@@ -5,9 +5,11 @@ project(PhoxtraKernel)
 enable_language(ASM)
 
 set(KERNEL_SOURCES
-    arch/x86_64/boot.S
+    arch/x86_64/boot.S 
+    arch/x86_64/cpu/cpu.cpp
     src/kernel.cpp
-    src/init.cpp
+    src/init.cpp 
+    src/console.cpp
     src/panic.cpp
     src/memory.cpp
     src/scheduler.cpp
@@ -30,12 +32,14 @@ target_compile_options(phoxtra-kernel PRIVATE
     -ffreestanding
     -fno-exceptions
     -fno-rtti
+    -fno-pie
     -Wall
     -Wextra
 )
 
 target_link_options(phoxtra-kernel PRIVATE
     -nostdlib
+    -no-pie
     -T ${CMAKE_SOURCE_DIR}/linker/linker.ld
 )
 
