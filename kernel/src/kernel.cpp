@@ -1,6 +1,7 @@
 #include "kernel.hpp"
 #include "init.hpp"
 #include "console.hpp"
+#include "serial.hpp"
 
 extern "C" void kernel_init()
 {
@@ -14,6 +15,9 @@ extern "C" void kernel_init()
     console::write("Initializing CPU ........ OK\n");
     console::write("Loading Kernel .......... OK\n");
     console::write("Starting Security Core .. WAITING\n");
+
+    serial::init();
+    serial::write("Akwaaba - Serial Console Started\n");
 
     system_init();
 
