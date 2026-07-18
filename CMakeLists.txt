@@ -18,3 +18,4 @@ option(PHOXTRA_BUILD_DOCS "Build documentation" OFF)
 
 add_subdirectory(kernel)
 add_subdirectory(boot)
+add_subdirectory(iso)

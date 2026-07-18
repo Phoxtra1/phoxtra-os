@@ -5,6 +5,7 @@ namespace console
 {
     void clear();
     void write(const char* text);
+    void put_char(char c);
 }
 
 #endif
