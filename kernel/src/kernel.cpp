@@ -1,10 +1,12 @@
-#include "kernel.hpp"
-#include "init.hpp"
-#include "console.hpp"
 #include "serial.hpp"
+#include "console.hpp"
+#include "init.hpp"
 
 extern "C" void kernel_init()
 {
+    serial::init();
+    serial::write("[BOOT] kernel_init reached\n");
+
     console::clear();
 
     console::write("Akwaaba\n\n");
@@ -12,14 +14,15 @@ extern "C" void kernel_init()
     console::write("PHOXTRA OS\n");
     console::write("Secure Identity Operating System\n\n");
 
-    console::write("Initializing CPU ........ OK\n");
-    console::write("Loading Kernel .......... OK\n");
-    console::write("Starting Security Core .. WAITING\n");
+    console::write("CPU ............... OK\n");
+    console::write("Memory ............ OK\n");
+    console::write("Security Core ..... Loading\n");
 
-    serial::init();
-    serial::write("Akwaaba - Serial Console Started\n");
+    serial::write("[BOOT] Console initialized\n");
 
     system_init();
+
+    serial::write("[BOOT] System initialization complete\n");
 
     while (true)
     {
