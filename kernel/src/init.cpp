@@ -56,6 +56,11 @@ extern "C" {
 #include "../services/phoxair.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
+#include "../ai/dipa_nl.h"
+#include "../drivers/continuum.h"
+#include "../exec/phoxtra_box.h"
+#include "../drivers/phoxtra_gl.h"
+#include "../net/cloud_sync.h"
 }
 
 /* ────────────────────────────────────────────────
@@ -125,8 +130,13 @@ void system_init()
     /* ── Phoxtra Core Enterprise Subsystems ── */
     entitlements_init();
     dipa_ai_init();
+    dipa_nl_init();
     verify_init();
     phoxair_init();
+    continuum_init();
+    phoxtra_box_init();
+    phoxtra_gl_init();
+    cloud_sync_init();
 
     /* ── Phase 8: TCP/IP Network Stack & e1000 Driver ───────── */
     netdev_init();

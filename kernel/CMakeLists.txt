@@ -75,6 +75,11 @@ set(KERNEL_SOURCES
     services/phoxair.c
     security/verify.c
     services/entitlements.c
+    ai/dipa_nl.c
+    drivers/continuum.c
+    exec/phoxtra_box.c
+    drivers/phoxtra_gl.c
+    net/cloud_sync.c
     process/stress.c
     memory/heap_audit.c
     sdk/sdk.c
