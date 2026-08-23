@@ -52,6 +52,10 @@ extern "C" {
 #include "../sdk/sdk.h"
 #include "../release/production.h"
 #include "../drivers/pci.h"
+#include "../ai/dipa_core.h"
+#include "../services/phoxair.h"
+#include "../security/verify.h"
+#include "../services/entitlements.h"
 }
 
 /* ────────────────────────────────────────────────
@@ -117,6 +121,12 @@ void system_init()
     capability_init();
     mac_init();
     stack_guard_init();
+
+    /* ── Phoxtra Core Enterprise Subsystems ── */
+    entitlements_init();
+    dipa_ai_init();
+    verify_init();
+    phoxair_init();
 
     /* ── Phase 8: TCP/IP Network Stack & e1000 Driver ───────── */
     netdev_init();

@@ -71,6 +71,10 @@ set(KERNEL_SOURCES
     ui/compositor.c
     ui/wm.c
     installer/installer.c
+    ai/dipa_core.c
+    services/phoxair.c
+    security/verify.c
+    services/entitlements.c
     process/stress.c
     memory/heap_audit.c
     sdk/sdk.c
