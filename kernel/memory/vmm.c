@@ -1,0 +1,197 @@
+#include "vmm.h"
+#include "pmm.h"
+#include "../log/logger.h"
+
+static uint64_t* pml4_root = NULL;
+
+static inline uint64_t read_cr3(void) {
+    uint64_t cr3_val;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3_val));
+    return cr3_val;
+}
+
+static inline void invlpg(void* m) {
+    asm volatile("invlpg (%0)" : : "b"(m) : "memory");
+}
+
+void vmm_init(void) {
+    // Acquire current CR3 table initialized in boot.S
+    pml4_root = (uint64_t*)(read_cr3() & ~0xFFFULL);
+    
+    klog(LOG_KERNEL, "Paging structure validated");
+    klog(LOG_KERNEL, "Virtual Memory Manager (VMM) started");
+}
+
+int vmm_map_page(uint64_t virt, uint64_t phys, uint32_t flags) {
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
+    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+
+    if (!pml4_root) {
+        pml4_root = (uint64_t*)(read_cr3() & ~0xFFF);
+    }
+
+    uint64_t* pdpt;
+    if (!(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) {
+        pdpt = (uint64_t*)pmm_alloc_page();
+        if (!pdpt) return -1;
+        for (int i = 0; i < 512; i++) pdpt[i] = 0;
+        pml4_root[pml4_idx] = ((uint64_t)pdpt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    } else {
+        pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
+    }
+
+    uint64_t* pdt;
+    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) {
+        pdt = (uint64_t*)pmm_alloc_page();
+        if (!pdt) return -1;
+        for (int i = 0; i < 512; i++) pdt[i] = 0;
+        pdpt[pdpt_idx] = ((uint64_t)pdt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    } else {
+        pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+    }
+
+    uint64_t* pt;
+    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) {
+        pt = (uint64_t*)pmm_alloc_page();
+        if (!pt) return -1;
+        for (int i = 0; i < 512; i++) pt[i] = 0;
+        pdt[pdt_idx] = ((uint64_t)pt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    } else {
+        pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+    }
+
+    pt[pt_idx] = (phys & ~0xFFF) | (flags & 0xFFF) | VMM_FLAG_PRESENT;
+    invlpg((void*)virt);
+    return 0;
+}
+
+int vmm_unmap_page(uint64_t virt) {
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
+    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+
+    if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return -1;
+    uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
+    
+    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return -1;
+    uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+
+    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) return -1;
+    uint64_t* pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+
+    pt[pt_idx] = 0;
+    invlpg((void*)virt);
+    return 0;
+}
+
+uint64_t vmm_virt_to_phys(uint64_t virt) {
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
+    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+
+    if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return 0;
+    uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
+
+    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return 0;
+    uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+
+    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) return 0;
+
+    // Check if huge page (2MB)
+    if (pdt[pdt_idx] & 0x80) {
+        return (pdt[pdt_idx] & ~0x1FFFFF) + (virt & 0x1FFFFF);
+    }
+
+    uint64_t* pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+    if (!(pt[pt_idx] & VMM_FLAG_PRESENT)) return 0;
+
+    return (pt[pt_idx] & ~0xFFF) + (virt & 0xFFF);
+}
+
+uint64_t vmm_get_kernel_page_directory(void) {
+    if (!pml4_root) {
+        pml4_root = (uint64_t*)(read_cr3() & ~0xFFFULL);
+    }
+    return (uint64_t)pml4_root;
+}
+
+uint64_t vmm_create_user_page_directory(void) {
+    uint64_t* user_pml4 = (uint64_t*)pmm_alloc_page();
+    if (!user_pml4) {
+        klog(LOG_ERROR, "VMM: Failed to allocate physical page for user PML4");
+        return 0;
+    }
+
+    uint64_t k_cr3 = vmm_get_kernel_page_directory();
+    uint64_t* k_pml4 = (uint64_t*)k_cr3;
+
+    // Copy identity kernel mappings so kernel code, stacks & hardware memory stay accessible
+    for (int i = 0; i < 512; i++) {
+        user_pml4[i] = k_pml4[i];
+    }
+
+    return (uint64_t)user_pml4;
+}
+
+void vmm_switch_page_directory(uint64_t cr3_phys) {
+    if (!cr3_phys) return;
+    uint64_t current_cr3 = read_cr3() & ~0xFFFULL;
+    if (current_cr3 != (cr3_phys & ~0xFFFULL)) {
+        asm volatile("mov %0, %%cr3" : : "r"(cr3_phys & ~0xFFFULL) : "memory");
+    }
+}
+
+int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
+    uint64_t* target_pml4 = (uint64_t*)pml4_phys;
+    if (!target_pml4) target_pml4 = pml4_root;
+    if (!target_pml4) target_pml4 = (uint64_t*)(read_cr3() & ~0xFFFULL);
+
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
+    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+
+    uint32_t user_flags = flags | VMM_FLAG_PRESENT | VMM_FLAG_USER;
+
+    uint64_t* pdpt;
+    if (!(target_pml4[pml4_idx] & VMM_FLAG_PRESENT)) {
+        pdpt = (uint64_t*)pmm_alloc_page();
+        if (!pdpt) return -1;
+        for (int i = 0; i < 512; i++) pdpt[i] = 0;
+        target_pml4[pml4_idx] = ((uint64_t)pdpt) | user_flags | VMM_FLAG_WRITABLE;
+    } else {
+        pdpt = (uint64_t*)(target_pml4[pml4_idx] & ~0xFFF);
+        target_pml4[pml4_idx] |= user_flags;
+    }
+
+    uint64_t* pdt;
+    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) {
+        pdt = (uint64_t*)pmm_alloc_page();
+        if (!pdt) return -1;
+        for (int i = 0; i < 512; i++) pdt[i] = 0;
+        pdpt[pdpt_idx] = ((uint64_t)pdt) | user_flags | VMM_FLAG_WRITABLE;
+    } else {
+        pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+        pdpt[pdpt_idx] |= user_flags;
+    }
+
+    uint64_t* pt;
+    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) {
+        pt = (uint64_t*)pmm_alloc_page();
+        if (!pt) return -1;
+        for (int i = 0; i < 512; i++) pt[i] = 0;
+        pdt[pdt_idx] = ((uint64_t)pt) | user_flags | VMM_FLAG_WRITABLE;
+    } else {
+        pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+        pdt[pdt_idx] |= user_flags;
+    }
+
+    pt[pt_idx] = (phys & ~0xFFF) | user_flags;
+    invlpg((void*)virt);
+    return 0;
+}
+

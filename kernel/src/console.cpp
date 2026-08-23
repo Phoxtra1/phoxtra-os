@@ -25,6 +25,34 @@ namespace console
         {
             row++;
             column = 0;
+            if (row >= 25)
+            {
+                // Scroll up
+                for (unsigned int i = 0; i < 24 * 80; i++)
+                {
+                    VGA_MEMORY[i] = VGA_MEMORY[i + 80];
+                }
+                for (unsigned int i = 24 * 80; i < 25 * 80; i++)
+                {
+                    VGA_MEMORY[i] = 0x0720;
+                }
+                row = 24;
+            }
+            return;
+        }
+
+        if (c == '\b')
+        {
+            if (column > 0)
+            {
+                column--;
+            }
+            else if (row > 0)
+            {
+                row--;
+                column = 79;
+            }
+            VGA_MEMORY[row * 80 + column] = 0x0720;
             return;
         }
 
@@ -41,7 +69,17 @@ namespace console
 
         if (row >= 25)
         {
+            // Scroll up
+            for (unsigned int i = 0; i < 24 * 80; i++)
+            {
+                VGA_MEMORY[i] = VGA_MEMORY[i + 80];
+            }
+            for (unsigned int i = 24 * 80; i < 25 * 80; i++)
+            {
+                VGA_MEMORY[i] = 0x0720;
+            }
             row = 24;
+            column = 0;
         }
     }
 
@@ -52,5 +90,17 @@ namespace console
             put_char(*text);
             text++;
         }
+    }
+}
+
+extern "C" {
+    void console_clear(void) {
+        console::clear();
+    }
+    void console_write(const char* text) {
+        console::write(text);
+    }
+    void console_put_char(char c) {
+        console::put_char(c);
     }
 }

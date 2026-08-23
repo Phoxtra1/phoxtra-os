@@ -1,21 +1,17 @@
 #!/bin/bash
-
 set -e
 
-echo "Building Phoxtra OS ISO..."
+echo "=== Building Phoxtra OS ISO ==="
 
-ISO_DIR="iso"
-BUILD_DIR="build"
+mkdir -p iso/boot/grub
 
-echo "Copying kernel..."
+cp build/kernel/phoxtra iso/boot/phoxtra
 
-cp ${BUILD_DIR}/kernel/phoxtra ${ISO_DIR}/boot/phoxtra
+grub-mkrescue -o phoxtra-os.iso iso
 
-echo "Generating ISO..."
-
-grub-mkrescue \
-    -o phoxtra-os.iso \
-    ${ISO_DIR}
-
-echo "ISO created successfully:"
-echo "phoxtra-os.iso"
+echo ""
+echo "=================================="
+echo "ISO CREATED SUCCESSFULLY"
+echo "=================================="
+echo ""
+ls -lh phoxtra-os.iso

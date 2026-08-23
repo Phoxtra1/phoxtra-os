@@ -54,10 +54,10 @@ _start:
     mov %eax, p3_table
     movl $0, p3_table + 4
 
-    # Set PDT entries (let's map 16MB = 8 entries of 2MB)
+    # Set PDT entries (map 128MB = 64 entries of 2MB)
     mov $p2_table, %edx
     mov $0, %eax
-    mov $8, %ecx
+    mov $64, %ecx
 .map_p2:
     mov %eax, %ebx
     or $0x083, %ebx # Present | Writable | HugePage (0x80)

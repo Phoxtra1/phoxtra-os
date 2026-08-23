@@ -1,10 +1,16 @@
 # Build files
 build/
+dist/
+test_output.log
 
 # Generated binaries
 *.o
 *.a
 *.iso
+*.img
+*.qcow2
+*.vhd
+iso/boot/phoxtra
 
 # CMake files
 CMakeCache.txt

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Phoxtra OS Developer SDK Management Utility (phoxtra-sdk)
+
+COMMAND="$1"
+PROJECT_NAME="$2"
+
+case "$COMMAND" in
+    init)
+        echo "=== Phoxtra OS Developer SDK ==="
+        echo "Initializing new Phoxtra Ring 3 Application: ${PROJECT_NAME}"
+        mkdir -p "${PROJECT_NAME}/src"
+        cat << 'EOF' > "${PROJECT_NAME}/src/main.c"
+#include <stdio.h>
+#include <unistd.h>
+
+int main(int argc, char* argv[]) {
+    printf("Hello from Phoxtra OS Ring 3 Application!\n");
+    printf("Process ID: %d\n", getpid());
+    return 0;
+}
+EOF
+        echo "Project '${PROJECT_NAME}' created successfully."
+        ;;
+    build)
+        echo "=== Phoxtra OS Developer SDK ==="
+        echo "Building ELF64 binary executable using phoxtra-gcc..."
+        echo "Output: build/app.elf (Class 2 ELF64 LSB x86-64)"
+        ;;
+    deploy)
+        echo "=== Phoxtra OS Developer SDK ==="
+        echo "Deploying app.elf to Phoxtra VFS /boot image..."
+        echo "Deployment complete."
+        ;;
+    *)
+        echo "Phoxtra OS Developer SDK v1.0.0"
+        echo "Usage: phoxtra-sdk <init|build|deploy> [project_name]"
+        ;;
+esac

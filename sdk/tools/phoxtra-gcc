@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Phoxtra OS Developer Cross-Compiler Toolchain Wrapper (phoxtra-gcc)
+# Target: x86_64-phoxtra-elf
+
+SYSROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LIBC_INC="${SYSROOT_DIR}/libc/include"
+
+echo "[phoxtra-gcc] Compiling target for Phoxtra OS (x86_64-phoxtra-elf)..."
+echo "[phoxtra-gcc] Sysroot: ${SYSROOT_DIR}"
+echo "[phoxtra-gcc] Includes: -I${LIBC_INC}"
+
+gcc -target x86_64-pc-none-elf -ffreestanding -nostdlib -I"${LIBC_INC}" "$@"

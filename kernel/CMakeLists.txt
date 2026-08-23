@@ -3,20 +3,78 @@ cmake_minimum_required(VERSION 3.20)
 project(PhoxtraKernel)
 
 enable_language(ASM)
+enable_language(ASM_NASM)
 
 set(KERNEL_SOURCES
-    arch/x86_64/boot.S 
+    arch/x86_64/boot.S
     arch/x86_64/cpu/cpu.cpp
+    arch/x86_64/gdt/gdt.cpp
+    arch/x86_64/gdt/gdt_flush.S
     arch/x86_64/serial/serial.cpp
+    arch/x86_64/idt.c
+    arch/x86_64/interrupts.asm
+    arch/x86_64/isr.asm
+    arch/x86_64/context.asm
+    arch/x86_64/user_mode.asm
     src/kernel.cpp
-    src/init.cpp 
+    src/init.cpp
     src/console.cpp
     src/panic.cpp
-    src/memory.cpp
-    src/scheduler.cpp
-    src/process.cpp
-    src/interrupt.cpp
-    src/syscall.cpp
+    src/boot_screen.cpp
+    src/pic.c
+    src/irq.c
+    src/timer.c
+    src/keyboard.c
+    src/shell.c
+    log/logger.c
+    memory/pmm.c
+    memory/vmm.c
+    memory/heap.c
+    hal/hal.c
+    process/pcb.c
+    process/process.c
+    scheduler/scheduler.c
+    syscall/syscall.c
+    events/events.c
+    vfs/vfs.c
+    vfs/devfs.c
+    vfs/initrd.c
+    storage/blockdev.c
+    storage/ahci.c
+    storage/partition.c
+    storage/ext2.c
+    storage/fat32.c
+    security/sha256.c
+    security/tpm2.c
+    security/process_identity.c
+    security/audit_logger.c
+    security/capability.c
+    security/mac.c
+    security/stack_guard.c
+    net/netdev.c
+    net/e1000.c
+    net/ethernet.c
+    net/arp.c
+    net/ipv4.c
+    net/udp.c
+    net/tcp.c
+    net/socket.c
+    net/dhcp.c
+    net/dns.c
+    exec/elf.c
+    exec/ld_so.c
+    drivers/framebuffer.c
+    drivers/pci.c
+    ui/font.c
+    ui/theme.c
+    ui/file_manager.c
+    ui/compositor.c
+    ui/wm.c
+    installer/installer.c
+    process/stress.c
+    memory/heap_audit.c
+    sdk/sdk.c
+    release/production.c
 )
 
 add_executable(phoxtra-kernel
@@ -25,21 +83,46 @@ add_executable(phoxtra-kernel
 
 target_include_directories(phoxtra-kernel PRIVATE
     include
+    arch/x86_64
     arch/x86_64/include
+    arch/x86_64/cpu
+    arch/x86_64/serial
+    arch/x86_64/gdt
+    log
+    memory
+    hal
+    process
+    scheduler
+    syscall
+    events
+    vfs
+    storage
+    security
+    net
+    exec
+    drivers
+    ui
+    sdk
+    release
 )
+
 
 target_compile_features(phoxtra-kernel PRIVATE cxx_std_20)
 
 target_compile_options(phoxtra-kernel PRIVATE
-    -ffreestanding
-    -fno-exceptions
-    -fno-rtti
-    -fno-pie
-    -fno-stack-protector
-    -fcf-protection=none
-    -mno-red-zone
-    -Wall
-    -Wextra
+    $<$<COMPILE_LANGUAGE:C,CXX>:-ffreestanding>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fno-pie>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fno-stack-protector>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fcf-protection=none>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-red-zone>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-sse>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-sse2>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-avx>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-avx2>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wall>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wextra>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
 
 target_link_options(phoxtra-kernel PRIVATE
