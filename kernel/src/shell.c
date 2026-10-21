@@ -472,11 +472,15 @@ static void cmd_libc(void) {
 }
 
 static void cmd_gui(void) {
-    console_write("\nSwitching to High-Resolution 1024x768x32 Desktop GUI Compositor...\n");
+    if (!framebuffer_is_available()) {
+        console_write("\nGUI unavailable: no supported bootloader framebuffer is connected.\n");
+        console_write("Check the Multiboot2 framebuffer request and GRUB video mode.\n\n");
+        return;
+    }
+    console_write("\nSwitching to High-Resolution Desktop GUI Compositor...\n");
     wm_start_desktop();
-    console_write("Phoxtra Desktop Window Manager (phoxtra-wm) active.\n\n");
+    console_write("Phoxtra Desktop Window Manager (phoxtra-wm) rendered to the framebuffer.\n\n");
 }
-
 static void cmd_wm(void) {
     console_write("\n=== Phoxtra Window Manager (phoxtra-wm) Status ===\n");
     console_write("Graphics Mode  : 1024x768 @ 32bpp ARGB8888 (VBE / GOP Framebuffer)\n");
