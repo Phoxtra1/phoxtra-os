@@ -16,7 +16,7 @@ jobs:
       - name: Install kernel and ISO build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 qemu-system-gui xvfb socat python3
       - name: Configure
         run: cmake -B build -S .
       - name: Build kernel
@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
-          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none \
+          xvfb-run -a qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display gtk \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
