@@ -1,0 +1,95 @@
+name: Phoxtra OS build
+
+on:
+  push:
+    branches: [main, "fix/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-kernel-and-iso:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install kernel and ISO build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+      - name: Configure
+        run: cmake -B build -S .
+      - name: Build kernel
+        run: cmake --build build -j2
+      - name: Build bootable ISO
+        run: cmake --build build --target iso
+      - name: Verify ISO artifact
+        run: test -s build/phoxtra.iso
+      - name: Boot ISO and check desktop framebuffer
+        shell: bash
+        run: |
+          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
+          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none \
+            -serial file:/tmp/phoxtra-serial.log \
+            -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
+            -no-reboot -no-shutdown &
+          QEMU_PID=$!
+          cleanup() { kill "$QEMU_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 40); do
+            [ -S /tmp/qemu-monitor.sock ] && break
+            sleep 0.25
+          done
+          sleep 8
+          cat /tmp/phoxtra-serial.log
+          grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
+          # Wait until shell_start has completed framebuffer console rendering.
+          for attempt in $(seq 1 40); do
+            grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
+            sleep 0.5
+          done
+          grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
+          { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 2
+          cat /tmp/phoxtra-serial.log
+          grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log
+          printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 1
+          python3 - <<'PY'
+          from pathlib import Path
+          data = Path('/tmp/phoxtra-screen.ppm').read_bytes()
+          # Parse the PPM header, allowing whitespace/comments before pixel data.
+          i = 0
+          tokens = []
+          while len(tokens) < 4:
+              while i < len(data) and data[i] in b' \t\r\n':
+                  i += 1
+              if i < len(data) and data[i] == ord('#'):
+                  while i < len(data) and data[i] not in b'\r\n':
+                      i += 1
+                  continue
+              start = i
+              while i < len(data) and data[i] not in b' \t\r\n':
+                  i += 1
+              tokens.append(data[start:i])
+          magic, width, height, maxval = tokens
+          while i < len(data) and data[i] in b' \t\r\n':
+              i += 1
+          assert magic == b'P6' and int(maxval) == 255, 'unexpected screenshot format'
+          pixels = data[i:]
+          assert len(pixels) >= int(width) * int(height) * 3, 'incomplete screenshot'
+          sample = pixels[:int(width) * int(height) * 3]
+          colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
+          print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
+          assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
+          PY
+
+      - name: Upload QEMU screenshot and serial diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoxtra-qemu-debug
+          path: |
+            /tmp/phoxtra-screen.ppm
+            /tmp/phoxtra-serial.log
+          if-no-files-found: warn

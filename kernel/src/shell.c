@@ -1,4 +1,5 @@
 #include "shell.h"
+#include "../log/logger.h"
 #include "boot_screen.h"
 #include "keyboard.h"
 #include "timer.h"
@@ -472,11 +473,19 @@ static void cmd_libc(void) {
 }
 
 static void cmd_gui(void) {
-    console_write("\nSwitching to High-Resolution 1024x768x32 Desktop GUI Compositor...\n");
+    klog(LOG_INFO, "GUI command received");
+    if (!framebuffer_is_available()) {
+        klog(LOG_ERROR, "GUI startup aborted: framebuffer unavailable");
+        console_write("\nGUI unavailable: no supported bootloader framebuffer is connected.\n");
+        console_write("Check the Multiboot2 framebuffer request and GRUB video mode.\n\n");
+        return;
+    }
+    /* Clear the boot console before drawing; long status text after the draw
+       can scroll the text console and repaint over the newly rendered desktop. */
+    console_clear();
     wm_start_desktop();
-    console_write("Phoxtra Desktop Window Manager (phoxtra-wm) active.\n\n");
+    klog(LOG_INFO, "GUI compositor render completed");
 }
-
 static void cmd_wm(void) {
     console_write("\n=== Phoxtra Window Manager (phoxtra-wm) Status ===\n");
     console_write("Graphics Mode  : 1024x768 @ 32bpp ARGB8888 (VBE / GOP Framebuffer)\n");
@@ -849,6 +858,7 @@ static void cmd_cat(const char* path) {
    ──────────────────────────────────────────────── */
 void shell_start(void) {
     boot_screen_display();
+    klog(LOG_INFO, "Shell ready for commands");
     console_write("phoxtra> ");
 
 

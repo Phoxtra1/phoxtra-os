@@ -195,3 +195,42 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     return 0;
 }
 
+
+
+/* Bootstrap paging identity-maps physical memory from 0 through 4 GiB. */
+int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size) {
+    if (!size || phys_start >= 0x100000000ULL ||
+        size > 0x100000000ULL - phys_start) return -1;
+    uint64_t last = phys_start + size - 1;
+    if (vmm_virt_to_phys(phys_start) != phys_start ||
+        vmm_virt_to_phys(last) != last) return -1;
+    return 0;
+}
+
+
+/* Mark the 2 MiB identity-mapped page(s) containing MMIO framebuffer memory
+   uncacheable. The bootstrap uses huge pages, so set PCD/PWT on those PDEs. */
+int vmm_mark_uncached(uint64_t phys_start, uint64_t size) {
+    if (!size || phys_start >= 0x100000000ULL ||
+        size > 0x100000000ULL - phys_start) return -1;
+    uint64_t first = phys_start & ~0x1FFFFFULL;
+    uint64_t last = (phys_start + size - 1) & ~0x1FFFFFULL;
+
+    /* Flush cached data before changing the memory type of the mapping. */
+    asm volatile("wbinvd" ::: "memory");
+    for (uint64_t base = first; ; base += 0x200000ULL) {
+        uint64_t pml4_idx = (base >> 39) & 0x1FF;
+        uint64_t pdpt_idx = (base >> 30) & 0x1FF;
+        uint64_t pdt_idx  = (base >> 21) & 0x1FF;
+        if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return -1;
+        uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFFULL);
+        if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return -1;
+        uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFFULL);
+        if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT) || !(pdt[pdt_idx] & 0x80ULL)) return -1;
+        pdt[pdt_idx] |= 0x18ULL; /* PWT | PCD: uncached framebuffer access */
+        invlpg((void*)base);
+        if (base == last) break;
+    }
+    asm volatile("wbinvd" ::: "memory");
+    return 0;
+}
