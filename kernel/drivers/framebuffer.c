@@ -105,6 +105,10 @@ void framebuffer_init(void) {
         klog(LOG_ERROR, "Framebuffer: physical framebuffer is not accessible");
         return;
     }
+    if (vmm_mark_uncached(tag->address, bytes) != 0) {
+        klog(LOG_ERROR, "Framebuffer: could not configure uncached MMIO mapping");
+        return;
+    }
     fb.address = (uint32_t*)(uintptr_t)tag->address;
     fb.width = tag->width < FB_WIDTH ? tag->width : FB_WIDTH;
     fb.height = tag->height < FB_HEIGHT ? tag->height : FB_HEIGHT;
