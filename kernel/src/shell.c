@@ -480,10 +480,11 @@ static void cmd_gui(void) {
         console_write("Check the Multiboot2 framebuffer request and GRUB video mode.\n\n");
         return;
     }
-    console_write("\nSwitching to High-Resolution Desktop GUI Compositor...\n");
+    /* Clear the boot console before drawing; long status text after the draw
+       can scroll the text console and repaint over the newly rendered desktop. */
+    console_clear();
     wm_start_desktop();
     klog(LOG_INFO, "GUI compositor render completed");
-    console_write("Phoxtra Desktop Window Manager (phoxtra-wm) rendered to the framebuffer.\n\n");
 }
 static void cmd_wm(void) {
     console_write("\n=== Phoxtra Window Manager (phoxtra-wm) Status ===\n");
