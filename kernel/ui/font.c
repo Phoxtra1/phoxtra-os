@@ -33,6 +33,7 @@ void font_init(void) {
 
 void font_draw_char(char c, uint32_t x, uint32_t y, uint32_t fg_color, uint32_t bg_color) {
     uint8_t u_c = (uint8_t)c;
+    if (u_c >= 'a' && u_c <= 'z') u_c = (uint8_t)(u_c - 'a' + 'A');
     if (u_c >= 128) u_c = '?';
 
     const uint8_t* glyph = font_bitmap_8x16[u_c];
