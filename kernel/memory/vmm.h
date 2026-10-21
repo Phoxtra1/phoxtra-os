@@ -14,6 +14,7 @@ extern "C" {
 
 void vmm_init(void);
 int vmm_map_page(uint64_t virt, uint64_t phys, uint32_t flags);
+int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size);
 int vmm_unmap_page(uint64_t virt);
 uint64_t vmm_virt_to_phys(uint64_t virt);
 
