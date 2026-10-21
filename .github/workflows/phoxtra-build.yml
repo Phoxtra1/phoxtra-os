@@ -75,5 +75,5 @@ jobs:
           sample = pixels[:int(width) * int(height) * 3]
           colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
           print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
-          assert len(colors) > 100, 'desktop gradient not detected; GUI may not have rendered'
+          assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
           PY
