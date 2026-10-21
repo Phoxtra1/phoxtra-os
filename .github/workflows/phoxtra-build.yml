@@ -1,0 +1,27 @@
+name: Phoxtra OS build
+
+on:
+  push:
+    branches: [main, "fix/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-kernel-and-iso:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install kernel and ISO build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso
+      - name: Configure
+        run: cmake -B build -S .
+      - name: Build kernel
+        run: cmake --build build -j2
+      - name: Build bootable ISO
+        run: cmake --build build --target iso
+      - name: Verify ISO artifact
+        run: test -s build/phoxtra.iso
