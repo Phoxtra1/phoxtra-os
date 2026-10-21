@@ -857,6 +857,7 @@ static void cmd_cat(const char* path) {
    ──────────────────────────────────────────────── */
 void shell_start(void) {
     boot_screen_display();
+    klog(LOG_INFO, "Shell ready for commands");
     console_write("phoxtra> ");
 
 
