@@ -9,6 +9,8 @@ static uint8_t pmm_bitmap[BITMAP_SIZE];
 static uint64_t total_memory_bytes = DEFAULT_MEM_SIZE;
 static uint64_t total_pages_count = MAX_PAGES;
 static uint64_t used_pages_count = 0;
+extern char __kernel_start;
+extern char __kernel_end;
 
 static inline void bitmap_set(uint64_t page_idx) {
     pmm_bitmap[page_idx / 8] |= (1 << (page_idx % 8));
@@ -40,7 +42,17 @@ void pmm_init(uint64_t mem_size) {
         used_pages_count++;
     }
 
-    klog(LOG_KERNEL, "Physical Memory Manager (PMM) started");
+    // Reserve loaded kernel, including bootstrap page tables and BSS.
+    uint64_t kernel_start = (uint64_t)&__kernel_start;
+    uint64_t kernel_end = (uint64_t)&__kernel_end;
+    if (kernel_end > kernel_start) {
+        uint64_t first = kernel_start / PAGE_SIZE;
+        uint64_t last = (kernel_end + PAGE_SIZE - 1) / PAGE_SIZE;
+        for (uint64_t i = first; i < last && i < total_pages_count && i < MAX_PAGES; i++) {
+            if (!bitmap_test(i)) { bitmap_set(i); used_pages_count++; }
+        }
+    }
+    klog(LOG_KERNEL, "Physical Memory Manager started; kernel pages reserved");
 }
 
 void* pmm_alloc_page(void) {
