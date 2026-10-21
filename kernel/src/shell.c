@@ -1,4 +1,5 @@
 #include "shell.h"
+#include "../log/logger.h"
 #include "boot_screen.h"
 #include "keyboard.h"
 #include "timer.h"
@@ -472,13 +473,16 @@ static void cmd_libc(void) {
 }
 
 static void cmd_gui(void) {
+    klog(LOG_INFO, "GUI command received");
     if (!framebuffer_is_available()) {
+        klog(LOG_ERROR, "GUI startup aborted: framebuffer unavailable");
         console_write("\nGUI unavailable: no supported bootloader framebuffer is connected.\n");
         console_write("Check the Multiboot2 framebuffer request and GRUB video mode.\n\n");
         return;
     }
     console_write("\nSwitching to High-Resolution Desktop GUI Compositor...\n");
     wm_start_desktop();
+    klog(LOG_INFO, "GUI compositor render completed");
     console_write("Phoxtra Desktop Window Manager (phoxtra-wm) rendered to the framebuffer.\n\n");
 }
 static void cmd_wm(void) {
