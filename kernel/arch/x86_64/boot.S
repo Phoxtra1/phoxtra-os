@@ -1,133 +1,126 @@
 .section .multiboot
 .align 8
-
 header_start:
-.long 0xE85250D6         # magic
-.long 0                  # architecture (i386 32-bit protected mode)
-.long header_end - header_start # header length
-.long -(0xE85250D6 + 0 + (header_end - header_start)) # checksum
-
-# end tag
+.long 0xE85250D6
+.long 0
+.long header_end - header_start
+.long -(0xE85250D6 + 0 + (header_end - header_start))
+# Request a 1024x768x32 framebuffer from the Multiboot2 loader.
+.short 5
+.short 0
+.long 20
+.long 1024
+.long 768
+.long 32
+.align 8
 .short 0
 .short 0
 .long 8
 header_end:
 
+.section .data
+.align 8
+multiboot2_magic_saved: .long 0
+multiboot2_info_saved:  .long 0
+
 .section .bss
 .align 4096
-p4_table:
-    .skip 4096
-p3_table:
-    .skip 4096
-p2_table:
-    .skip 4096
-
+p4_table: .skip 4096
+p3_table: .skip 4096
+# Four page directories identity-map 0..4 GiB with 2 MiB pages.
+p2_tables: .skip 16384
 .align 16
-stack_bottom:
-.skip 16384
+stack_bottom: .skip 16384
 stack_top:
 
 .section .text
 .code32
 .global _start
 .type _start, @function
-
 .extern kernel_init
-
 _start:
     cli
     cld
+    # Preserve Multiboot2 EAX magic and EBX information pointer.
+    mov %eax, multiboot2_magic_saved
+    mov %ebx, multiboot2_info_saved
 
-    # Save multiboot information
-    mov %eax, %edi
-    mov %ebx, %esi
-
-    # Point PML4[0] to p3_table
+    # PML4[0] -> PDPT.
     mov $p3_table, %eax
-    or $0x003, %eax # Present | Writable
+    or $0x003, %eax
     mov %eax, p4_table
     movl $0, p4_table + 4
 
-    # Point PDPT[0] to p2_table
-    mov $p2_table, %eax
-    or $0x003, %eax # Present | Writable
-    mov %eax, p3_table
-    movl $0, p3_table + 4
+    # PDPT entries 0..3 -> four page directories (0..4 GiB).
+    mov $p2_tables, %eax
+    mov $p3_table, %edx
+    mov $4, %ecx
+.map_pdpt:
+    mov %eax, %ebx
+    or $0x003, %ebx
+    mov %ebx, (%edx)
+    movl $0, 4(%edx)
+    add $4096, %eax
+    add $8, %edx
+    loop .map_pdpt
 
-    # Set PDT entries (map 128MB = 64 entries of 2MB)
-    mov $p2_table, %edx
+    # Fill 2048 huge pages to identity-map the first 4 GiB.
+    mov $p2_tables, %edx
     mov $0, %eax
-    mov $64, %ecx
+    mov $2048, %ecx
 .map_p2:
     mov %eax, %ebx
-    or $0x083, %ebx # Present | Writable | HugePage (0x80)
+    or $0x083, %ebx
     mov %ebx, (%edx)
     movl $0, 4(%edx)
     add $0x200000, %eax
     add $8, %edx
-    dec %ecx
-    jnz .map_p2
+    loop .map_p2
 
-    # Load PML4 address to CR3
     mov $p4_table, %eax
     mov %eax, %cr3
-
-    # Enable PAE in CR4
     mov %cr4, %eax
-    or $0x20, %eax # set PAE bit (bit 5)
+    or $0x20, %eax
     mov %eax, %cr4
-
-    # Enable Long Mode in EFER MSR
-    mov $0xC0000080, %ecx # EFER MSR address
+    mov $0xC0000080, %ecx
     rdmsr
-    or $0x100, %eax # set LME bit (bit 8)
+    or $0x100, %eax
     wrmsr
-
-    # Enable paging
     mov %cr0, %eax
-    or $0x80000001, %eax # set PG bit (bit 31) and PE bit (bit 0)
+    or $0x80000001, %eax
     mov %eax, %cr0
 
-    # Load 64-bit GDT
     lgdt gdt64_pointer
-
-    # Far return to 64-bit code segment
     push $0x08
     push $long_mode_start
     lret
 
 .code64
 long_mode_start:
-    # Load 64-bit data segment registers
     mov $0x10, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
     mov %ax, %ss
-
-    # Load 64-bit stack pointer
     mov $stack_top, %rsp
-
-    # Call 64-bit C++ kernel_init
+    and $-16, %rsp
+    # SysV AMD64: kernel_init(magic, info_phys).
+    mov multiboot2_magic_saved(%rip), %edi
+    mov multiboot2_info_saved(%rip), %esi
     call kernel_init
-
 .hang:
     hlt
     jmp .hang
 
 .section .rodata
 .align 8
-gdt64:
-    .quad 0x0000000000000000 # null descriptor
-gdt64_code:
-    .quad 0x00209A0000000000 # 64-bit code descriptor
-gdt64_data:
-    .quad 0x0000920000000000 # 64-bit data descriptor
+gdt64: .quad 0
+gdt64_code: .quad 0x00209A0000000000
+gdt64_data: .quad 0x0000920000000000
 gdt64_end:
-
 gdt64_pointer:
-    .short gdt64_end - gdt64 - 1
-    .long gdt64
+.short gdt64_end - gdt64 - 1
+.long gdt64
 
 .section .note.GNU-stack,"",@progbits
