@@ -43,6 +43,8 @@ jobs:
           sleep 8
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
+          # Let kernel_init enable IRQs and shell_start finish its boot screen.
+          sleep 3
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 2
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
