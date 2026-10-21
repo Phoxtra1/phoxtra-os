@@ -12,7 +12,8 @@ namespace console {
     static void draw_cell(unsigned int r, unsigned int c) {
         if (!framebuffer_is_available() || r >= 25 || c >= 80) return;
         char ch = cells[r][c];
-        if (ch != ' ') font_draw_char(ch, c * 8, r * 16, 0x00F8FAFC, 0x00000000);
+        if (ch == ' ') fb_fill_rect(c * 8, r * 16, 8, 16, 0x00000000);
+        else font_draw_char(ch, c * 8, r * 16, 0x00F8FAFC, 0x00000000);
     }
 
     static void redraw_framebuffer_console(void) {
