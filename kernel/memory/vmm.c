@@ -195,3 +195,14 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     return 0;
 }
 
+
+
+/* Bootstrap paging identity-maps physical memory from 0 through 4 GiB. */
+int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size) {
+    if (!size || phys_start >= 0x100000000ULL ||
+        size > 0x100000000ULL - phys_start) return -1;
+    uint64_t last = phys_start + size - 1;
+    if (vmm_virt_to_phys(phys_start) != phys_start ||
+        vmm_virt_to_phys(last) != last) return -1;
+    return 0;
+}
