@@ -84,7 +84,7 @@ int platform_input_poll(platform_input_event_t* event) {
         event->modifiers = keyboard_control_pressed() ? PLATFORM_MOD_CTRL : 0;
         event->x = 0;
         event->y = 0;
-        return PLATFORM_OK;
+        return 1;
     }
     mouse_event_t mouse;
     if (mouse_poll_event(&mouse)) {
@@ -95,7 +95,7 @@ int platform_input_poll(platform_input_event_t* event) {
         event->modifiers = keyboard_control_pressed() ? PLATFORM_MOD_CTRL : 0;
         event->x = mouse.x;
         event->y = mouse.y;
-        return PLATFORM_OK;
+        return 1;
     }
     event->type = PLATFORM_INPUT_NONE;
     return 0;
