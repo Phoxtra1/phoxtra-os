@@ -10,6 +10,7 @@ extern "C" {
 
 void file_manager_init(void);
 void file_manager_open_window(const char* initial_path);
+void file_manager_navigate(const char* path);
 void file_manager_render(void);
 window_t* file_manager_get_window(void);
 int file_manager_hit_test(uint32_t x, uint32_t y);
