@@ -107,7 +107,7 @@ static void redraw_entries(void) {
         if (!node) continue;
         if ((int32_t)index == selected_entry)
             fb_fill_rect(x - 6, y - 5, FM_CELL_WIDTH - 4, 70, 0x00405267);
-        if (node->flags & VFS_DIRECTORY) icon_draw_folder(x, y, node->name);
+        if (node->flags == VFS_DIRECTORY) icon_draw_folder(x, y, node->name);
         else icon_draw_file(x, y, node->name);
     }
 
@@ -115,12 +115,13 @@ static void redraw_entries(void) {
                                        fm_win->y + 86, palette->text_color, 0);
     char status[64];
     /* The fixed status text avoids presenting fictitious disk capacity. */
-    if (entry_count > FM_VISIBLE_ITEMS) {
-        const char* more = "Use [ and ] to browse pages";
-        font_draw_string(more, fm_win->x + 16, fm_win->y + fm_win->height - 43,
-                         palette->text_color, 0);
-    }
-    font_draw_string("Enter: open   Backspace: parent   N: folder   Ctrl+N: file",
+    font_draw_string("Folder: click  File: double-click",
+                     fm_win->x + 16, fm_win->y + fm_win->height - 60, palette->text_color, 0);
+    font_draw_string("Backspace: parent  N: folder",
+                     fm_win->x + 16, fm_win->y + fm_win->height - 42, palette->text_color, 0);
+    font_draw_string(entry_count > FM_VISIBLE_ITEMS
+                         ? "Ctrl+N: file  [ ]: pages"
+                         : "Ctrl+N: create file",
                      fm_win->x + 16, fm_win->y + fm_win->height - 24, palette->text_color, 0);
     (void)status;
 }
@@ -148,14 +149,16 @@ void file_manager_open_window(const char* initial_path) {
 window_t* file_manager_get_window(void) { return fm_win; }
 
 void file_manager_navigate(const char* path) {
+    klog(LOG_INFO, "File manager navigation requested");
     if (!path || !path[0]) return;
     vfs_node_t* node = platform_storage_lookup(path);
-    if (!node || !(node->flags & VFS_DIRECTORY)) return;
+    if (!platform_storage_is_directory(node)) return;
     if (!text_copy(current_path, path, sizeof(current_path))) return;
     page_start = 0;
     selected_entry = -1;
     current_directory = node;
     redraw_entries();
+    klog(LOG_INFO, "File manager navigated to directory");
 }
 void file_manager_go_parent(void) {
     if (text_equal(current_path, "/")) return;
@@ -179,6 +182,11 @@ void file_manager_scroll(int32_t pages) {
     selected_entry = -1;
     redraw_entries();
 }
+int file_manager_entry_is_directory(uint32_t index) {
+    vfs_node_t* node = entry_at(index);
+    return platform_storage_is_directory(node);
+}
+
 int file_manager_hit_test(uint32_t x, uint32_t y) {
     if (!fm_win || !fm_win->active || fm_win->minimized) return -1;
     if (x < fm_win->x + 16 || y < fm_win->y + 72 ||
@@ -212,6 +220,7 @@ int file_manager_open_entry(uint32_t index) {
         for (uint32_t i = 0; node->name[i] && p < sizeof(next) - 1; ++i) next[p++] = node->name[i];
         next[p] = '\0';
         file_manager_navigate(next);
+        klog(LOG_INFO, "File manager opened directory entry");
         return 1;
     }
 

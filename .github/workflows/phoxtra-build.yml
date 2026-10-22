@@ -49,6 +49,7 @@ jobs:
           sleep 8
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
+          grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
           # Wait until shell_start has completed framebuffer console rendering.
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
@@ -64,11 +65,20 @@ jobs:
             sleep 0.25
           done
           grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
-          # Exercise the active desktop: focus the file manager, create a folder and a file.
+          # Exercise a real PS/2 mouse click on the first folder in the file manager.
+          { printf 'mouse_move 40 -60\n'; sleep 0.2; printf 'mouse_move 40 -60\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
+          grep -q 'File manager navigated to directory' /tmp/phoxtra-serial.log
+          # Also verify keyboard-driven folder and file creation.
           { for key in f n c; do printf 'sendkey %s\n' "$key"; sleep 0.35; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
           grep -q 'Created RAM-backed file' /tmp/phoxtra-serial.log
+          grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           # Leave the desktop event loop so the test can confirm a clean return to the shell.

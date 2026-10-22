@@ -14,6 +14,7 @@ void file_manager_navigate(const char* path);
 void file_manager_render(void);
 window_t* file_manager_get_window(void);
 int file_manager_hit_test(uint32_t x, uint32_t y);
+int file_manager_entry_is_directory(uint32_t index);
 void file_manager_select_entry(uint32_t index);
 int file_manager_open_entry(uint32_t index);
 void file_manager_go_parent(void);

@@ -91,7 +91,7 @@ void compositor_render_frame(void) {
         fb_fill_rect(win->x + 48, win->y + 10, 12, 12, 0x0010B981); // Green Max
 
         // Window Title Text
-        font_draw_string(win->title, win->x + 70, win->y + 8, 0x00F8FAFC, 0x00000000);
+        font_draw_string_bold(win->title, win->x + 70, win->y + 8, 0x00F8FAFC, 0x00000000);
     }
 
     // 3. Render Modern Desktop Taskbar / Dock

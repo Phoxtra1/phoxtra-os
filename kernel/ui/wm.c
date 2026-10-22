@@ -176,7 +176,11 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
             uint64_t now = timer_get_ticks();
             file_manager_select_entry((uint32_t)index);
             selected_file_entry = index;
-            if (last_file_entry == index && now - last_file_click_tick <= 45) {
+            /* Directories open on the first click; files retain double-click preview. */
+            if (file_manager_entry_is_directory((uint32_t)index)) {
+                (void)file_manager_open_entry((uint32_t)index);
+                last_file_entry = -1;
+            } else if (last_file_entry == index && now - last_file_click_tick <= 45) {
                 (void)file_manager_open_entry((uint32_t)index);
                 last_file_entry = -1;
             } else {
