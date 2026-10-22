@@ -83,7 +83,7 @@ static void redraw_entries(void) {
     fb_fill_rect(fm_win->x + 8, fm_win->y + 36, fm_win->width - 16,
                  fm_win->height - 44, fm_win->bg_color);
     current_directory = platform_storage_lookup(current_path);
-    if (!current_directory || !(current_directory->flags & VFS_DIRECTORY)) {
+    if (!current_directory || !platform_storage_is_directory(current_directory)) {
         font_draw_string("Directory unavailable", fm_win->x + 16, fm_win->y + 44,
                          palette->text_color, 0);
         entry_count = 0;
@@ -201,7 +201,7 @@ int file_manager_open_entry(uint32_t index) {
     vfs_node_t* node = entry_at(index);
     if (!node) return 0;
     selected_entry = (int32_t)index;
-    if (node->flags & VFS_DIRECTORY) {
+    if (platform_storage_is_directory(node)) {
         char next[FM_PATH_CAP];
         uint32_t p = 0;
         if (text_equal(current_path, "/")) next[p++] = '/';
