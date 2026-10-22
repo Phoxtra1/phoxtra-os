@@ -49,7 +49,7 @@ jobs:
           sleep 8
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
-          grep -q 'Carlito Calibri-compatible regular/bold 9x16 font initialized' /tmp/phoxtra-serial.log
+          grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
           # Wait until shell_start has completed framebuffer console rendering.
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
