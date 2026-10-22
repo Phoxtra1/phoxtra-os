@@ -34,6 +34,7 @@ typedef enum {
 #define PLATFORM_INPUT_RIGHT_PRESSED 0x02u
 #define PLATFORM_INPUT_MIDDLE_PRESSED 0x04u
 #define PLATFORM_INPUT_LEFT_CLICKED 0x08u
+#define PLATFORM_INPUT_RIGHT_CLICKED 0x10u
 #define PLATFORM_MOD_CTRL 0x01u
 
 typedef struct platform_input_event {

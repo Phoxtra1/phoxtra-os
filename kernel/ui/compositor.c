@@ -67,7 +67,10 @@ void compositor_raise_window(window_t* window) {
 void compositor_render_frame(void) {
     // 1. Draw Modern Glassmorphic Desktop Background Gradient
     theme_palette_t* palette = theme_get_current();
-    fb_draw_gradient(0, 0, FB_WIDTH, FB_HEIGHT, palette->desktop_bg_start, palette->desktop_bg_end);
+    uint32_t wallpaper_start = palette->desktop_bg_start;
+    uint32_t wallpaper_end = palette->desktop_bg_end;
+    theme_get_wallpaper_colors(&wallpaper_start, &wallpaper_end);
+    fb_draw_gradient(0, 0, FB_WIDTH, FB_HEIGHT, wallpaper_start, wallpaper_end);
 
     // 2. Render Windows
     for (uint32_t i = 0; i < window_count; i++) {

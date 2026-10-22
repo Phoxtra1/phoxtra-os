@@ -92,6 +92,7 @@ int platform_input_poll(platform_input_event_t* event) {
         event->key = 0;
         event->buttons = (uint8_t)(mouse.buttons & 0x07u);
         if (mouse.left_clicked) event->buttons |= PLATFORM_INPUT_LEFT_CLICKED;
+        if (mouse.right_clicked) event->buttons |= PLATFORM_INPUT_RIGHT_CLICKED;
         event->modifiers = keyboard_control_pressed() ? PLATFORM_MOD_CTRL : 0;
         event->x = mouse.x;
         event->y = mouse.y;

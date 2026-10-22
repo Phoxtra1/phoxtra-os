@@ -178,7 +178,7 @@ static void cmd_help(void) {
     console_write("  userland   - Audit Ring 3 Userland Isolation & Memory Transition Engine\n");
     console_write("  pci        - Scan PCI Express Bus for Hardware Controllers & Peripherals\n");
     console_write("  installer  - Launch Phoxtra OS Bare-Metal Installation Wizard\n");
-    console_write("  theme      - Switch Desktop Theme (midnight-gold, cyber-sapphire, emerald)\n");
+    console_write("  theme      - Switch Desktop Theme (phoxtra-blue, cyber-sapphire, emerald)\n");
     console_write("  fm         - Launch Phoxtra Graphical File Manager Window\n");
     console_write("  store      - Launch Phoxtra App Store & Software Package Manager\n");
     console_write("  update     - Audit Automated Over-The-Air (OTA) Cloud System Updates\n");

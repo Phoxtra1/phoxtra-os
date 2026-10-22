@@ -21,6 +21,13 @@ static int32_t drag_dx = 0, drag_dy = 0;
 static int32_t selected_file_entry = -1;
 static int32_t last_file_entry = -1;
 static uint64_t last_file_click_tick = 0;
+static int32_t selected_desktop_icon = -1;
+static int32_t last_desktop_icon = -1;
+static uint64_t last_desktop_click_tick = 0;
+static uint8_t context_menu_open = 0;
+static uint32_t context_menu_x = 0, context_menu_y = 0;
+#define DESKTOP_MENU_WIDTH 304u
+#define DESKTOP_MENU_HEIGHT 310u
 
 void wm_init(void) {
     klog(LOG_INFO, "Initializing Phoxtra desktop window manager");
@@ -42,6 +49,11 @@ void wm_start_desktop(void) {
 }
 
 static void wm_draw_desktop_icons(void) {
+    if (selected_desktop_icon == 0) fb_fill_rect(8, 16, 72, 66, 0x0030445D);
+    if (selected_desktop_icon == 1) fb_fill_rect(8, 88, 72, 66, 0x0030445D);
+    if (selected_desktop_icon == 2) fb_fill_rect(8, 160, 72, 66, 0x0030445D);
+    if (selected_desktop_icon == 3) fb_fill_rect(8, 232, 72, 66, 0x0030445D);
+    if (selected_desktop_icon == 4) fb_fill_rect(8, 304, 72, 66, 0x0030445D);
     icon_draw_drive(18, 20, "System");
     icon_draw_folder(18, 92, "Documents");
     icon_draw_folder(18, 164, "Downloads");
@@ -90,11 +102,81 @@ static void wm_draw_pointer(void) {
     }
 }
 
+static void wm_draw_context_menu(void) {
+    if (!context_menu_open) return;
+    theme_palette_t* pal = theme_get_current();
+    uint32_t x = context_menu_x, y = context_menu_y;
+    fb_fill_rect(x, y, DESKTOP_MENU_WIDTH, DESKTOP_MENU_HEIGHT, 0x00101828);
+    fb_draw_rect(x, y, DESKTOP_MENU_WIDTH, DESKTOP_MENU_HEIGHT, pal->accent_secondary);
+    font_draw_string_bold("PHOXTRA DESKTOP", x + 12, y + 7, 0x00F8FAFC, 0);
+    fb_fill_rect(x + 8, y + 31, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
+    font_draw_string_bold("WALLPAPER", x + 12, y + 36, pal->accent_primary, 0);
+
+    for (uint32_t i = 0; i < theme_get_wallpaper_count(); ++i) {
+        uint32_t row_y = y + 59u + i * 25u;
+        if (theme_get_wallpaper_index() == i)
+            fb_fill_rect(x + 6, row_y - 2, DESKTOP_MENU_WIDTH - 12, 24, 0x0030445D);
+        char prefix[3] = { (char)('1' + i), ' ', '\0' };
+        font_draw_string(prefix, x + 12, row_y, 0x00BAE6FD, 0);
+        font_draw_string(theme_get_wallpaper_name(i), x + 34, row_y, pal->text_color, 0);
+    }
+
+    fb_fill_rect(x + 8, y + 163, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
+    font_draw_string_bold("COLOUR SCHEME", x + 12, y + 169, pal->accent_primary, 0);
+    static const char* const theme_names[3] = {
+        "1  Phoxtra Blue", "2  Cyber Sapphire", "3  Emerald Dark"
+    };
+    for (uint32_t i = 0; i < 3u; ++i) {
+        uint32_t row_y = y + 194u + i * 26u;
+        if (theme_get_current_index() == i)
+            fb_fill_rect(x + 6, row_y - 2, DESKTOP_MENU_WIDTH - 12, 24, 0x0030445D);
+        font_draw_string(theme_names[i], x + 12, row_y, pal->text_color, 0);
+    }
+    fb_fill_rect(x + 8, y + 274, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
+    font_draw_string("Right-click desktop to reopen", x + 12, y + 282, 0x0094A3B8, 0);
+}
+
+/* Returns 1 when the click is consumed by the open menu. */
+static int wm_handle_context_menu_click(uint32_t x, uint32_t y) {
+    if (!context_menu_open) return 0;
+    if (x < context_menu_x || x >= context_menu_x + DESKTOP_MENU_WIDTH ||
+        y < context_menu_y || y >= context_menu_y + DESKTOP_MENU_HEIGHT) {
+        context_menu_open = 0;
+        return 0;
+    }
+
+    uint32_t rel_y = y - context_menu_y;
+    if (rel_y >= 59u && rel_y < 159u) {
+        uint32_t index = (rel_y - 59u) / 25u;
+        if (index < theme_get_wallpaper_count()) theme_set_wallpaper(index);
+    } else if (rel_y >= 194u && rel_y < 272u) {
+        uint32_t index = (rel_y - 194u) / 26u;
+        if (index < 3u) theme_set(index);
+    }
+    context_menu_open = 0;
+    return 1;
+}
+
+static void wm_handle_right_click(uint32_t x, uint32_t y) {
+    if (y >= FB_HEIGHT - 48u || compositor_window_at_point(x, y)) {
+        context_menu_open = 0;
+        return;
+    }
+    context_menu_open = 1;
+    context_menu_x = x;
+    context_menu_y = y;
+    if (context_menu_x + DESKTOP_MENU_WIDTH > FB_WIDTH)
+        context_menu_x = FB_WIDTH - DESKTOP_MENU_WIDTH;
+    if (context_menu_y + DESKTOP_MENU_HEIGHT > FB_HEIGHT - 48u)
+        context_menu_y = FB_HEIGHT - 48u - DESKTOP_MENU_HEIGHT;
+}
+
 static void wm_render_desktop(void) {
     compositor_render_frame();
     wm_draw_desktop_icons();
     wm_draw_window_contents();
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
+    wm_draw_context_menu();
     wm_draw_pointer();
     platform_display_present();
 }
@@ -123,16 +205,39 @@ static void wm_handle_dock_click(uint32_t x) {
     }
 }
 
-static void wm_handle_desktop_icon(uint32_t x, uint32_t y) {
-    if (x >= 130) return;
+static int wm_desktop_icon_at(uint32_t x, uint32_t y) {
+    if (x < 8 || x >= 80 || y < 16 || y >= 370) return -1;
+    uint32_t row = (y - 16u) / 72u;
+    if (row >= 5u || y >= 16u + row * 72u + 66u) return -1;
+    return (int)row;
+}
+
+static void wm_open_desktop_icon(int32_t index) {
+    const char* path = "/";
+    if (index == 1) path = "/home/user/Documents";
+    else if (index == 2) path = "/home/user/Downloads";
+    else if (index == 3) path = "/home/user/Pictures";
+    else if (index == 4) path = "/home/user/Desktop";
     file_manager_open_window("/home/user");
     fm_win = file_manager_get_window();
     wm_restore_window(fm_win);
-    if (y >= 82 && y < 154) file_manager_navigate("/home/user/Documents");
-    else if (y >= 154 && y < 226) file_manager_navigate("/home/user/Downloads");
-    else if (y >= 226 && y < 298) file_manager_navigate("/home/user/Pictures");
-    else if (y >= 298 && y < 370) file_manager_navigate("/home/user/Desktop");
-    else file_manager_navigate("/");
+    if (index == 0) file_manager_navigate("/");
+    else file_manager_navigate(path);
+}
+
+static void wm_handle_desktop_icon(uint32_t x, uint32_t y) {
+    int32_t index = wm_desktop_icon_at(x, y);
+    if (index < 0) { selected_desktop_icon = -1; return; }
+    uint64_t now = timer_get_ticks();
+    selected_desktop_icon = index;
+    if (last_desktop_icon == index && now - last_desktop_click_tick <= 45u) {
+        last_desktop_icon = -1;
+        selected_desktop_icon = -1;
+        wm_open_desktop_icon(index);
+    } else {
+        last_desktop_icon = index;
+    }
+    last_desktop_click_tick = now;
 }
 
 static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
@@ -173,6 +278,7 @@ static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
 }
 
 static void wm_handle_click(uint32_t x, uint32_t y) {
+    if (context_menu_open && wm_handle_context_menu_click(x, y)) return;
     if (y >= FB_HEIGHT - 48) {
         wm_handle_dock_click(x);
         return;
@@ -197,11 +303,8 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
             uint64_t now = timer_get_ticks();
             file_manager_select_entry((uint32_t)index);
             selected_file_entry = index;
-            /* Directories open on the first click; files retain double-click preview. */
-            if (file_manager_entry_is_directory((uint32_t)index)) {
-                (void)file_manager_open_entry((uint32_t)index);
-                last_file_entry = -1;
-            } else if (last_file_entry == index && now - last_file_click_tick <= 45) {
+            /* Single click selects; a second click on the same item opens it. */
+            if (last_file_entry == index && now - last_file_click_tick <= 45u) {
                 (void)file_manager_open_entry((uint32_t)index);
                 last_file_entry = -1;
             } else {
@@ -262,6 +365,8 @@ void wm_desktop_event_loop(void) {
         platform_input_event_t event;
         int event_result = platform_input_poll(&event);
         if (event_result > 0 && event.type == PLATFORM_INPUT_POINTER) {
+            if (event.buttons & PLATFORM_INPUT_RIGHT_CLICKED)
+                wm_handle_right_click((uint32_t)event.x, (uint32_t)event.y);
             if (event.buttons & PLATFORM_INPUT_LEFT_CLICKED)
                 wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
             if ((event.buttons & PLATFORM_INPUT_LEFT_PRESSED) && drag_win) {
