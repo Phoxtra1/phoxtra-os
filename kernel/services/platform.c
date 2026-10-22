@@ -145,15 +145,15 @@ int platform_storage_list(const platform_fs_node_t* directory, uint32_t index, p
     vfs_node_t* child = vfs_readdir((vfs_node_t*)directory, index);
     if (!child) return PLATFORM_ERR_NOT_FOUND;
     copy_name(entry->name, child->name, sizeof(entry->name));
-    entry->type = (child->flags & VFS_DIRECTORY) ? PLATFORM_FS_ENTRY_DIRECTORY :
-                  ((child->flags & VFS_CHARDEVICE) ? PLATFORM_FS_ENTRY_DEVICE : PLATFORM_FS_ENTRY_FILE);
+    entry->type = (child->flags == VFS_DIRECTORY) ? PLATFORM_FS_ENTRY_DIRECTORY :
+                  ((child->flags == VFS_CHARDEVICE) ? PLATFORM_FS_ENTRY_DEVICE : PLATFORM_FS_ENTRY_FILE);
     entry->size = child->size;
     entry->handle = child;
     return PLATFORM_OK;
 }
 uint32_t platform_storage_count(const platform_fs_node_t* directory) {
     uint32_t count = 0;
-    if (!directory || !(directory->flags & VFS_DIRECTORY)) return 0;
+    if (!directory || directory->flags != VFS_DIRECTORY) return 0;
     while (vfs_readdir((vfs_node_t*)directory, count)) ++count;
     return count;
 }
@@ -162,7 +162,7 @@ uint64_t platform_storage_read(const platform_fs_node_t* file, uint64_t offset, 
     return vfs_read((vfs_node_t*)file, offset, size, buffer);
 }
 uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint64_t size, const uint8_t* buffer) {
-    if (!file || !buffer || !(file->flags & VFS_FILE)) return 0;
+    if (!file || !buffer || file->flags != VFS_FILE) return 0;
     return vfs_write(file, offset, size, buffer);
 }
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name) {
@@ -170,7 +170,7 @@ int platform_storage_create_directory(platform_fs_node_t* parent, const char* na
     return vfs_create_child(parent, name, VFS_DIRECTORY) ? PLATFORM_OK : PLATFORM_ERR_IO;
 }
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents) {
-    if (!parent || !name || !name[0] || !(parent->flags & VFS_DIRECTORY)) return PLATFORM_ERR_INVALID;
+    if (!parent || !name || !name[0] || parent->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;
     if (platform_security_check_vfs(0, parent, 0) != PLATFORM_OK) return PLATFORM_ERR_DENIED;
     return vfs_create_ram_file(parent, name, initial_contents) ? PLATFORM_OK : PLATFORM_ERR_IO;
 }
