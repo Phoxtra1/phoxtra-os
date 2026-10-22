@@ -115,12 +115,13 @@ static void redraw_entries(void) {
                                        fm_win->y + 86, palette->text_color, 0);
     char status[64];
     /* The fixed status text avoids presenting fictitious disk capacity. */
-    if (entry_count > FM_VISIBLE_ITEMS) {
-        const char* more = "Use [ and ] to browse pages";
-        font_draw_string(more, fm_win->x + 16, fm_win->y + fm_win->height - 43,
-                         palette->text_color, 0);
-    }
-    font_draw_string("Enter: open   Backspace: parent   N: folder   Ctrl+N: file",
+    font_draw_string("Folder: click  File: double-click",
+                     fm_win->x + 16, fm_win->y + fm_win->height - 60, palette->text_color, 0);
+    font_draw_string("Backspace: parent  N: folder",
+                     fm_win->x + 16, fm_win->y + fm_win->height - 42, palette->text_color, 0);
+    font_draw_string(entry_count > FM_VISIBLE_ITEMS
+                         ? "Ctrl+N: file  [ ]: pages"
+                         : "Ctrl+N: create file",
                      fm_win->x + 16, fm_win->y + fm_win->height - 24, palette->text_color, 0);
     (void)status;
 }
