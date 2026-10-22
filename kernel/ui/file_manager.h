@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 void file_manager_init(void);
+void file_manager_render(void);
 void file_manager_open_window(const char* initial_path);
 void file_manager_create_folder(const char* folder_name);
 void file_manager_navigate(const char* path);
