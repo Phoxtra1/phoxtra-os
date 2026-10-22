@@ -171,7 +171,6 @@ int platform_storage_create_directory(platform_fs_node_t* parent, const char* na
 }
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents) {
     if (!parent || !name || !name[0] || parent->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;
-    if (platform_security_check_vfs(0, parent, 0) != PLATFORM_OK) return PLATFORM_ERR_DENIED;
     return vfs_create_ram_file(parent, name, initial_contents) ? PLATFORM_OK : PLATFORM_ERR_IO;
 }
 int platform_storage_get_info(platform_storage_info_t* info) {
