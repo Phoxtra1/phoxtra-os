@@ -7,6 +7,7 @@
 
 #define MAX_WINDOWS 16
 static window_t window_list[MAX_WINDOWS];
+static uint32_t z_order[MAX_WINDOWS];
 static uint32_t window_count = 0;
 
 uint32_t compositor_window_count(void) { return window_count; }
