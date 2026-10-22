@@ -32,7 +32,7 @@ static const platform_product_profile_t active_profile = {
 #endif
 
 static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
-    { "terminal", "Terminal", "System", "Kernel shell console", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
+    { "terminal", "Shell Console", "System", "Kernel shell command interface; desktop terminal emulator is not yet implemented", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
     { "file-manager", "Files", "Productivity", "VFS file and folder browser", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
     { "settings", "Settings", "System", "Future unified device and desktop settings", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
     { "amineva-workspace", "Amineva Workspace", "Productivity", "Foundation entry for Docs, Sheets, Slides and collaboration tools", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
