@@ -32,6 +32,44 @@ vfs_node_t* vfs_create_node(const char* name, uint32_t flags) {
     return node;
 }
 
+#define VFS_RAM_FILE_CAPACITY 1024u
+
+static uint64_t ram_file_read(vfs_node_t* node, uint64_t offset, uint64_t size, uint8_t* buffer) {
+    if (!node || !node->ptr || !buffer || offset >= node->size) return 0;
+    uint64_t amount = size;
+    if (amount > node->size - offset) amount = node->size - offset;
+    const uint8_t* data = (const uint8_t*)node->ptr;
+    for (uint64_t i = 0; i < amount; ++i) buffer[i] = data[offset + i];
+    return amount;
+}
+static uint64_t ram_file_write(vfs_node_t* node, uint64_t offset, uint64_t size, const uint8_t* buffer) {
+    if (!node || !node->ptr || !buffer || offset >= VFS_RAM_FILE_CAPACITY) return 0;
+    uint64_t amount = size;
+    if (amount > VFS_RAM_FILE_CAPACITY - offset) amount = VFS_RAM_FILE_CAPACITY - offset;
+    uint8_t* data = (uint8_t*)node->ptr;
+    for (uint64_t i = 0; i < amount; ++i) data[offset + i] = buffer[i];
+    if (offset + amount > node->size) node->size = offset + amount;
+    return amount;
+}
+
+vfs_node_t* vfs_create_ram_file(vfs_node_t* parent, const char* name, const char* initial_contents) {
+    if (!parent || !name || !name[0]) return (void*)0;
+    size_t length = 0;
+    if (initial_contents) while (initial_contents[length] && length < VFS_RAM_FILE_CAPACITY) ++length;
+    if (length == VFS_RAM_FILE_CAPACITY && initial_contents[length]) return (void*)0;
+    uint8_t* data = (uint8_t*)kmalloc(VFS_RAM_FILE_CAPACITY);
+    if (!data) return (void*)0;
+    for (size_t i = 0; i < VFS_RAM_FILE_CAPACITY; ++i) data[i] = 0;
+    for (size_t i = 0; i < length; ++i) data[i] = (uint8_t)initial_contents[i];
+    vfs_node_t* node = vfs_create_child(parent, name, VFS_FILE);
+    if (!node) { kfree(data); return (void*)0; }
+    node->ptr = data;
+    node->size = length;
+    node->read = ram_file_read;
+    node->write = ram_file_write;
+    return node;
+}
+
 vfs_node_t* vfs_create_child(vfs_node_t* parent, const char* name, uint32_t flags) {
     if (!parent || !(parent->flags & VFS_DIRECTORY) || !name || !name[0]) return (void*)0;
     if (kstrcmp(name, ".") == 0 || kstrcmp(name, "..") == 0) return (void*)0;
@@ -159,10 +197,16 @@ void vfs_seed_default_tree(void) {
         klog(LOG_WARNING, "VFS: user workspace could not be initialized");
         return;
     }
-    (void)ensure_directory(user, "Desktop");
-    (void)ensure_directory(user, "Documents");
+    vfs_node_t* desktop = ensure_directory(user, "Desktop");
+    vfs_node_t* documents = ensure_directory(user, "Documents");
     (void)ensure_directory(user, "Downloads");
     (void)ensure_directory(user, "Pictures");
     (void)ensure_directory(user, "Music");
+    if (desktop && !desktop->first_child)
+        (void)vfs_create_ram_file(desktop, "README.txt",
+            "Welcome to Phoxtra OS.\n\nThis is your temporary RAM-backed desktop.\nFiles in this workspace do not survive a reboot yet.\n");
+    if (documents && !documents->first_child)
+        (void)vfs_create_ram_file(documents, "welcome.txt",
+            "AKWAABA - PHOXTRA OS\n\nYour Documents folder is backed by the in-memory VFS.\nPersistent disk storage will be connected in a later storage milestone.\n");
     klog(LOG_INFO, "VFS seeded a temporary RAM-backed home workspace");
 }

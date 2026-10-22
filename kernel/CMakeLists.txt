@@ -25,6 +25,7 @@ set(KERNEL_SOURCES
     src/irq.c
     src/timer.c
     src/keyboard.c
+    src/mouse.c
     src/shell.c
     log/logger.c
     memory/pmm.c
