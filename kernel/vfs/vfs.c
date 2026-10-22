@@ -100,7 +100,7 @@ vfs_node_t* vfs_get_root(void) { return vfs_root; }
 int vfs_mount(const char* path, vfs_node_t* node) {
     if (!vfs_root || !node || !path || !path[0]) return -1;
     if (kstrcmp(path, "/") == 0) {
-        if (!(node->flags & VFS_DIRECTORY)) return -1;
+        if (node->flags != VFS_DIRECTORY) return -1;
         vfs_root = node;
         node->parent = node;
         return 0;
