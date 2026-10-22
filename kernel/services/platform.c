@@ -137,10 +137,10 @@ platform_fs_node_t* platform_storage_lookup(const char* path) {
     return vfs_lookup(path);
 }
 int platform_storage_is_directory(const platform_fs_node_t* node) {
-    return node && (node->flags & VFS_DIRECTORY) != 0;
+    return node && node->flags == VFS_DIRECTORY;
 }
 int platform_storage_list(const platform_fs_node_t* directory, uint32_t index, platform_fs_entry_t* entry) {
-    if (!directory || !entry || !(directory->flags & VFS_DIRECTORY)) return PLATFORM_ERR_INVALID;
+    if (!directory || !entry || directory->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;
     vfs_node_t* child = vfs_readdir((vfs_node_t*)directory, index);
     if (!child) return PLATFORM_ERR_NOT_FOUND;
     copy_name(entry->name, child->name, sizeof(entry->name));
@@ -157,7 +157,7 @@ uint32_t platform_storage_count(const platform_fs_node_t* directory) {
     return count;
 }
 uint64_t platform_storage_read(const platform_fs_node_t* file, uint64_t offset, uint64_t size, uint8_t* buffer) {
-    if (!file || !buffer || !(file->flags & VFS_FILE)) return 0;
+    if (!file || !buffer || file->flags != VFS_FILE) return 0;
     return vfs_read((vfs_node_t*)file, offset, size, buffer);
 }
 uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint64_t size, const uint8_t* buffer) {
@@ -165,7 +165,7 @@ uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint6
     return vfs_write(file, offset, size, buffer);
 }
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name) {
-    if (!parent || !name || !name[0] || !(parent->flags & VFS_DIRECTORY)) return PLATFORM_ERR_INVALID;
+    if (!parent || !name || !name[0] || parent->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;
     return vfs_create_child(parent, name, VFS_DIRECTORY) ? PLATFORM_OK : PLATFORM_ERR_IO;
 }
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents) {
