@@ -231,7 +231,7 @@ void wm_desktop_event_loop(void) {
     for (;;) {
         platform_input_event_t event;
         int event_result = platform_input_poll(&event);
-        if (event_result == PLATFORM_OK && event.type == PLATFORM_INPUT_POINTER) {
+        if (event_result > 0 && event.type == PLATFORM_INPUT_POINTER) {
             if (event.buttons & PLATFORM_INPUT_LEFT_CLICKED)
                 wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
             if ((event.buttons & PLATFORM_INPUT_LEFT_PRESSED) && drag_win) {
