@@ -25,6 +25,7 @@
 #include "../ui/font.h"
 #include "../ui/compositor.h"
 #include "../ui/wm.h"
+#include "mouse.h"
 #include "../process/stress.h"
 #include "../memory/heap_audit.h"
 #include "../memory/vmm.h"
@@ -484,6 +485,7 @@ static void cmd_gui(void) {
        can scroll the text console and repaint over the newly rendered desktop. */
     console_clear();
     wm_start_desktop();
+    wm_desktop_event_loop();
     klog(LOG_INFO, "GUI compositor render completed");
 }
 static void cmd_wm(void) {

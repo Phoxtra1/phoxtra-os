@@ -9,6 +9,7 @@ extern "C" {
 
 void wm_init(void);
 void wm_start_desktop(void);
+void wm_desktop_event_loop(void);
 uint32_t wm_get_window_count(void);
 
 #ifdef __cplusplus

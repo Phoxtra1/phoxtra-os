@@ -132,11 +132,19 @@ void keyboard_init(void) {
     irq_install_handler(1, keyboard_callback);
 }
 
-char keyboard_get_char(void) {
-    while (kbd_head == kbd_tail) {
-        asm volatile("hlt");
-    }
-    char c = kbd_buffer[kbd_tail];
+int keyboard_poll_char(char* out) {
+    if (!out || kbd_head == kbd_tail) return 0;
+    *out = kbd_buffer[kbd_tail];
     kbd_tail = (kbd_tail + 1) % KBD_BUFFER_SIZE;
+    return 1;
+}
+
+int keyboard_control_pressed(void) { return control_active; }
+
+char keyboard_get_char(void) {
+    char c;
+    while (!keyboard_poll_char(&c)) {
+        asm volatile("sti; hlt" ::: "memory");
+    }
     return c;
 }
