@@ -79,7 +79,7 @@ static void wm_render_desktop(void) {
     wm_draw_window_contents();
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
     wm_draw_pointer();
-    fb_swap_buffers();
+    platform_display_present();
 }
 
 static void wm_restore_window(window_t* win) {
