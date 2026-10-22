@@ -132,7 +132,8 @@ void file_manager_init(void) {
 void file_manager_open_window(const char* initial_path) {
     if (initial_path && initial_path[0]) text_copy(current_path, initial_path, sizeof(current_path));
     if (!vfs_lookup(current_path)) text_copy(current_path, "/home/user", sizeof(current_path));
-    if (fm_win && fm_win->active) {
+    if (fm_win) {
+        fm_win->active = 1;
         fm_win->minimized = 0;
         redraw_entries();
         return;
