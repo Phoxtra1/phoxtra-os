@@ -7,7 +7,7 @@
 #include "../installer/installer.h"
 #include "../log/logger.h"
 #include "../src/mouse.h"
-#include "../src/keyboard.h"
+#include "keyboard.h"
 #include "../src/timer.h"
 
 static window_t* term_win = 0;
