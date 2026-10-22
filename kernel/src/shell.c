@@ -112,6 +112,7 @@ extern uint64_t vmm_create_user_page_directory(void);
 extern void vmm_switch_page_directory(uint64_t cr3_phys);
 
 static void cmd_platform(void) {
+    klog(LOG_INFO, "Platform diagnostic command executed");
     const platform_product_profile_t* profile = platform_product_profile();
     platform_display_info_t display;
     platform_storage_info_t storage;
