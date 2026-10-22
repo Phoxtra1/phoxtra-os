@@ -23,7 +23,8 @@ void wm_init(void) {
 
     // Initialize Default Desktop Windows
     term_win = compositor_create_window("Phoxtra Terminal - Ring 3", 60, 60, 480, 320, 0x00020617);
-    fm_win   = compositor_create_window("Phoxtra File Manager - /home/user", 570, 60, 400, 320, 0x00020617);
+    file_manager_open_window("/home/user");
+    fm_win = compositor_window_at(compositor_window_count() - 1);
     sec_win  = compositor_create_window("Phoxtra Security & CAC Audit", 60, 410, 910, 280, 0x00020617);
 }
 
@@ -100,15 +101,7 @@ static void wm_render_desktop(void) {
         font_draw_string("phoxtra> help", term_win->x + 16, term_win->y + 70, 0x00F8FAFC, 0);
         font_draw_string("Keyboard: click window, type; Esc returns to shell", term_win->x + 16, term_win->y + 92, 0x0094A3B8, 0);
     }
-    if (fm_win) {
-        font_draw_string("Location: /home/user", fm_win->x + 16, fm_win->y + 42, 0x0038BDF8, 0);
-        fb_fill_rect(fm_win->x + 16, fm_win->y + 60, fm_win->width - 32, 2, 0x00334155);
-        icon_draw_folder(fm_win->x + 24, fm_win->y + 80, "Documents");
-        icon_draw_folder(fm_win->x + 104, fm_win->y + 80, "Downloads");
-        icon_draw_folder(fm_win->x + 184, fm_win->y + 80, "Pictures");
-        icon_draw_folder(fm_win->x + 24, fm_win->y + 170, "Desktop");
-        icon_draw_file(fm_win->x + 104, fm_win->y + 170, "README.txt");
-    }
+    if (fm_win) file_manager_render();
     if (sec_win) {
         font_draw_string("SECURITY POLICY / AUDIT STATUS", sec_win->x + 16, sec_win->y + 48, 0x00FFD700, 0);
         font_draw_string("Kernel capabilities and access checks", sec_win->x + 16, sec_win->y + 76, 0x0034D399, 0);
