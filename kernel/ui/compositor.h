@@ -18,6 +18,7 @@ typedef struct window {
     uint8_t  active;
     uint8_t  minimized;
     uint8_t  maximized;
+    uint32_t restore_x, restore_y, restore_width, restore_height;
 } window_t;
 
 void compositor_init(void);
