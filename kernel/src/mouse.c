@@ -110,7 +110,7 @@ void mouse_init(void) {
     /* Enable the auxiliary PS/2 clock, but keep IRQ12 disabled while
        issuing setup commands so the command ACK remains available here. */
     if (!wait_input_empty()) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: controller did not become ready");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: controller did not become ready");
         return;
     }
     outb(PS2_COMMAND_PORT, PS2_AUX_ENABLE);
@@ -119,28 +119,28 @@ void mouse_init(void) {
     outb(PS2_COMMAND_PORT, PS2_READ_COMMAND_BYTE);
     uint8_t command_byte = 0;
     if (!wait_output_full(&command_byte)) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: no controller response");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: no controller response");
         return;
     }
     command_byte = (uint8_t)((command_byte | 0x20u) & (uint8_t)~0x02u);
     command_byte = (uint8_t)(command_byte & (uint8_t)~0x20u);
     if (!write_command_byte(command_byte)) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: failed to configure controller");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: failed to configure controller");
         return;
     }
 
     if (!mouse_command(PS2_MOUSE_DEFAULTS)) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: device did not acknowledge defaults");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: device did not acknowledge defaults");
         return;
     }
     if (!mouse_command(PS2_MOUSE_ENABLE_STREAMING)) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: streaming could not be enabled");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: streaming could not be enabled");
         return;
     }
 
     command_byte = (uint8_t)((command_byte | 0x02u) & (uint8_t)~0x20u);
     if (!write_command_byte(command_byte)) {
-        klog(LOG_WARN, "PS/2 mouse unavailable: failed to enable IRQ12");
+        klog(LOG_WARNING, "PS/2 mouse unavailable: failed to enable IRQ12");
         return;
     }
 
