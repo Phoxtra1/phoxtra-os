@@ -189,6 +189,7 @@ void system_init()
     vfs_init();
     devfs_init();
     initrd_init();
+    vfs_seed_default_tree();
 
     /* ── Phase 10: Storage Drivers & Filesystems ── */
     blockdev_init();
