@@ -107,7 +107,7 @@ static void redraw_entries(void) {
         if (!node) continue;
         if ((int32_t)index == selected_entry)
             fb_fill_rect(x - 6, y - 5, FM_CELL_WIDTH - 4, 70, 0x00405267);
-        if (node->flags & VFS_DIRECTORY) icon_draw_folder(x, y, node->name);
+        if (node->flags == VFS_DIRECTORY) icon_draw_folder(x, y, node->name);
         else icon_draw_file(x, y, node->name);
     }
 
@@ -152,7 +152,7 @@ void file_manager_navigate(const char* path) {
     klog(LOG_INFO, "File manager navigation requested");
     if (!path || !path[0]) return;
     vfs_node_t* node = platform_storage_lookup(path);
-    if (!node || !(node->flags & VFS_DIRECTORY)) return;
+    if (!platform_storage_is_directory(node)) return;
     if (!text_copy(current_path, path, sizeof(current_path))) return;
     page_start = 0;
     selected_entry = -1;
