@@ -67,7 +67,7 @@ vfs_node_t* vfs_create_ram_file(vfs_node_t* parent, const char* name, const char
 }
 
 vfs_node_t* vfs_create_child(vfs_node_t* parent, const char* name, uint32_t flags) {
-    if (!parent || !(parent->flags & VFS_DIRECTORY) || !name || !name[0]) return (void*)0;
+    if (!parent || parent->flags != VFS_DIRECTORY || !name || !name[0]) return (void*)0;
     if (kstrcmp(name, ".") == 0 || kstrcmp(name, "..") == 0) return (void*)0;
     for (uint32_t i = 0; name[i]; ++i) {
         if (name[i] == '/' || i >= sizeof(((vfs_node_t*)0)->name) - 1) return (void*)0;
