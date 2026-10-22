@@ -54,10 +54,14 @@ static void draw_preview(void) {
                      palette->accent_primary, 0);
     fb_fill_rect(preview_win->x + 14, preview_win->y + 62, preview_win->width - 28, 1, 0x00334155);
     uint32_t x = preview_win->x + 16, y = preview_win->y + 72;
-    uint32_t line_chars = (preview_win->width - 32) / (FONT_WIDTH + 1);
+    uint32_t line_chars = (preview_win->width - 32) / (FONT_AVG_WIDTH + 1);
     if (!line_chars) line_chars = 1;
     uint32_t chars = 0, lines = 0;
-    for (uint32_t i = 0; preview_text[i] && lines < 8; ++i) {
+    uint32_t max_lines = preview_win->height > 118u
+        ? (preview_win->height - 118u) / (FONT_HEIGHT + 2u) : 1u;
+    if (!max_lines) max_lines = 1u;
+    if (max_lines > 8u) max_lines = 8u;
+    for (uint32_t i = 0; preview_text[i] && lines < max_lines; ++i) {
         char ch[2] = { preview_text[i], 0 };
         if (preview_text[i] == '\r') continue;
         if (preview_text[i] == '\n' || chars >= line_chars) {
@@ -116,9 +120,9 @@ static void redraw_entries(void) {
     char status[64];
     /* The fixed status text avoids presenting fictitious disk capacity. */
     font_draw_string("Folder: click  File: double-click",
-                     fm_win->x + 16, fm_win->y + fm_win->height - 60, palette->text_color, 0);
+                     fm_win->x + 16, fm_win->y + fm_win->height - 72, palette->text_color, 0);
     font_draw_string("Backspace: parent  N: folder",
-                     fm_win->x + 16, fm_win->y + fm_win->height - 42, palette->text_color, 0);
+                     fm_win->x + 16, fm_win->y + fm_win->height - 48, palette->text_color, 0);
     font_draw_string(entry_count > FM_VISIBLE_ITEMS
                          ? "Ctrl+N: file  [ ]: pages"
                          : "Ctrl+N: create file",
