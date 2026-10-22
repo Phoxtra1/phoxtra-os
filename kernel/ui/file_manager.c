@@ -217,10 +217,12 @@ int file_manager_open_entry(uint32_t index) {
     uint64_t got = vfs_read(node, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
     preview_text[got < sizeof(preview_text) ? got : sizeof(preview_text) - 1] = '\0';
     text_copy(preview_name, node->name, sizeof(preview_name));
-    if (!preview_win || !preview_win->active) {
-        preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 280, 210, 450, 230, 0x00020617);
+    if (!preview_win) preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 280, 170, 450, 190, 0x00020617);
+    if (preview_win) {
+        preview_win->active = 1;
+        preview_win->minimized = 0;
+        compositor_raise_window(preview_win);
     }
-    if (preview_win) { preview_win->active = 1; preview_win->minimized = 0; }
     klog(LOG_INFO, "Opened VFS file preview");
     return 1;
 }
