@@ -97,3 +97,5 @@ void file_manager_create_file(const char* name, const char* content) {
         klog(LOG_INFO, "File Manager: Created RAM-backed file");
     } else klog(LOG_WARNING, "File Manager: file creation failed");
 }
+
+void file_manager_render(void) { redraw_entries(); }
