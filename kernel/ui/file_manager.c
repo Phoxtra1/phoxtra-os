@@ -132,7 +132,7 @@ void file_manager_init(void) {
 }
 void file_manager_open_window(const char* initial_path) {
     if (initial_path && initial_path[0]) text_copy(current_path, initial_path, sizeof(current_path));
-    if (!vfs_lookup(current_path)) text_copy(current_path, "/home/user", sizeof(current_path));
+    if (!platform_storage_lookup(current_path)) text_copy(current_path, "/home/user", sizeof(current_path));
     if (fm_win) {
         fm_win->active = 1;
         fm_win->minimized = 0;
@@ -229,7 +229,7 @@ int file_manager_open_entry(uint32_t index) {
 }
 void file_manager_create_folder(const char* name) {
     if (!name || !name[0]) return;
-    if (!current_directory) current_directory = vfs_lookup(current_path);
+    if (!current_directory) current_directory = platform_storage_lookup(current_path);
     if (platform_storage_create_directory(current_directory, name) == PLATFORM_OK) {
         redraw_entries();
         klog(LOG_INFO, "Created RAM-backed folder");
@@ -237,7 +237,7 @@ void file_manager_create_folder(const char* name) {
 }
 void file_manager_create_file(const char* name, const char* content) {
     if (!name || !name[0]) return;
-    if (!current_directory) current_directory = vfs_lookup(current_path);
+    if (!current_directory) current_directory = platform_storage_lookup(current_path);
     if (platform_storage_create_text_file(current_directory, name, content ? content : "") == PLATFORM_OK) {
         redraw_entries();
         klog(LOG_INFO, "Created RAM-backed file");
