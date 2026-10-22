@@ -65,6 +65,7 @@ int platform_services_init(void) {
     status_flags |= PLATFORM_STATUS_POLICY_PROVIDER;
     initialized = 1;
     klog(LOG_INFO, "Phoxtra shared platform services initialized");
+    klog(LOG_INFO, active_profile.id);
     klog(LOG_INFO, "Storage backend: volatile RAM VFS; persistent storage is not yet connected");
     return PLATFORM_OK;
 }
