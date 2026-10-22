@@ -80,7 +80,7 @@ typedef struct platform_fs_entry {
     char name[PLATFORM_FS_NAME_CAP];
     uint32_t type;
     uint64_t size;
-    const platform_fs_node_t* handle;
+    platform_fs_node_t* handle;
 } platform_fs_entry_t;
 
 typedef struct platform_storage_info {
@@ -90,7 +90,7 @@ typedef struct platform_storage_info {
 } platform_storage_info_t;
 
 #define PLATFORM_STORAGE_VOLATILE_RAM 1u
-const platform_fs_node_t* platform_storage_lookup(const char* path);
+platform_fs_node_t* platform_storage_lookup(const char* path);
 int platform_storage_is_directory(const platform_fs_node_t* node);
 int platform_storage_list(const platform_fs_node_t* directory, uint32_t index, platform_fs_entry_t* entry);
 uint32_t platform_storage_count(const platform_fs_node_t* directory);
