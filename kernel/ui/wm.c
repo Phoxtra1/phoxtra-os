@@ -249,7 +249,7 @@ void wm_desktop_event_loop(void) {
             last_redraw = 0;
         }
 
-        if (event_result == PLATFORM_OK && event.type == PLATFORM_INPUT_KEY) {
+        if (event_result > 0 && event.type == PLATFORM_INPUT_KEY) {
             char key = (char)event.key;
             if (key == 27) break;
             wm_handle_key(key);
