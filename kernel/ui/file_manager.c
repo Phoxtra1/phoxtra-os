@@ -87,10 +87,10 @@ void file_manager_create_folder(const char* name) {
     if (vfs_create_child(current_directory, name, VFS_DIRECTORY)) {
         redraw_entries();
         klog(LOG_INFO, "File Manager: Created RAM-backed directory");
-    } else klog(LOG_WARN, "File Manager: Directory creation failed");
+    } else klog(LOG_WARNING, "File Manager: Directory creation failed");
 }
 void file_manager_create_file(const char* name, const char* content) {
     (void)name; (void)content;
     /* Regular file data storage is not yet implemented in the VFS node ABI. */
-    klog(LOG_WARN, "File Manager: regular file creation awaits VFS data backend");
+    klog(LOG_WARNING, "File Manager: regular file creation awaits VFS data backend");
 }
