@@ -17,11 +17,11 @@ static uint32_t status_flags;
 #define PHOXTRA_PRODUCT_KIND PLATFORM_PROFILE_LAPTOP
 #endif
 
-#if PHOXTRA_PRODUCT_KIND == PLATFORM_PROFILE_EMBEDDED
+#if PHOXTRA_PRODUCT_KIND == 3
 static const platform_product_profile_t active_profile = {
     PLATFORM_PROFILE_EMBEDDED, "phoxtra-embedded", "Phoxtra Embedded Device", 0, 1, 1
 };
-#elif PHOXTRA_PRODUCT_KIND == PLATFORM_PROFILE_DESKTOP
+#elif PHOXTRA_PRODUCT_KIND == 2
 static const platform_product_profile_t active_profile = {
     PLATFORM_PROFILE_DESKTOP, "phoxtra-desktop", "Phoxtra Desktop", 1, 1, 1
 };
