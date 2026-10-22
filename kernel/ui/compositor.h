@@ -17,6 +17,7 @@ typedef struct window {
     uint32_t bg_color;
     uint8_t  active;
     uint8_t  minimized;
+    uint8_t  maximized;
 } window_t;
 
 void compositor_init(void);
