@@ -110,6 +110,5 @@ void compositor_render_frame(void) {
 
     font_draw_string("PHOXTRA OS", FB_WIDTH - 120, FB_HEIGHT - 32, 0x00F8FAFC, 0x00000000);
 
-    // 4. Swap Framebuffers
-    fb_swap_buffers();
+    /* The window manager presents after drawing all desktop layers. */
 }

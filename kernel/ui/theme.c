@@ -13,7 +13,7 @@ static theme_palette_t themes[3] = {
         .titlebar_bg      = 0x00111827,
         .accent_primary   = 0x00FFD700, // Royal Amber Gold
         .accent_secondary = 0x00007ACC, // Cyber Sapphire
-        .folder_color     = 0x00F1C40F, // Warm Gold Folder
+        .folder_color     = 0x0038BDF8, // Phoxtra light blue (default)
         .file_color       = 0x00E2E8F0, // Soft Slate File
         .text_color       = 0x00F8FAFC
     },
@@ -26,7 +26,7 @@ static theme_palette_t themes[3] = {
         .titlebar_bg      = 0x000F2A4A,
         .accent_primary   = 0x0064FFDA,
         .accent_secondary = 0x00007ACC,
-        .folder_color     = 0x0038BDF8,
+        .folder_color     = 0x003B82F6,
         .file_color       = 0x00E2E8F0,
         .text_color       = 0x00CCD6F6
     },
@@ -64,25 +64,13 @@ theme_palette_t* theme_get_current(void) {
 
 void icon_draw_folder(uint32_t x, uint32_t y, const char* label) {
     theme_palette_t* pal = theme_get_current();
-    static const uint32_t folder_colors[] = {
-        0x00FACC15, /* Phoxtra gold */
-        0x008B5CF6, /* purple */
-        0x003B82F6, /* blue */
-        0x000D9488, /* teal */
-        0x00F97316  /* orange */
-    };
-    uint32_t hash = 0;
-    if (label) {
-        for (uint32_t i = 0; label[i]; ++i)
-            hash = (hash * 31u) ^ (uint8_t)label[i];
-    }
-    uint32_t color = folder_colors[hash % (sizeof(folder_colors) / sizeof(folder_colors[0]))];
+    uint32_t color = pal->folder_color;
 
-    /* Folder tab and body use the same label-derived color, including purple. */
+    /* All folders share the selected theme colour. */
     fb_fill_rect(x + 4, y, 20, 8, color);
     fb_fill_rect(x, y + 6, 44, 34, color);
-    fb_draw_rect(x, y + 6, 44, 34, 0x003B3150);
-    fb_fill_rect(x + 2, y + 10, 40, 4, 0x33FFFFFF);
+    fb_draw_rect(x, y + 6, 44, 34, pal->accent_secondary);
+    fb_fill_rect(x + 2, y + 10, 40, 4, 0x00BAE6FD);
 
     if (label)
         font_draw_string(label, x - 4, y + 44, pal->text_color, 0x00000000);

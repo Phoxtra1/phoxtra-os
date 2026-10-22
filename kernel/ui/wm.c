@@ -55,6 +55,7 @@ static void wm_draw_window_contents(void) {
         font_draw_string("Terminal shell is available after leaving the desktop.", term_win->x + 16, term_win->y + 76, 0x00F8FAFC, 0);
         font_draw_string("Esc: return to shell", term_win->x + 16, term_win->y + 102, 0x0094A3B8, 0);
         font_draw_string("F: show file manager", term_win->x + 16, term_win->y + 124, 0x0094A3B8, 0);
+        font_draw_string("1: Light Blue  2: Blue  3: Emerald", term_win->x + 16, term_win->y + 148, 0x0094A3B8, 0);
     }
     if (sec_win && sec_win->active && !sec_win->minimized) {
         font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
@@ -146,6 +147,10 @@ static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
         drag_win = 0;
         return;
     }
+    if (win->maximized) {
+        drag_win = 0;
+        return;
+    }
     drag_win = win;
     drag_dx = (int32_t)x - (int32_t)win->x;
     drag_dy = (int32_t)y - (int32_t)win->y;
@@ -209,6 +214,11 @@ static void wm_handle_key(char key) {
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
     if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
 
+    if (key >= '1' && key <= '3') {
+        theme_set((uint32_t)(key - '1'));
+        return;
+    }
+
     if (focused_win != fm_win || !fm_win || !fm_win->active) return;
     if (key == '\b') {
         file_manager_go_parent();
@@ -239,12 +249,16 @@ void wm_desktop_event_loop(void) {
             if (event.buttons & PLATFORM_INPUT_LEFT_CLICKED)
                 wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
             if ((event.buttons & PLATFORM_INPUT_LEFT_PRESSED) && drag_win) {
+                int32_t max_x = (int32_t)FB_WIDTH - (int32_t)drag_win->width;
+                int32_t max_y = (int32_t)FB_HEIGHT - 48 - (int32_t)drag_win->height;
+                if (max_x < 0) max_x = 0;
+                if (max_y < 0) max_y = 0;
                 int32_t nx = event.x - drag_dx;
                 int32_t ny = event.y - drag_dy;
                 if (nx < 0) nx = 0;
                 if (ny < 0) ny = 0;
-                if (nx + (int32_t)drag_win->width > FB_WIDTH) nx = (int32_t)FB_WIDTH - (int32_t)drag_win->width;
-                if (ny + 32 > FB_HEIGHT - 48) ny = (int32_t)FB_HEIGHT - 80;
+                if (nx > max_x) nx = max_x;
+                if (ny > max_y) ny = max_y;
                 drag_win->x = (uint32_t)nx;
                 drag_win->y = (uint32_t)ny;
             } else if (!(event.buttons & PLATFORM_INPUT_LEFT_PRESSED)) {
