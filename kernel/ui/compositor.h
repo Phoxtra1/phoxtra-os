@@ -17,11 +17,15 @@ typedef struct window {
     uint32_t bg_color;
     uint8_t  active;
     uint8_t  minimized;
+    uint8_t  maximized;
 } window_t;
 
 void compositor_init(void);
 window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t bg_color);
 void compositor_render_frame(void);
+uint32_t compositor_window_count(void);
+window_t* compositor_window_at(uint32_t index);
+window_t* compositor_window_at_point(uint32_t x, uint32_t y);
 
 #ifdef __cplusplus
 }
