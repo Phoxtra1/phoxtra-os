@@ -9,6 +9,7 @@
 #include "../src/mouse.h"
 #include "keyboard.h"
 #include "timer.h"
+#include "../services/platform.h"
 
 static window_t* term_win = 0;
 static window_t* sec_win = 0;
@@ -64,13 +65,12 @@ static void wm_draw_window_contents(void) {
 }
 
 static void wm_draw_pointer(void) {
-    if (!mouse_is_available()) return;
     int32_t px = 0, py = 0;
-    mouse_get_position(&px, &py);
+    if (platform_input_pointer_position(&px, &py) != PLATFORM_OK) return;
     if (px < 0 || py < 0 || px >= FB_WIDTH || py >= FB_HEIGHT) return;
-    fb_fill_rect((uint32_t)px, (uint32_t)py, 2, 15, 0x00FFFFFF);
-    fb_fill_rect((uint32_t)px, (uint32_t)py, 8, 2, 0x00FFFFFF);
-    fb_fill_rect((uint32_t)(px + 2 < FB_WIDTH ? px + 2 : px), (uint32_t)(py + 3 < FB_HEIGHT ? py + 3 : py), 2, 9, 0x00000000);
+    platform_display_fill_rect((uint32_t)px, (uint32_t)py, 2, 15, 0x00FFFFFF);
+    platform_display_fill_rect((uint32_t)px, (uint32_t)py, 8, 2, 0x00FFFFFF);
+    platform_display_fill_rect((uint32_t)(px + 2 < FB_WIDTH ? px + 2 : px), (uint32_t)(py + 3 < FB_HEIGHT ? py + 3 : py), 2, 9, 0x00000000);
 }
 
 static void wm_render_desktop(void) {
@@ -229,10 +229,12 @@ void wm_desktop_event_loop(void) {
     wm_render_desktop();
     uint64_t last_redraw = timer_get_ticks();
     for (;;) {
-        mouse_event_t event;
-        if (mouse_poll_event(&event)) {
-            if (event.left_clicked) wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
-            if ((event.buttons & 1u) && drag_win) {
+        platform_input_event_t event;
+        int event_result = platform_input_poll(&event);
+        if (event_result == PLATFORM_OK && event.type == PLATFORM_INPUT_POINTER) {
+            if (event.buttons & PLATFORM_INPUT_LEFT_CLICKED)
+                wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
+            if ((event.buttons & PLATFORM_INPUT_LEFT_PRESSED) && drag_win) {
                 int32_t nx = event.x - drag_dx;
                 int32_t ny = event.y - drag_dy;
                 if (nx < 0) nx = 0;
@@ -241,14 +243,14 @@ void wm_desktop_event_loop(void) {
                 if (ny + 32 > FB_HEIGHT - 48) ny = (int32_t)FB_HEIGHT - 80;
                 drag_win->x = (uint32_t)nx;
                 drag_win->y = (uint32_t)ny;
-            } else if (!(event.buttons & 1u)) {
+            } else if (!(event.buttons & PLATFORM_INPUT_LEFT_PRESSED)) {
                 drag_win = 0;
             }
             last_redraw = 0;
         }
 
-        char key;
-        if (keyboard_poll_char(&key)) {
+        if (event_result == PLATFORM_OK && event.type == PLATFORM_INPUT_KEY) {
+            char key = (char)event.key;
             if (key == 27) break;
             wm_handle_key(key);
             last_redraw = 0;
