@@ -149,6 +149,7 @@ void file_manager_open_window(const char* initial_path) {
 window_t* file_manager_get_window(void) { return fm_win; }
 
 void file_manager_navigate(const char* path) {
+    klog(LOG_INFO, "File manager navigation requested");
     if (!path || !path[0]) return;
     vfs_node_t* node = platform_storage_lookup(path);
     if (!node || !(node->flags & VFS_DIRECTORY)) return;
@@ -218,6 +219,7 @@ int file_manager_open_entry(uint32_t index) {
         for (uint32_t i = 0; node->name[i] && p < sizeof(next) - 1; ++i) next[p++] = node->name[i];
         next[p] = '\0';
         file_manager_navigate(next);
+        klog(LOG_INFO, "File manager opened directory entry");
         return 1;
     }
 
