@@ -179,6 +179,11 @@ void file_manager_scroll(int32_t pages) {
     selected_entry = -1;
     redraw_entries();
 }
+int file_manager_entry_is_directory(uint32_t index) {
+    vfs_node_t* node = entry_at(index);
+    return platform_storage_is_directory(node);
+}
+
 int file_manager_hit_test(uint32_t x, uint32_t y) {
     if (!fm_win || !fm_win->active || fm_win->minimized) return -1;
     if (x < fm_win->x + 16 || y < fm_win->y + 72 ||
