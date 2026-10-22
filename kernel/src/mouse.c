@@ -171,3 +171,11 @@ int mouse_poll_event(mouse_event_t* event) {
     __asm__ volatile ("pushq %0; popfq" : : "r"(flags) : "memory", "cc");
     return 1;
 }
+
+void mouse_get_position(int32_t* x, int32_t* y) {
+    uint64_t flags;
+    __asm__ volatile ("pushfq; popq %0; cli" : "=r"(flags) : : "memory");
+    if (x) *x = pointer_x;
+    if (y) *y = pointer_y;
+    __asm__ volatile ("pushq %0; popfq" : : "r"(flags) : "memory", "cc");
+}

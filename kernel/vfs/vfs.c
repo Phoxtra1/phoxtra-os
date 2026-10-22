@@ -51,7 +51,6 @@ static uint64_t ram_file_write(vfs_node_t* node, uint64_t offset, uint64_t size,
     if (offset + amount > node->size) node->size = offset + amount;
     return amount;
 }
-
 vfs_node_t* vfs_create_ram_file(vfs_node_t* parent, const char* name, const char* initial_contents) {
     if (!parent || !name || !name[0]) return (void*)0;
     size_t length = 0;
@@ -63,10 +62,7 @@ vfs_node_t* vfs_create_ram_file(vfs_node_t* parent, const char* name, const char
     for (size_t i = 0; i < length; ++i) data[i] = (uint8_t)initial_contents[i];
     vfs_node_t* node = vfs_create_child(parent, name, VFS_FILE);
     if (!node) { kfree(data); return (void*)0; }
-    node->ptr = data;
-    node->size = length;
-    node->read = ram_file_read;
-    node->write = ram_file_write;
+    node->ptr = data; node->size = length; node->read = ram_file_read; node->write = ram_file_write;
     return node;
 }
 
@@ -204,9 +200,9 @@ void vfs_seed_default_tree(void) {
     (void)ensure_directory(user, "Music");
     if (desktop && !desktop->first_child)
         (void)vfs_create_ram_file(desktop, "README.txt",
-            "Welcome to Phoxtra OS.\n\nThis is your temporary RAM-backed desktop.\nFiles in this workspace do not survive a reboot yet.\n");
+            "Welcome to Phoxtra OS.\n\nThis desktop is currently RAM-backed.\nChanges will not survive reboot until persistent storage is integrated.\n");
     if (documents && !documents->first_child)
         (void)vfs_create_ram_file(documents, "welcome.txt",
-            "AKWAABA - PHOXTRA OS\n\nYour Documents folder is backed by the in-memory VFS.\nPersistent disk storage will be connected in a later storage milestone.\n");
+            "AKWAABA - PHOXTRA OS\n\nYour Documents folder uses the in-memory VFS.\nPersistent disk storage will be added in a later milestone.\n");
     klog(LOG_INFO, "VFS seeded a temporary RAM-backed home workspace");
 }

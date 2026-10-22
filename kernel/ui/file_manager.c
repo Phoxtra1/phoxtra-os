@@ -95,7 +95,5 @@ void file_manager_create_file(const char* name, const char* content) {
     if (vfs_create_ram_file(current_directory, name, content ? content : "")) {
         redraw_entries();
         klog(LOG_INFO, "File Manager: Created RAM-backed file");
-    } else {
-        klog(LOG_WARNING, "File Manager: file creation failed");
-    }
+    } else klog(LOG_WARNING, "File Manager: file creation failed");
 }
