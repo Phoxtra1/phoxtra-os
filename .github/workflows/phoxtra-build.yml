@@ -66,9 +66,9 @@ jobs:
             sleep 0.25
           done
           grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
-          # Pointer starts at 512,384. Move to the first folder cell (~635,150).
-          # Positive PS/2 Y deltas move upward in this driver.
-          { printf 'mouse_move 123 117\n'; sleep 0.2; printf 'mouse_move 0 117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          # Pointer starts at 512,384. QEMU HMP Y is inverted by the PS/2 emulation,
+          # so negative HMP Y deltas move the on-screen pointer upward to ~635,150.
+          { printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
             grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log && break
             sleep 0.25
