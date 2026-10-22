@@ -32,6 +32,8 @@ typedef struct vfs_node {
 void vfs_init(void);
 vfs_node_t* vfs_get_root(void);
 vfs_node_t* vfs_create_node(const char* name, uint32_t flags);
+vfs_node_t* vfs_create_child(vfs_node_t* parent, const char* name, uint32_t flags);
+void vfs_seed_default_tree(void);
 int vfs_mount(const char* path, vfs_node_t* node);
 vfs_node_t* vfs_lookup(const char* path);
 uint64_t vfs_read(vfs_node_t* node, uint64_t offset, uint64_t size, uint8_t* buffer);
