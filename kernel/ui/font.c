@@ -6,7 +6,8 @@
 #define GLYPH_COUNT 95u
 #define GLYPH_BYTES 18u
 
-static uint8_t glyph_data[GLYPH_COUNT][GLYPH_BYTES];
+static uint8_t regular_glyph_data[GLYPH_COUNT][GLYPH_BYTES];
+static uint8_t bold_glyph_data[GLYPH_COUNT][GLYPH_BYTES];
 static int font_ready;
 
 static int base64_value(char c) {
@@ -37,11 +38,14 @@ static uint32_t decode_base64(const char* src, uint8_t* dst, uint32_t capacity) 
 }
 
 void font_init(void) {
-    uint32_t decoded = decode_base64(phoxtra_carlito_regular_b64,
-                                     &glyph_data[0][0], sizeof(glyph_data));
-    font_ready = decoded == sizeof(glyph_data);
+    uint32_t regular_size = decode_base64(phoxtra_carlito_regular_b64,
+        &regular_glyph_data[0][0], sizeof(regular_glyph_data));
+    uint32_t bold_size = decode_base64(phoxtra_carlito_bold_b64,
+        &bold_glyph_data[0][0], sizeof(bold_glyph_data));
+    font_ready = regular_size == sizeof(regular_glyph_data) &&
+                 bold_size == sizeof(bold_glyph_data);
     klog(font_ready ? LOG_INFO : LOG_ERROR,
-         font_ready ? "Carlito Calibri-compatible 9x16 font initialized"
+         font_ready ? "Carlito Calibri-compatible regular/bold 9x16 font initialized"
                     : "Carlito font data invalid; text renderer disabled");
 }
 
@@ -50,18 +54,13 @@ static void draw_char_style(char c, uint32_t x, uint32_t y,
     uint8_t code = (uint8_t)c;
     if (code < 32 || code > 126) code = '?';
     uint32_t index = (uint32_t)code - 32u;
+    const uint8_t* glyph = bold ? bold_glyph_data[index] : regular_glyph_data[index];
     for (uint32_t row = 0; row < FONT_HEIGHT; ++row) {
         for (uint32_t col = 0; col < FONT_WIDTH; ++col) {
             uint32_t bit = row * FONT_WIDTH + col;
-            uint8_t byte = glyph_data[index][bit / 8u];
-            int set = font_ready && ((byte >> (bit % 8u)) & 1u);
-            if (bold && !set && col > 0) {
-                uint32_t prev = bit - 1u;
-                set = ((glyph_data[index][prev / 8u] >> (prev % 8u)) & 1u) != 0;
-            }
+            int set = font_ready && ((glyph[bit / 8u] >> (bit % 8u)) & 1u);
             if (set) {
                 fb_put_pixel(x + col, y + row, fg);
-                if (bold && col + 1u < FONT_WIDTH) fb_put_pixel(x + col + 1u, y + row, fg);
             } else if (bg != 0) {
                 fb_put_pixel(x + col, y + row, bg);
             }
@@ -97,12 +96,10 @@ static void draw_string_style(const char* str, uint32_t x, uint32_t y,
     }
 }
 
-void font_draw_string(const char* str, uint32_t x, uint32_t y,
-                      uint32_t fg, uint32_t bg) {
+void font_draw_string(const char* str, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_string_style(str, x, y, fg, bg, 0);
 }
 
-void font_draw_string_bold(const char* str, uint32_t x, uint32_t y,
-                           uint32_t fg, uint32_t bg) {
+void font_draw_string_bold(const char* str, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_string_style(str, x, y, fg, bg, 1);
 }
