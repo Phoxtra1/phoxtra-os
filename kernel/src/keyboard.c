@@ -14,6 +14,7 @@ static char kbd_buffer[KBD_BUFFER_SIZE];
 static volatile int kbd_head = 0;
 static volatile int kbd_tail = 0;
 static int shift_active = 0;
+static volatile int control_active = 0;
 
 static unsigned char kbdus[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	/* 9 */
@@ -94,6 +95,8 @@ static unsigned char kbdus_shift[128] = {
 static void keyboard_callback(struct registers* regs) {
     (void)regs;
     uint8_t scancode = inb(0x60);
+    if (scancode == 0x1D) { control_active = 1; return; }
+    if (scancode == 0x9D) { control_active = 0; return; }
 
     if (scancode == 0x2A || scancode == 0x36) {
         shift_active = 1;
@@ -125,11 +128,19 @@ void keyboard_init(void) {
     irq_install_handler(1, keyboard_callback);
 }
 
-char keyboard_get_char(void) {
-    while (kbd_head == kbd_tail) {
-        asm volatile("hlt");
-    }
-    char c = kbd_buffer[kbd_tail];
+int keyboard_poll_char(char* out) {
+    if (!out || kbd_head == kbd_tail) return 0;
+    *out = kbd_buffer[kbd_tail];
     kbd_tail = (kbd_tail + 1) % KBD_BUFFER_SIZE;
+    return 1;
+}
+
+int keyboard_control_pressed(void) { return control_active; }
+
+char keyboard_get_char(void) {
+    char c;
+    while (!keyboard_poll_char(&c)) {
+        asm volatile("sti; hlt" ::: "memory");
+    }
     return c;
 }

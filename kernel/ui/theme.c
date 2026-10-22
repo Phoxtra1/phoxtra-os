@@ -64,21 +64,28 @@ theme_palette_t* theme_get_current(void) {
 
 void icon_draw_folder(uint32_t x, uint32_t y, const char* label) {
     theme_palette_t* pal = theme_get_current();
+    static const uint32_t folder_colors[] = {
+        0x00FACC15, /* Phoxtra gold */
+        0x008B5CF6, /* purple */
+        0x003B82F6, /* blue */
+        0x000D9488, /* teal */
+        0x00F97316  /* orange */
+    };
+    uint32_t hash = 0;
+    if (label) {
+        for (uint32_t i = 0; label[i]; ++i)
+            hash = (hash * 31u) ^ (uint8_t)label[i];
+    }
+    uint32_t color = folder_colors[hash % (sizeof(folder_colors) / sizeof(folder_colors[0]))];
 
-    // Folder Tab (Top Left)
-    fb_fill_rect(x + 4, y, 20, 8, pal->folder_color);
-    
-    // Folder Main Body (48x36 px)
-    fb_fill_rect(x, y + 6, 44, 34, pal->folder_color);
-    fb_draw_rect(x, y + 6, 44, 34, 0x00D97706); // Dark Amber Outline
-
-    // Inner Glass Layer Highlight
+    /* Folder tab and body use the same label-derived color, including purple. */
+    fb_fill_rect(x + 4, y, 20, 8, color);
+    fb_fill_rect(x, y + 6, 44, 34, color);
+    fb_draw_rect(x, y + 6, 44, 34, 0x003B3150);
     fb_fill_rect(x + 2, y + 10, 40, 4, 0x33FFFFFF);
 
-    // Label Text
-    if (label) {
+    if (label)
         font_draw_string(label, x - 4, y + 44, pal->text_color, 0x00000000);
-    }
 }
 
 void icon_draw_file(uint32_t x, uint32_t y, const char* label) {

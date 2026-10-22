@@ -7,6 +7,7 @@ extern "C" {
 #include "irq.h"
 #include "timer.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "logger.h"
 #include "pmm.h"
 #include "vmm.h"
@@ -54,6 +55,7 @@ extern "C" {
 #include "../drivers/pci.h"
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
+#include "../services/platform.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 #include "../ai/dipa_nl.h"
@@ -103,6 +105,7 @@ void system_init()
     irq_init();
     timer_init(100);
     keyboard_init();
+    mouse_init();
 
     /* ── Phase 2: Memory Subsystem ─────────────── */
     pmm_init(0);
@@ -197,6 +200,8 @@ void system_init()
     vfs_init();
     devfs_init();
     initrd_init();
+    vfs_seed_default_tree();
+    platform_services_init();
 
     /* ── Phase 10: Storage Drivers & Filesystems ── */
     blockdev_init();

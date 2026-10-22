@@ -2,6 +2,16 @@ cmake_minimum_required(VERSION 3.20)
 
 project(PhoxtraKernel)
 
+set(PHOXTRA_PRODUCT_PROFILE "laptop" CACHE STRING "Phoxtra product profile: laptop, desktop, embedded")
+set_property(CACHE PHOXTRA_PRODUCT_PROFILE PROPERTY STRINGS laptop desktop embedded)
+if(PHOXTRA_PRODUCT_PROFILE STREQUAL "embedded")
+    set(PHOXTRA_PRODUCT_KIND 3)
+elseif(PHOXTRA_PRODUCT_PROFILE STREQUAL "desktop")
+    set(PHOXTRA_PRODUCT_KIND 2)
+else()
+    set(PHOXTRA_PRODUCT_KIND 1)
+endif()
+
 enable_language(ASM)
 enable_language(ASM_NASM)
 
@@ -25,6 +35,7 @@ set(KERNEL_SOURCES
     src/irq.c
     src/timer.c
     src/keyboard.c
+    src/mouse.c
     src/shell.c
     log/logger.c
     memory/pmm.c
@@ -73,6 +84,7 @@ set(KERNEL_SOURCES
     installer/installer.c
     ai/dipa_core.c
     services/phoxair.c
+    services/platform.c
     security/verify.c
     services/entitlements.c
     ai/dipa_nl.c
@@ -126,6 +138,7 @@ target_include_directories(phoxtra-kernel PRIVATE
 
 
 target_compile_features(phoxtra-kernel PRIVATE cxx_std_20)
+target_compile_definitions(phoxtra-kernel PRIVATE PHOXTRA_PRODUCT_KIND=${PHOXTRA_PRODUCT_KIND})
 
 target_compile_options(phoxtra-kernel PRIVATE
     $<$<COMPILE_LANGUAGE:C,CXX>:-ffreestanding>

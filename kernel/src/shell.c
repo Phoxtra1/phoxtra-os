@@ -25,6 +25,7 @@
 #include "../ui/font.h"
 #include "../ui/compositor.h"
 #include "../ui/wm.h"
+#include "mouse.h"
 #include "../process/stress.h"
 #include "../memory/heap_audit.h"
 #include "../memory/vmm.h"
@@ -35,6 +36,7 @@
 #include "../installer/installer.h"
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
+#include "../services/platform.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 
@@ -109,9 +111,39 @@ extern void switch_to_user_mode(uint64_t entry_point, uint64_t user_rsp);
 extern uint64_t vmm_create_user_page_directory(void);
 extern void vmm_switch_page_directory(uint64_t cr3_phys);
 
+static void cmd_platform(void) {
+    klog(LOG_INFO, "Platform diagnostic command executed");
+    const platform_product_profile_t* profile = platform_product_profile();
+    platform_display_info_t display;
+    platform_storage_info_t storage;
+    console_write("\n=== PHOXTRA SHARED PLATFORM SERVICES ===\n");
+    console_write("Profile : "); console_write(profile->display_name); console_write(" ("); console_write(profile->id); console_write(")\n");
+    console_write("Services: "); console_write(platform_services_is_initialized() ? "INITIALIZED\n" : "NOT INITIALIZED\n");
+    console_write("Input   : keyboard "); console_write(platform_input_has_keyboard() ? "available" : "unavailable");
+    console_write(", pointer "); console_write(platform_input_has_pointer() ? "detected" : "not detected"); console_write("\n");
+    if (platform_display_get_info(&display) == PLATFORM_OK) {
+        console_write("Display : "); print_dec(display.width); console_write("x"); print_dec(display.height);
+        console_write(" @ "); print_dec(display.bits_per_pixel); console_write(" bpp\n");
+    } else console_write("Display : no supported framebuffer\n");
+    if (platform_storage_get_info(&storage) == PLATFORM_OK) {
+        console_write("Storage : "); console_write(storage.description); console_write("\n");
+    }
+    console_write("Devices : "); print_dec(platform_device_count()); console_write(" PCI devices enumerated\n");
+    console_write("Applications:\n");
+    for (uint32_t i = 0; i < platform_app_count(); ++i) {
+        const platform_app_info_t* app = 0;
+        if (platform_app_get(i, &app) != PLATFORM_OK || !app) continue;
+        console_write("  - "); console_write(app->id); console_write(" : ");
+        console_write(app->state == PLATFORM_APP_AVAILABLE ? "available interface (see description)" : "planned, not launchable yet");
+        console_write("\n");
+    }
+    console_write("\n");
+}
+
 static void cmd_help(void) {
     console_write("Available commands:\n");
     console_write("  help       - Show this message\n");
+    console_write("  platform   - Inspect shared services and active product profile\n");
     console_write("  about      - OS information\n");
     console_write("  clear      - Clear the screen\n");
     console_write("  ticks      - System timer ticks\n");
@@ -484,6 +516,7 @@ static void cmd_gui(void) {
        can scroll the text console and repaint over the newly rendered desktop. */
     console_clear();
     wm_start_desktop();
+    wm_desktop_event_loop();
     klog(LOG_INFO, "GUI compositor render completed");
 }
 static void cmd_wm(void) {
@@ -873,6 +906,7 @@ void shell_start(void) {
 
             if (input_len > 0) {
                 if      (kstrcmp(input, "help")     == 0) cmd_help();
+                else if (kstrcmp(input, "platform") == 0) cmd_platform();
                 else if (kstrcmp(input, "about")    == 0) cmd_about();
                 else if (kstrcmp(input, "clear")    == 0) { console_clear(); }
                 else if (kstrcmp(input, "ticks")    == 0) cmd_ticks();
