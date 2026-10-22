@@ -38,6 +38,7 @@ window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, ui
     win->active    = 1;
     win->minimized = 0;
     win->maximized = 0;
+    win->restore_x = x; win->restore_y = y; win->restore_width = width; win->restore_height = height;
 
     int pos = 0;
     while (title && title[pos] && pos < 63) {
