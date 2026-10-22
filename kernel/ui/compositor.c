@@ -4,10 +4,21 @@
 #include "../drivers/framebuffer.h"
 #include "../log/logger.h"
 #include "phoxtra_logo.h"
+#include "phoxtra_logo.h"
 
 #define MAX_WINDOWS 16
 static window_t window_list[MAX_WINDOWS];
 static uint32_t window_count = 0;
+
+uint32_t compositor_window_count(void) { return window_count; }
+window_t* compositor_window_at(uint32_t i) { return i < window_count ? &window_list[i] : (window_t*)0; }
+window_t* compositor_window_at_point(uint32_t x, uint32_t y) {
+    for (uint32_t i = window_count; i > 0; --i) {
+        window_t* w = &window_list[i - 1];
+        if (w->active && !w->minimized && x >= w->x && y >= w->y && x < w->x + w->width && y < w->y + w->height) return w;
+    }
+    return (window_t*)0;
+}
 
 void compositor_init(void) {
     klog(LOG_INFO, "Initializing Window Compositor Engine (phoxtra-wm)...");
@@ -27,6 +38,7 @@ window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, ui
     win->bg_color  = bg_color;
     win->active    = 1;
     win->minimized = 0;
+    win->maximized = 0;
 
     int pos = 0;
     while (title && title[pos] && pos < 63) {
@@ -41,7 +53,8 @@ window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, ui
 
 void compositor_render_frame(void) {
     // 1. Draw Modern Glassmorphic Desktop Background Gradient
-    fb_draw_gradient(0, 0, FB_WIDTH, FB_HEIGHT, 0x000F172A, 0x001E293B);
+    theme_palette_t* palette = theme_get_current();
+    fb_draw_gradient(0, 0, FB_WIDTH, FB_HEIGHT, palette->desktop_bg_start, palette->desktop_bg_end);
 
     // 2. Render Windows
     for (uint32_t i = 0; i < window_count; i++) {
@@ -75,14 +88,14 @@ void compositor_render_frame(void) {
     // Taskbar Launcher Buttons & System Clock
     fb_fill_rect(12, FB_HEIGHT - 40, 130, 32, 0x000F172A);
     fb_draw_rect(12, FB_HEIGHT - 40, 130, 32, 0x0006B6D4);
-    icon_draw_phoxtra_badge(16, FB_HEIGHT - 40);
+    phoxtra_logo_draw(16, FB_HEIGHT - 40, 32);
     font_draw_string("PHOXTRA", 54, FB_HEIGHT - 30, 0x0038BDF8, 0x00000000);
 
     font_draw_string("TERMINAL", 150, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("SECURITY", 240, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("NETWORK",  330, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
 
-    font_draw_string("15:30 UTC", FB_WIDTH - 110, FB_HEIGHT - 32, 0x00F8FAFC, 0x00000000);
+    font_draw_string("PHOXTRA OS", FB_WIDTH - 120, FB_HEIGHT - 32, 0x00F8FAFC, 0x00000000);
 
     // 4. Swap Framebuffers
     fb_swap_buffers();
