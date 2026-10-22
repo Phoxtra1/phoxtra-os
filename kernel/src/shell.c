@@ -134,7 +134,7 @@ static void cmd_platform(void) {
         const platform_app_info_t* app = 0;
         if (platform_app_get(i, &app) != PLATFORM_OK || !app) continue;
         console_write("  - "); console_write(app->id); console_write(" : ");
-        console_write(app->state == PLATFORM_APP_AVAILABLE ? "available in current shell/desktop" : "planned, not launchable yet");
+        console_write(app->state == PLATFORM_APP_AVAILABLE ? "available interface (see description)" : "planned, not launchable yet");
         console_write("\n");
     }
     console_write("\n");
