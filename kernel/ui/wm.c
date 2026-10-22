@@ -189,7 +189,6 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
 
 static void wm_create_new_folder(void) {
     file_manager_create_folder("New Folder");
-    file_manager_create_folder("New Folder 2");
 }
 static void wm_create_new_file(void) {
     file_manager_create_file("New File.txt", "Welcome to Phoxtra OS.\nThis file is stored in temporary RAM.\n");
@@ -221,12 +220,8 @@ static void wm_handle_key(char key) {
     }
     if (key == '[') { file_manager_scroll(-1); return; }
     if (key == ']') { file_manager_scroll(1); return; }
-    if (key == 'n' || key == 'N') {
-        if (keyboard_control_pressed()) wm_create_new_file();
-        else wm_create_new_folder();
-    } else if (key == 'f' && keyboard_control_pressed()) {
-        wm_create_new_file();
-    }
+    if (key == 'n' || key == 'N') wm_create_new_folder();
+    else if (key == 'c' || key == 'C') wm_create_new_file();
 }
 
 void wm_desktop_event_loop(void) {
