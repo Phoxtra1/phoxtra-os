@@ -152,6 +152,7 @@ static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
 }
 
 static void wm_handle_click(uint32_t x, uint32_t y) {
+    klog(LOG_INFO, "Desktop mouse click event received");
     if (y >= FB_HEIGHT - 48) {
         wm_handle_dock_click(x);
         return;
@@ -173,6 +174,7 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
     if (win == fm_win) {
         int index = file_manager_hit_test(x, y);
         if (index >= 0) {
+            klog(LOG_INFO, "File manager entry hit-test succeeded");
             uint64_t now = timer_get_ticks();
             file_manager_select_entry((uint32_t)index);
             selected_file_entry = index;
