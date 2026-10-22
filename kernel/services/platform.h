@@ -45,6 +45,7 @@ typedef struct platform_input_event {
     int32_t y;
 } platform_input_event_t;
 
+/* Returns 1 for an event, 0 when no event is queued, and a negative error code. */
 int platform_input_poll(platform_input_event_t* event);
 int platform_input_pointer_position(int32_t* x, int32_t* y);
 int platform_input_has_keyboard(void);
