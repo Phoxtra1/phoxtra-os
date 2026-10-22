@@ -8,7 +8,7 @@
 #include "../log/logger.h"
 #include "../src/mouse.h"
 #include "keyboard.h"
-#include "../src/timer.h"
+#include "timer.h"
 
 static window_t* term_win = 0;
 static window_t* sec_win = 0;
