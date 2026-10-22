@@ -7,172 +7,263 @@
 #include "../installer/installer.h"
 #include "../log/logger.h"
 #include "../src/mouse.h"
-#include "../src/keyboard.h"
-#include "../src/timer.h"
+#include "keyboard.h"
+#include "timer.h"
 
 static window_t* term_win = 0;
-static window_t* sec_win  = 0;
-static window_t* mon_win  = 0;
-static window_t* fm_win   = 0;
+static window_t* sec_win = 0;
+static window_t* mon_win = 0;
+static window_t* fm_win = 0;
+static window_t* focused_win = 0;
+static window_t* drag_win = 0;
+static int32_t drag_dx = 0, drag_dy = 0;
+static int32_t selected_file_entry = -1;
+static int32_t last_file_entry = -1;
+static uint64_t last_file_click_tick = 0;
 
 void wm_init(void) {
-    klog(LOG_INFO, "Initializing Phoxtra Desktop Window Manager (phoxtra-wm)...");
+    klog(LOG_INFO, "Initializing Phoxtra desktop window manager");
     theme_init();
     file_manager_init();
     installer_init();
 
-    // Initialize Default Desktop Windows
-    term_win = compositor_create_window("Phoxtra Terminal - Ring 3", 60, 60, 480, 320, 0x00020617);
+    /* Keep the left icon rail clear and prevent the top windows from overlapping. */
+    term_win = compositor_create_window("PHOXTRA TERMINAL", 170, 54, 400, 300, 0x00020617);
     file_manager_open_window("/home/user");
-    fm_win = compositor_window_at(compositor_window_count() - 1);
-    sec_win  = compositor_create_window("Phoxtra Security & CAC Audit", 60, 410, 910, 280, 0x00020617);
+    fm_win = file_manager_get_window();
+    sec_win = compositor_create_window("SECURITY AND SYSTEM STATUS", 170, 374, 832, 310, 0x00020617);
+    focused_win = term_win;
+    (void)mon_win;
 }
 
 void wm_start_desktop(void) {
-    klog(LOG_INFO, "Starting High-Resolution GUI Compositor (1024x768x32)...");
-
-    // Render Initial GUI Desktop Frame
-    compositor_render_frame();
-
-    // Render Desktop Icons (Folders & Drives)
-    icon_draw_drive(20, 20, "System NVMe");
-    icon_draw_folder(20, 90, "Documents");
-    icon_draw_folder(20, 160, "Downloads");
-    icon_draw_folder(20, 230, "System");
-    icon_draw_file(20, 300, "README.txt");
-
-    // Render Window Inner Contents
-    if (term_win) {
-        font_draw_string("AKWAABA PHOXTRA OS v1.0.0 Commercial", term_win->x + 16, term_win->y + 48, 0x00FFD700, 0x00000000);
-        font_draw_string("phoxtra> ifconfig", term_win->x + 16, term_win->y + 70, 0x00F8FAFC, 0x00000000);
-        font_draw_string("eth0: inet 192.168.1.150 netmask 255.255.255.0", term_win->x + 16, term_win->y + 92, 0x0094A3B8, 0x00000000);
-        font_draw_string("phoxtra> theme midnight-gold", term_win->x + 16, term_win->y + 114, 0x00F8FAFC, 0x00000000);
-        font_draw_string("Theme switched: Phoxtra Flagship Midnight Gold", term_win->x + 16, term_win->y + 136, 0x0034D399, 0x00000000);
-        font_draw_string("phoxtra> installer", term_win->x + 16, term_win->y + 158, 0x0038BDF8, 0x00000000);
-    }
-
-    if (fm_win) {
-        font_draw_string("Location: /home/user", fm_win->x + 16, fm_win->y + 42, 0x0038BDF8, 0x00000000);
-        fb_fill_rect(fm_win->x + 16, fm_win->y + 60, fm_win->width - 32, 2, 0x00334155);
-
-        // Graphical Folder Grid inside File Manager
-        icon_draw_folder(fm_win->x + 24, fm_win->y + 80, "Projects");
-        icon_draw_folder(fm_win->x + 104, fm_win->y + 80, "Pictures");
-        icon_draw_folder(fm_win->x + 184, fm_win->y + 80, "Music");
-        icon_draw_file(fm_win->x + 264, fm_win->y + 80, "config.json");
-
-        icon_draw_folder(fm_win->x + 24, fm_win->y + 170, "Desktop");
-        icon_draw_file(fm_win->x + 104, fm_win->y + 170, "notes.txt");
-        icon_draw_file(fm_win->x + 184, fm_win->y + 170, "app.elf");
-
-        font_draw_string("7 items | 4.2 GB free", fm_win->x + 16, fm_win->y + 290, 0x0094A3B8, 0x00000000);
-    }
-
-    if (sec_win) {
-        font_draw_string("SECURITY POLICY STATUS & AUDIT RING BUFFER", sec_win->x + 16, sec_win->y + 48, 0x00FFD700, 0x00000000);
-        font_draw_string("[1] Hardware TPM 2.0 Root of Trust ........ VERIFIED (EK SHA-256)", sec_win->x + 16, sec_win->y + 76, 0x0034D399, 0x00000000);
-        font_draw_string("[2] Capability Access Control (CAC) ......... ENFORCING (Bitmask 64-bit)", sec_win->x + 16, sec_win->y + 98, 0x0034D399, 0x00000000);
-        font_draw_string("[3] Mandatory Access Control (MAC) .......... ACTIVE (SYSTEM / SERVICE / USER)", sec_win->x + 16, sec_win->y + 120, 0x0034D399, 0x00000000);
-        font_draw_string("[4] Stack Canary & Kernel Guard Pages ...... ACTIVE (Hardware Entropy Seeded)", sec_win->x + 16, sec_win->y + 142, 0x0034D399, 0x00000000);
-        font_draw_string("[5] Bare-Metal NVMe/PCIe Scanner ........... READY (pci_scan)", sec_win->x + 16, sec_win->y + 164, 0x0034D399, 0x00000000);
-    }
-
-    fb_swap_buffers();
+    klog(LOG_INFO, "Starting Phoxtra desktop at 1024x768");
 }
 
-uint32_t wm_get_window_count(void) {
-    return 3;
+static void wm_draw_desktop_icons(void) {
+    icon_draw_drive(18, 20, "System");
+    icon_draw_folder(18, 92, "Documents");
+    icon_draw_folder(18, 164, "Downloads");
+    icon_draw_folder(18, 236, "Pictures");
+    icon_draw_folder(18, 308, "Desktop");
 }
 
+static void wm_draw_window_contents(void) {
+    if (term_win && term_win->active && !term_win->minimized) {
+        font_draw_string("AKWAABA - PHOXTRA OS", term_win->x + 16, term_win->y + 50, 0x00FFD700, 0);
+        font_draw_string("Terminal shell is available after leaving the desktop.", term_win->x + 16, term_win->y + 76, 0x00F8FAFC, 0);
+        font_draw_string("Esc: return to shell", term_win->x + 16, term_win->y + 102, 0x0094A3B8, 0);
+        font_draw_string("F: show file manager", term_win->x + 16, term_win->y + 124, 0x0094A3B8, 0);
+    }
+    if (sec_win && sec_win->active && !sec_win->minimized) {
+        font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
+        font_draw_string("VFS workspace: temporary RAM storage", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
+        font_draw_string("Input: PS/2 keyboard and mouse when detected", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
+        font_draw_string("Persistent storage and application launching are not yet complete.", sec_win->x + 16, sec_win->y + 122, 0x0094A3B8, 0);
+    }
+}
 
-static window_t* wm_drag_window = 0;
-static int32_t wm_drag_dx = 0, wm_drag_dy = 0;
-static uint8_t wm_was_pressed = 0;
+static void wm_draw_pointer(void) {
+    if (!mouse_is_available()) return;
+    int32_t px = 0, py = 0;
+    mouse_get_position(&px, &py);
+    if (px < 0 || py < 0 || px >= FB_WIDTH || py >= FB_HEIGHT) return;
+    fb_fill_rect((uint32_t)px, (uint32_t)py, 2, 15, 0x00FFFFFF);
+    fb_fill_rect((uint32_t)px, (uint32_t)py, 8, 2, 0x00FFFFFF);
+    fb_fill_rect((uint32_t)(px + 2 < FB_WIDTH ? px + 2 : px), (uint32_t)(py + 3 < FB_HEIGHT ? py + 3 : py), 2, 9, 0x00000000);
+}
 
 static void wm_render_desktop(void) {
     compositor_render_frame();
-    icon_draw_drive(20, 20, "System NVMe");
-    icon_draw_folder(20, 90, "Documents");
-    icon_draw_folder(20, 160, "Downloads");
-    icon_draw_folder(20, 230, "System");
-    icon_draw_file(20, 300, "README.txt");
-    if (term_win) {
-        font_draw_string("AKWAABA PHOXTRA OS v1.0.0", term_win->x + 16, term_win->y + 48, 0x00FFD700, 0);
-        font_draw_string("phoxtra> help", term_win->x + 16, term_win->y + 70, 0x00F8FAFC, 0);
-        font_draw_string("Keyboard: click window, type; Esc returns to shell", term_win->x + 16, term_win->y + 92, 0x0094A3B8, 0);
-    }
-    if (fm_win) file_manager_render();
-    if (sec_win) {
-        font_draw_string("SECURITY POLICY / AUDIT STATUS", sec_win->x + 16, sec_win->y + 48, 0x00FFD700, 0);
-        font_draw_string("Kernel capabilities and access checks", sec_win->x + 16, sec_win->y + 76, 0x0034D399, 0);
-        font_draw_string("Device-backed status depends on detected hardware", sec_win->x + 16, sec_win->y + 98, 0x0034D399, 0);
-    }
+    wm_draw_desktop_icons();
+    wm_draw_window_contents();
+    if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
+    wm_draw_pointer();
     fb_swap_buffers();
 }
 
-static void wm_handle_click(uint32_t x, uint32_t y) {
-    window_t* win = compositor_window_at_point(x, y);
-    if (!win) {
-        if (y >= FB_HEIGHT - 48 && x < 142) {
-            if (fm_win) fm_win->minimized = 0;
-        }
-        return;
-    }
-    if (y < win->y + 32) {
-        if (x < win->x + 28) { win->active = 0; if (win == term_win) term_win = 0; if (win == sec_win) sec_win = 0; if (win == fm_win) fm_win = 0; return; }
-        if (x < win->x + 46) { win->minimized = 1; return; }
-        if (x < win->x + 64) {
-            if (!win->maximized) {
-                win->x = 0; win->y = 0; win->width = FB_WIDTH; win->height = FB_HEIGHT - 48; win->maximized = 1;
-            } else {
-                win->x = 60; win->y = 60; win->width = 480; win->height = 320; win->maximized = 0;
-            }
-            return;
-        }
-        wm_drag_window = win;
-        wm_drag_dx = (int32_t)x - (int32_t)win->x;
-        wm_drag_dy = (int32_t)y - (int32_t)win->y;
-        return;
-    }
-    if (win == fm_win && y >= win->y + 78 && y < win->y + 270) {
-        uint32_t row = (y - (win->y + 78)) / 92;
-        uint32_t col = (x - (win->x + 22)) / 112;
-        uint32_t index = row * 3 + col;
-        (void)file_manager_open_entry(index);
+static void wm_restore_window(window_t* win) {
+    if (!win) return;
+    win->active = 1;
+    win->minimized = 0;
+    compositor_raise_window(win);
+    focused_win = win;
+}
+
+static void wm_handle_dock_click(uint32_t x) {
+    if (x < 142) {
+        file_manager_open_window("/home/user");
+        fm_win = file_manager_get_window();
+        wm_restore_window(fm_win);
+    } else if (x < 225) {
+        wm_restore_window(term_win);
+    } else if (x < 315) {
+        wm_restore_window(sec_win);
+    } else if (x < 430) {
+        file_manager_open_window("/home/user");
+        fm_win = file_manager_get_window();
+        wm_restore_window(fm_win);
     }
 }
 
+static void wm_handle_desktop_icon(uint32_t x, uint32_t y) {
+    if (x >= 130) return;
+    file_manager_open_window("/home/user");
+    fm_win = file_manager_get_window();
+    wm_restore_window(fm_win);
+    if (y >= 82 && y < 154) file_manager_navigate("/home/user/Documents");
+    else if (y >= 154 && y < 226) file_manager_navigate("/home/user/Downloads");
+    else if (y >= 226 && y < 298) file_manager_navigate("/home/user/Pictures");
+    else if (y >= 298 && y < 370) file_manager_navigate("/home/user/Desktop");
+    else file_manager_navigate("/");
+}
+
+static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
+    (void)y;
+    uint32_t local_x = x - win->x;
+    if (local_x < 28) {
+        win->active = 0;
+        if (focused_win == win) focused_win = 0;
+        drag_win = 0;
+        return;
+    }
+    if (local_x < 46) {
+        win->minimized = 1;
+        drag_win = 0;
+        return;
+    }
+    if (local_x < 64) {
+        if (!win->maximized) {
+            win->restore_x = win->x; win->restore_y = win->y;
+            win->restore_width = win->width; win->restore_height = win->height;
+            win->x = 0; win->y = 0; win->width = FB_WIDTH; win->height = FB_HEIGHT - 48;
+            win->maximized = 1;
+        } else {
+            win->x = win->restore_x; win->y = win->restore_y;
+            win->width = win->restore_width; win->height = win->restore_height;
+            win->maximized = 0;
+        }
+        drag_win = 0;
+        return;
+    }
+    drag_win = win;
+    drag_dx = (int32_t)x - (int32_t)win->x;
+    drag_dy = (int32_t)y - (int32_t)win->y;
+}
+
+static void wm_handle_click(uint32_t x, uint32_t y) {
+    if (y >= FB_HEIGHT - 48) {
+        wm_handle_dock_click(x);
+        return;
+    }
+
+    window_t* win = compositor_window_at_point(x, y);
+    if (!win) {
+        wm_handle_desktop_icon(x, y);
+        return;
+    }
+    compositor_raise_window(win);
+    focused_win = win;
+
+    if (y < win->y + 32) {
+        wm_handle_window_button(win, x, y);
+        return;
+    }
+
+    if (win == fm_win) {
+        int index = file_manager_hit_test(x, y);
+        if (index >= 0) {
+            uint64_t now = timer_get_ticks();
+            file_manager_select_entry((uint32_t)index);
+            selected_file_entry = index;
+            if (last_file_entry == index && now - last_file_click_tick <= 45) {
+                (void)file_manager_open_entry((uint32_t)index);
+                last_file_entry = -1;
+            } else {
+                last_file_entry = index;
+            }
+            last_file_click_tick = now;
+        }
+    }
+}
+
+static void wm_create_new_folder(void) {
+    file_manager_create_folder("New Folder");
+}
+static void wm_create_new_file(void) {
+    file_manager_create_file("New File.txt", "Welcome to Phoxtra OS.\nThis file is stored in temporary RAM.\n");
+}
+
+static void wm_handle_key(char key) {
+    if (key == 27) return;
+    if (key == 'f' || key == 'F') {
+        file_manager_open_window("/home/user");
+        fm_win = file_manager_get_window();
+        wm_restore_window(fm_win);
+        return;
+    }
+    if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
+    if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
+
+    if (focused_win != fm_win || !fm_win || !fm_win->active) return;
+    if (key == '\b') {
+        file_manager_go_parent();
+        selected_file_entry = -1;
+        return;
+    }
+    if (key == '\n') {
+        if (selected_file_entry >= 0) {
+            (void)file_manager_open_entry((uint32_t)selected_file_entry);
+            selected_file_entry = -1;
+        }
+        return;
+    }
+    if (key == '[') { file_manager_scroll(-1); return; }
+    if (key == ']') { file_manager_scroll(1); return; }
+    if (key == 'n' || key == 'N') wm_create_new_folder();
+    else if (key == 'c' || key == 'C') wm_create_new_file();
+}
+
 void wm_desktop_event_loop(void) {
-    klog(LOG_INFO, "Desktop event loop active; use Esc to return to shell");
+    klog(LOG_INFO, "Desktop event loop active");
     wm_render_desktop();
     uint64_t last_redraw = timer_get_ticks();
     for (;;) {
-        mouse_event_t ev;
-        if (mouse_poll_event(&ev)) {
-            if (ev.left_clicked) {
-                wm_handle_click((uint32_t)ev.x, (uint32_t)ev.y);
-                wm_was_pressed = 1;
-                last_redraw = 0;
-            } else if ((ev.buttons & 1u) && wm_drag_window) {
-                int32_t nx = ev.x - wm_drag_dx, ny = ev.y - wm_drag_dy;
-                if (nx < 0) nx = 0; if (ny < 0) ny = 0;
-                if (nx + (int32_t)wm_drag_window->width > FB_WIDTH) nx = FB_WIDTH - wm_drag_window->width;
-                if (ny + 32 > FB_HEIGHT - 48) ny = FB_HEIGHT - 80;
-                wm_drag_window->x = (uint32_t)nx; wm_drag_window->y = (uint32_t)ny;
-                last_redraw = 0;
-            } else if (!(ev.buttons & 1u)) wm_drag_window = 0;
+        mouse_event_t event;
+        if (mouse_poll_event(&event)) {
+            if (event.left_clicked) wm_handle_click((uint32_t)event.x, (uint32_t)event.y);
+            if ((event.buttons & 1u) && drag_win) {
+                int32_t nx = event.x - drag_dx;
+                int32_t ny = event.y - drag_dy;
+                if (nx < 0) nx = 0;
+                if (ny < 0) ny = 0;
+                if (nx + (int32_t)drag_win->width > FB_WIDTH) nx = (int32_t)FB_WIDTH - (int32_t)drag_win->width;
+                if (ny + 32 > FB_HEIGHT - 48) ny = (int32_t)FB_HEIGHT - 80;
+                drag_win->x = (uint32_t)nx;
+                drag_win->y = (uint32_t)ny;
+            } else if (!(event.buttons & 1u)) {
+                drag_win = 0;
+            }
+            last_redraw = 0;
         }
+
         char key;
         if (keyboard_poll_char(&key)) {
             if (key == 27) break;
-            if (key == 'f' && fm_win) { fm_win->minimized = 0; last_redraw = 0; }
-            if (key == 't' && term_win) { term_win->minimized = 0; last_redraw = 0; }
+            wm_handle_key(key);
+            last_redraw = 0;
         }
-        if (last_redraw == 0 || timer_get_ticks() - last_redraw >= 2) {
+
+        uint64_t now = timer_get_ticks();
+        if (last_redraw == 0 || now - last_redraw >= 2) {
             wm_render_desktop();
-            last_redraw = timer_get_ticks();
+            last_redraw = now;
         }
-        __asm__ volatile ("pause");
+        __asm__ volatile ("sti; hlt" ::: "memory");
     }
     klog(LOG_INFO, "Desktop event loop returned to shell");
+}
+
+uint32_t wm_get_window_count(void) {
+    return compositor_window_count();
 }

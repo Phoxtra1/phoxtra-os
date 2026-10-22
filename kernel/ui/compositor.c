@@ -7,13 +7,14 @@
 
 #define MAX_WINDOWS 16
 static window_t window_list[MAX_WINDOWS];
+static uint32_t z_order[MAX_WINDOWS];
 static uint32_t window_count = 0;
 
 uint32_t compositor_window_count(void) { return window_count; }
 window_t* compositor_window_at(uint32_t i) { return i < window_count ? &window_list[i] : (window_t*)0; }
 window_t* compositor_window_at_point(uint32_t x, uint32_t y) {
     for (uint32_t i = window_count; i > 0; --i) {
-        window_t* w = &window_list[i - 1];
+        window_t* w = &window_list[z_order[i - 1]];
         if (w->active && !w->minimized && x >= w->x && y >= w->y && x < w->x + w->width && y < w->y + w->height) return w;
     }
     return (window_t*)0;
@@ -22,7 +23,7 @@ window_t* compositor_window_at_point(uint32_t x, uint32_t y) {
 void compositor_init(void) {
     klog(LOG_INFO, "Initializing Window Compositor Engine (phoxtra-wm)...");
     window_count = 0;
-    for (int i = 0; i < MAX_WINDOWS; i++) window_list[i].active = 0;
+    for (int i = 0; i < MAX_WINDOWS; i++) { window_list[i].active = 0; z_order[i] = (uint32_t)i; }
 }
 
 window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t bg_color) {
@@ -38,6 +39,7 @@ window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, ui
     win->active    = 1;
     win->minimized = 0;
     win->maximized = 0;
+    win->restore_x = x; win->restore_y = y; win->restore_width = width; win->restore_height = height;
 
     int pos = 0;
     while (title && title[pos] && pos < 63) {
@@ -50,6 +52,18 @@ window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, ui
     return win;
 }
 
+void compositor_raise_window(window_t* window) {
+    if (!window) return;
+    uint32_t index = MAX_WINDOWS;
+    for (uint32_t i = 0; i < window_count; ++i) {
+        if (&window_list[z_order[i]] == window) { index = i; break; }
+    }
+    if (index >= window_count || index == window_count - 1) return;
+    uint32_t id = z_order[index];
+    for (uint32_t i = index; i + 1 < window_count; ++i) z_order[i] = z_order[i + 1];
+    z_order[window_count - 1] = id;
+}
+
 void compositor_render_frame(void) {
     // 1. Draw Modern Glassmorphic Desktop Background Gradient
     theme_palette_t* palette = theme_get_current();
@@ -57,7 +71,7 @@ void compositor_render_frame(void) {
 
     // 2. Render Windows
     for (uint32_t i = 0; i < window_count; i++) {
-        window_t* win = &window_list[i];
+        window_t* win = &window_list[z_order[i]];
         if (!win->active || win->minimized) continue;
 
         // Window Drop Shadow

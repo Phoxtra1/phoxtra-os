@@ -50,11 +50,26 @@ jobs:
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          sleep 2
-          cat /tmp/phoxtra-serial.log
-          grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log
+          for attempt in $(seq 1 40); do
+            grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
+          # Exercise the active desktop: focus the file manager, create a folder and a file.
+          { for key in f n c; do printf 'sendkey %s\n' "$key"; sleep 0.35; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 1
+          grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
+          grep -q 'Created RAM-backed file' /tmp/phoxtra-serial.log
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
+          # Leave the desktop event loop so the test can confirm a clean return to the shell.
+          printf 'sendkey esc\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 40); do
+            grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          cat /tmp/phoxtra-serial.log
+          grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log
           python3 - <<'PY'
           from pathlib import Path
           data = Path('/tmp/phoxtra-screen.ppm').read_bytes()
