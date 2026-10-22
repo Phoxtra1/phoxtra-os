@@ -49,6 +49,7 @@ jobs:
           sleep 8
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
+          grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
           # Wait until shell_start has completed framebuffer console rendering.
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
@@ -69,6 +70,7 @@ jobs:
           sleep 1
           grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
           grep -q 'Created RAM-backed file' /tmp/phoxtra-serial.log
+          grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           # Leave the desktop event loop so the test can confirm a clean return to the shell.
