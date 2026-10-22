@@ -40,6 +40,9 @@ void klog(log_level_t level, const char* message) {
         case LOG_KERNEL:
             serial_write_str("[KERNEL] ");
             break;
+        case LOG_HARDWARE:
+            serial_write_str("[HARDWARE] ");
+            break;
         default:
             serial_write_str("[LOG] ");
             break;

@@ -84,6 +84,12 @@ set(KERNEL_SOURCES
     memory/heap_audit.c
     sdk/sdk.c
     release/production.c
+    hardware/hardware_manager.c
+    hardware/phoxdrive/phoxdrive.c
+    hardware/phoxdrive/phoxdrive_hazard.c
+    hardware/phoxdrive/phoxdrive_audio.c
+    hardware/phoxdrive/phoxdrive_telemetry.c
+    hardware/fieldsense/fieldsense.c
 )
 
 add_executable(phoxtra-kernel
@@ -113,6 +119,9 @@ target_include_directories(phoxtra-kernel PRIVATE
     ui
     sdk
     release
+    hardware
+    hardware/phoxdrive
+    hardware/fieldsense
 )
 
 

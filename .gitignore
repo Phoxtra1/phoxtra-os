@@ -25,3 +25,7 @@ compile_commands.json
 
 # OS files
 .DS_Store
+
+# Environment files
+.env
+.env.*

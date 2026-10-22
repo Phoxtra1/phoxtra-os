@@ -10,7 +10,8 @@ typedef enum {
     LOG_WARNING,
     LOG_ERROR,
     LOG_SECURITY,
-    LOG_KERNEL
+    LOG_KERNEL,
+    LOG_HARDWARE
 } log_level_t;
 
 void logger_init(void);

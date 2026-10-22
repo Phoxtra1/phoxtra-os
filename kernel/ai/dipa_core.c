@@ -13,7 +13,7 @@ void dipa_ai_process_query(const char* query, char* out_response, uint32_t max_l
 
     // Direct Dipa AI Query Parser
     klog(LOG_INFO, "Dipa AI Processing Kernel Query...");
-    
+
     const char* prefix = "[Dipa AI] System analyzed your request. Execution ready: ";
     uint32_t p = 0;
     while (prefix[p] && p < max_len - 1) {

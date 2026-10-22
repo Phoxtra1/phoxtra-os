@@ -71,6 +71,8 @@ void wm_start_desktop(void) {
         font_draw_string("[3] Mandatory Access Control (MAC) .......... ACTIVE (SYSTEM / SERVICE / USER)", sec_win->x + 16, sec_win->y + 120, 0x0034D399, 0x00000000);
         font_draw_string("[4] Stack Canary & Kernel Guard Pages ...... ACTIVE (Hardware Entropy Seeded)", sec_win->x + 16, sec_win->y + 142, 0x0034D399, 0x00000000);
         font_draw_string("[5] Bare-Metal NVMe/PCIe Scanner ........... READY (pci_scan)", sec_win->x + 16, sec_win->y + 164, 0x0034D399, 0x00000000);
+        font_draw_string("[6] Phoxdrive Automotive Telematics ........ ONLINE (Safety Radar Active)", sec_win->x + 16, sec_win->y + 186, 0x0038BDF8, 0x00000000);
+        font_draw_string("[7] Universal Hardware Product Engine ...... READY (Phoxdrive, FieldSense)", sec_win->x + 16, sec_win->y + 208, 0x0038BDF8, 0x00000000);
     }
 
     fb_swap_buffers();

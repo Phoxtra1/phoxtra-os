@@ -1,41 +1,51 @@
 # Phoxtra OS
 
-Phoxtra OS is a secure, identity-first operating system designed for desktops, laptops, tablets, mobile devices, servers, and enterprise environments. The operating system is built around five core principles: **Security, Identity, Privacy, Trust, and Intelligence**.
+Phoxtra OS is a secure, identity-first operating system and the **unified mother foundation powering all Phoxtra physical hardware products**. Rather than existing statically solely for laptops or mobile devices, Phoxtra OS adapts dynamically to empower every class of hardware Phoxtra builds—ranging from automotive safety and telematics systems (**Phoxdrive**) to agricultural soil stations (**FieldSense**), industrial edge gateways, smart mobility units, and enterprise workstations.
+
+The operating system is built around six core principles: **Hardware-Native Empowerment, Security, Identity, Privacy, Trust, and Intelligence**.
 
 ---
 
 ## 🚀 Current Project Status
 
-Phoxtra OS is currently in **Phase 1 (v0.1.0-alpha: First successful Phoxtra OS boot)**. The project has a solid foundational bootstrap layer and build setup, but many of the core kernel subsystems and user-space modules are currently placeholders or empty files.
+Phoxtra OS has successfully evolved through its **v1.0.0 Commercial Release Foundation** and has expanded into its **Universal Hardware Ecosystem (v2.1.0-hardware)**.
 
-### Done & Fully Functional:
-1. **Bootstrapping & Long Mode transition (`kernel/arch/x86_64/boot.S`)**:
-   - Implements a Multiboot 2 header.
-   - Sets up initial identity paging for the first 16 MB of physical memory using 2 MB huge pages (PML4, PDPT, and PDT).
-   - Enables Physical Address Extension (PAE), Long Mode (EFER MSR), and paging.
-   - Loads the 64-bit Global Descriptor Table (`gdt64`).
-   - Switches to 64-bit Long Mode and jumps to the C++ entry point `kernel_init`.
-2. **Serial Logging Driver (`kernel/arch/x86_64/serial/serial.cpp`)**:
-   - Basic COM1 serial port logging using inline assembly port I/O (`inb`, `outb`).
-   - Outputs initial boot diagnostics `[BOOT]` over serial.
-3. **VGA Console Driver (`kernel/src/console.cpp`)**:
-   - Simple text-mode VGA console driver mapped to physical address `0xB8000`.
-   - Supports `clear()`, `write()`, and custom scrolling/wrapping with standard 80x25 grid representation.
-4. **Kernel Entry & Flow (`kernel/src/kernel.cpp`, `kernel/src/init.cpp`)**:
-   - `kernel_init` starts the serial port, clears the VGA screen, prints a beautiful "Akwaaba" welcome banner, and starts system-wide initialization.
-5. **Build System & Toolchain (`CMakeLists.txt`)**:
-   - Complete CMake-based build configuration targeting C++20 and Assembler.
-   - Links the kernel binary (`phoxtra`) using a custom linker script (`linker/linker.ld`) at physical address `1M`.
-   - Packs the kernel into a bootable ISO using GRUB (`grub-mkrescue`).
-
-### Skeletal / Placeholders (Need Implementation):
-- **CPU Management (`kernel/arch/x86_64/cpu/cpu.cpp`)**: Contains a skeletal placeholder for CPU feature/vendor checking.
-- **Memory Manager (`kernel/src/memory.cpp` / `kernel/include/memory.hpp`)**: Empty / 0-byte skeleton. Needs physical page allocation (e.g., bitmap or buddy system) and virtual memory mapping.
-- **Interrupt Handler (`kernel/src/interrupt.cpp` / `kernel/include/interrupt.hpp`)**: Empty. Needs IDT setup, ISRs, IRQ handling (PIC/APIC), and exception handlers.
-- **Scheduler & Processes (`kernel/src/scheduler.cpp`, `kernel/src/process.cpp`)**: Empty stubs. Needs thread control blocks, task queue, and basic context-switching.
-- **System Calls & Panic (`kernel/src/syscall.cpp`, `kernel/src/panic.cpp`)**: Skeletal stubs. Needs kernel crash handler (Panic) and syscall dispatcher via `syscall`/`sysret` or interrupts.
-- **Bootloader & UEFI (`boot/`)**: Skeletal main files for custom bootloader and UEFI entry.
-- **Installer & Recovery (`installer/`, `recovery/`)**: Empty modules.
+### Active Subsystems & Verified Capabilities:
+1. **Phoxtra Universal Hardware Device Framework (`kernel/hardware/`)**:
+   - Central device registry managing physical Phoxtra hardware profiles: `AUTOMOTIVE`, `AGRICULTURE`, `SMART_MOBILITY`, `INDUSTRIAL_IOT`, `EDGE_GATEWAY`, `MOBILE`, and `DESKTOP_LAPTOP`.
+   - Dynamic profile adaptation without relying on fragmented third-party application stacks.
+2. **Phoxdrive In-Vehicle Automotive Subsystem (`kernel/hardware/phoxdrive/`)**:
+   - **Broken-down Vehicle Radar**: Detection of stationary or stalled vehicles ahead with relative velocity and time-to-impact calculations.
+   - **Accident-Prone Zone Geofencing**: Proactive warnings prior to entering high-risk accident hotspots.
+   - **Deplorable Road & Pothole Surface Scanner**: High-frequency vertical shock (Z-axis IMU) monitoring evaluating road quality on an index of 0–100.
+   - **Speed Telemetry & Synthetic Voice Alert Engine**: Real-time speed cross-checking against road thresholds with audible spoken speech warnings.
+3. **FieldSense AgTech Hardware Foundation (`kernel/hardware/fieldsense/`)**:
+   - Soil moisture, temperature, pH, ambient humidity telemetry, and automated irrigation solenoid controls.
+4. **Core Kernel & Multitasking**:
+   - 64-bit Long Mode bootstrap (`boot.S`, Multiboot2).
+   - 100 Hz timer-driven preemptive round-robin scheduler with assembly context switching (`context.asm`).
+   - Stress tested for up to 64 concurrent tasks.
+5. **Memory Subsystem**:
+   - 3-tier memory management: Physical page frame allocator (Bitmap PMM), 4-level paging VMM, and dynamic kernel heap (`kmalloc`/`kfree`) with memory leak auditing.
+6. **Hardware Root-of-Trust & Zero-Trust Security**:
+   - TPM 2.0 SPI MMIO interface with PCR 0–3 measurements.
+   - Cryptographic SHA-256 process identity attestation.
+   - Immutable hash-chained audit logger.
+   - 64-bit Capability Access Control (CAC) and Mandatory Access Control (MAC) domain isolation.
+   - Stack canaries, guard pages, and ASLR protection.
+7. **Storage, Filesystems & Hardware Discovery**:
+   - Hardware Abstraction Layer (HAL) with PCI Express scanner.
+   - AHCI SATA controller, MBR/GPT partition parser, ext2 and FAT32 filesystems.
+   - Unified Virtual Filesystem (VFS), DevFS, and InitRD.
+8. **Networking Stack**:
+   - Intel 82540EM Gigabit Ethernet NIC driver.
+   - Complete TCP/IP stack: Ethernet II, ARP, IPv4, ICMP Echo, UDP, TCP state machine, BSD Socket API, DHCP client, and DNS resolver.
+9. **Display, Window Compositor & Desktop Environment**:
+   - High-resolution 1024x768 @ 32bpp linear framebuffer with double buffering.
+   - 8x16 anti-aliased bitmap fonts.
+   - Window Compositor (`compositor.c`) and Window Manager (`phoxtra-wm`) with glassmorphism aesthetics, dock/taskbar, theme engine, and file manager UI.
+10. **Interactive Diagnostic Shell**:
+    - Over 35 interactive commands (`help`, `hardware`, `phoxdrive`, `fieldsense`, `ps`, `tpm`, `identity`, `ifconfig`, `ping`, `gui`, `dipa`, `vfs`, etc.).
 
 ---
 
@@ -44,73 +54,56 @@ Phoxtra OS is currently in **Phase 1 (v0.1.0-alpha: First successful Phoxtra OS 
 ```
 .
 ├── boot/                      # Custom Bootloader & UEFI entry stubs
-├── config/                    # Empty YAML configurations (system, security, boot, etc.)
-├── docs/                      # Technical documentation & Roadmap
-│   ├── architecture/          # Engineering principles, memory, and design specifications
-│   └── design/                # Design language and visual assets
-├── installer/                 # Placeholder for the operating system installer
+├── config/                    # System and boot configuration profiles
+├── docs/                      # Architectural specifications & Roadmaps
+│   └── architecture/          # Hardware ecosystem, Phoxdrive specs, memory, security
 ├── iso/                       # ISO packaging configuration & GRUB bootloader script
 ├── kernel/                    # Main kernel directory (x86_64 and architecture-independent sources)
-│   ├── arch/x86_64/           # x86_64 Assembly boot and hardware-specific drivers
+│   ├── arch/x86_64/           # x86_64 Assembly boot, IDT/ISR, GDT, context switching
+│   ├── hardware/              # Universal Hardware Framework (Phoxdrive, FieldSense, Device Registry)
 │   ├── include/               # Core kernel header files
-│   └── src/                   # Core kernel implementation files (scheduler, memory, etc.)
+│   ├── log/                   # Kernel serial logging & logger engine
+│   ├── memory/                # PMM, VMM, kernel heap, and heap audit
+│   ├── net/                   # Intel e1000 NIC, Ethernet, ARP, IPv4, TCP/UDP, sockets
+│   ├── process/               # PCB, process manager, multitasking stress engine
+│   ├── scheduler/             # Preemptive round-robin scheduler
+│   ├── security/              # TPM 2.0, SHA-256 attestation, CAC, MAC, audit logger
+│   ├── src/                   # Kernel entry, init, shell, console, interrupts, timer
+│   ├── storage/               # AHCI, block devices, ext2, FAT32, partition tables
+│   ├── ui/                    # Framebuffer, compositor, window manager (phoxtra-wm), fonts
+│   └── vfs/                   # Virtual filesystem, DevFS, InitRD
+├── libc/                      # Native C standard library (phoxtra-libc POSIX subset)
 ├── linker/                    # Custom linker script (`linker.ld`)
-├── recovery/                  # Recovery mode placeholder
-└── scripts/                   # Helper scripts to build and run the ISO
+├── scripts/                   # Build and release packaging scripts
+└── sdk/                       # Developer cross-compiler toolchains and utilities
 ```
 
 ---
 
-## 🛠️ Building the Project
+## 🛠️ Building & Running Phoxtra OS
 
 ### Prerequisites
-
-You need the following tools installed on your host system:
 - **CMake** (v3.20 or newer)
-- **GCC / G++** cross-compiler for `x86_64-elf` (or standard GCC with `-ffreestanding` support)
-- **xorriso** and **grub-common** (for ISO generation with `grub-mkrescue`)
+- **GCC / G++** cross-compiler for `x86_64-elf` (or standard GCC with `-ffreestanding`)
+- **NASM** (for x86_64 assembly modules)
+- **xorriso** & **grub-mkrescue** (for bootable ISO creation)
 - **QEMU** (for virtualization and testing)
 
 ### Build Commands
 
-1. **Configure the project**:
+1. **Configure and build the kernel**:
    ```bash
    cmake -B build -S .
-   ```
-
-2. **Compile the kernel and bootloader**:
-   ```bash
    cmake --build build
    ```
 
-3. **Generate the bootable ISO image**:
+2. **Generate the bootable ISO**:
    ```bash
-   # Using CMake custom target
-   cmake --build build --target iso
-
-   # Or using the build script
    ./scripts/build-iso.sh
    ```
-   This will generate `phoxtra-os.iso` in the project root (or `build/phoxtra.iso`).
+   This generates `phoxtra-os.iso` in the project root.
 
----
-
-## 🖥️ Running Phoxtra OS
-
-You can run the generated ISO image using QEMU:
-
-```bash
-qemu-system-x86_64 -cdrom build/phoxtra.iso -serial stdio
-```
-
-- `-serial stdio` redirects the kernel's serial port debug output (`[BOOT]`) directly to your host terminal.
-- A virtual VGA window will open displaying the graphical console.
-
----
-
-## 🧭 Next Steps & Roadmap
-
-See [docs/roadmap/roadmap.md](docs/roadmap/roadmap.md) for the detailed, phase-by-phase development plan. The immediate next tasks are:
-1. **Interrupt Vector Table (IDT)**: Setup basic hardware interrupts, GDT refresh, and exception handling.
-2. **Physical Memory Allocator**: Setup a simple allocator to support dynamic memory allocation in the kernel.
-3. **Panic & Diagnostics**: Bring up the panic screen (`kernel_panic`) and assert capabilities to ease debugging.
+3. **Run in QEMU**:
+   ```bash
+   qemu-system-x86_64 -cdrom phoxtra-os.iso -serial stdio
+   ```
