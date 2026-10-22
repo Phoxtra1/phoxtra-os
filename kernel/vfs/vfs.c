@@ -156,7 +156,7 @@ void vfs_seed_default_tree(void) {
     vfs_node_t* home = ensure_directory(vfs_root, "home");
     vfs_node_t* user = ensure_directory(home, "user");
     if (!user) {
-        klog(LOG_WARN, "VFS: user workspace could not be initialized");
+        klog(LOG_WARNING, "VFS: user workspace could not be initialized");
         return;
     }
     (void)ensure_directory(user, "Desktop");
