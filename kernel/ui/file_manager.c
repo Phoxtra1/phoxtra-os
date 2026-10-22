@@ -158,6 +158,7 @@ void file_manager_navigate(const char* path) {
     selected_entry = -1;
     current_directory = node;
     redraw_entries();
+    klog(LOG_INFO, "File manager navigated to directory");
 }
 void file_manager_go_parent(void) {
     if (text_equal(current_path, "/")) return;
