@@ -33,6 +33,7 @@ void vfs_init(void);
 vfs_node_t* vfs_get_root(void);
 vfs_node_t* vfs_create_node(const char* name, uint32_t flags);
 vfs_node_t* vfs_create_child(vfs_node_t* parent, const char* name, uint32_t flags);
+vfs_node_t* vfs_create_ram_file(vfs_node_t* parent, const char* name, const char* initial_contents);
 void vfs_seed_default_tree(void);
 int vfs_mount(const char* path, vfs_node_t* node);
 vfs_node_t* vfs_lookup(const char* path);
