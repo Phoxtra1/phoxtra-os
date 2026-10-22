@@ -55,7 +55,7 @@ static void copy_name(char* dst, const char* src, uint32_t cap) {
 int platform_services_init(void) {
     framebuffer_t* fb = framebuffer_get();
     if (fb && fb->available) status_flags |= PLATFORM_STATUS_DISPLAY;
-    if (keyboard_poll_char) status_flags |= PLATFORM_STATUS_KEYBOARD;
+    status_flags |= PLATFORM_STATUS_KEYBOARD;
     if (mouse_is_available()) status_flags |= PLATFORM_STATUS_POINTER;
     if (vfs_get_root()) {
         status_flags |= PLATFORM_STATUS_VFS | PLATFORM_STATUS_STORAGE_VOLATILE;
@@ -132,7 +132,7 @@ void platform_display_draw_gradient(uint32_t x, uint32_t y, uint32_t w, uint32_t
 void platform_display_clear(uint32_t color) { fb_clear(color); }
 void platform_display_present(void) { fb_swap_buffers(); }
 
-const platform_fs_node_t* platform_storage_lookup(const char* path) {
+platform_fs_node_t* platform_storage_lookup(const char* path) {
     if (!path || !path[0]) return 0;
     return vfs_lookup(path);
 }
@@ -166,7 +166,6 @@ uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint6
 }
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name) {
     if (!parent || !name || !name[0] || !(parent->flags & VFS_DIRECTORY)) return PLATFORM_ERR_INVALID;
-    if (platform_security_check_vfs(0, parent, 0) != PLATFORM_OK) return PLATFORM_ERR_DENIED;
     return vfs_create_child(parent, name, VFS_DIRECTORY) ? PLATFORM_OK : PLATFORM_ERR_IO;
 }
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents) {
@@ -215,9 +214,9 @@ int platform_device_get(uint32_t index, platform_device_info_t* info) {
 
 int platform_security_check_vfs(const pcb_t* caller, const platform_fs_node_t* node, uint32_t mode) {
     if (!node) return PLATFORM_ERR_INVALID;
-    /* Null caller is allowed only for the current trusted kernel desktop shell.
-       User processes must pass their PCB and be checked against MAC policy. */
-    if (!caller) return PLATFORM_OK;
+    /* Protected operations must provide a process identity; kernel-owned VFS
+       construction helpers do not invoke this user-facing authorization gate. */
+    if (!caller) return PLATFORM_ERR_DENIED;
     return mac_check_vfs_access((pcb_t*)caller, node->mac_label, mode) ? PLATFORM_OK : PLATFORM_ERR_DENIED;
 }
 int platform_security_has_capability(pcb_t* caller, uint64_t capability) {
