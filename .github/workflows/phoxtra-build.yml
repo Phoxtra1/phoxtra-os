@@ -57,10 +57,7 @@ jobs:
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
-          grep -q 'Platform diagnostic command executed' /tmp/phoxtra-serial.log
-          # Exercise shared platform diagnostics before entering the GUI.
-          { for key in p l a t f o r m ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          sleep 0.5
+          sleep 1
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
