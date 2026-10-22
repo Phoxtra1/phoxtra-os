@@ -16,6 +16,7 @@ typedef struct mouse_event {
 
 void mouse_init(void);
 int mouse_is_available(void);
+void mouse_get_position(int32_t* x, int32_t* y);
 /* Returns 1 when a new motion/button event was available, otherwise 0. */
 int mouse_poll_event(mouse_event_t* event);
 
