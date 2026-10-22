@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "../drivers/framebuffer.h"
 #include "../log/logger.h"
+#include "phoxtra_logo.h"
 
 #define MAX_WINDOWS 16
 static window_t window_list[MAX_WINDOWS];
