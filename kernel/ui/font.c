@@ -53,11 +53,11 @@ static void draw_char_style(char c, uint32_t x, uint32_t y,
     for (uint32_t row = 0; row < FONT_HEIGHT; ++row) {
         for (uint32_t col = 0; col < FONT_WIDTH; ++col) {
             uint32_t bit = row * FONT_WIDTH + col;
-            uint8_t byte = glyph_data[index * GLYPH_BYTES + bit / 8u];
+            uint8_t byte = glyph_data[index][bit / 8u];
             int set = font_ready && ((byte >> (bit % 8u)) & 1u);
             if (bold && !set && col > 0) {
                 uint32_t prev = bit - 1u;
-                set = ((glyph_data[index * GLYPH_BYTES + prev / 8u] >> (prev % 8u)) & 1u) != 0;
+                set = ((glyph_data[index][prev / 8u] >> (prev % 8u)) & 1u) != 0;
             }
             if (set) {
                 fb_put_pixel(x + col, y + row, fg);
