@@ -15,6 +15,7 @@ static volatile int kbd_head = 0;
 static volatile int kbd_tail = 0;
 static int shift_active = 0;
 static volatile int control_active = 0;
+static volatile int control_active = 0;
 
 static unsigned char kbdus[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	/* 9 */
@@ -95,6 +96,8 @@ static unsigned char kbdus_shift[128] = {
 static void keyboard_callback(struct registers* regs) {
     (void)regs;
     uint8_t scancode = inb(0x60);
+    if (scancode == 0x1D) { control_active = 1; return; }
+    if (scancode == 0x9D) { control_active = 0; return; }
 
     if (scancode == 0x1D) { control_active = 1; return; }
     if (scancode == 0x9D) { control_active = 0; return; }
