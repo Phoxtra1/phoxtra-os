@@ -49,6 +49,11 @@ jobs:
             sleep 0.5
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
+          grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
+          grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
+          # Exercise shared platform diagnostics before entering the GUI.
+          { for key in p l a t f o r m ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 0.5
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
@@ -97,6 +102,15 @@ jobs:
           colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
           print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
           assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
+          # Phoxtra brand mark is rendered in the left dock launcher at x=16,y=728.
+          logo_colors = set()
+          w, h = int(width), int(height)
+          for y in range(728, min(760, h)):
+              for x in range(16, min(48, w)):
+                  j = (y * w + x) * 3
+                  logo_colors.add(pixels[j:j+3])
+          print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
+          assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
 
       - name: Upload QEMU screenshot and serial diagnostics
