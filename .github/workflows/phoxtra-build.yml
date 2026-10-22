@@ -21,6 +21,12 @@ jobs:
         run: cmake -B build -S .
       - name: Build kernel
         run: cmake --build build -j2
+      - name: Build alternate product profiles
+        run: |
+          cmake -B build-desktop -S . -DPHOXTRA_PRODUCT_PROFILE=desktop
+          cmake --build build-desktop -j2
+          cmake -B build-embedded -S . -DPHOXTRA_PRODUCT_PROFILE=embedded
+          cmake --build build-embedded -j2
       - name: Build bootable ISO
         run: cmake --build build --target iso
       - name: Verify ISO artifact
@@ -49,6 +55,9 @@ jobs:
             sleep 0.5
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
+          grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
+          grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
+          sleep 1
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
@@ -97,6 +106,15 @@ jobs:
           colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
           print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
           assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
+          # Phoxtra brand mark is rendered in the left dock launcher at x=16,y=728.
+          logo_colors = set()
+          w, h = int(width), int(height)
+          for y in range(728, min(760, h)):
+              for x in range(16, min(48, w)):
+                  j = (y * w + x) * 3
+                  logo_colors.add(pixels[j:j+3])
+          print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
+          assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
 
       - name: Upload QEMU screenshot and serial diagnostics

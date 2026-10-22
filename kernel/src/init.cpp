@@ -55,6 +55,7 @@ extern "C" {
 #include "../drivers/pci.h"
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
+#include "../services/platform.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 #include "../ai/dipa_nl.h"
@@ -192,6 +193,7 @@ void system_init()
     devfs_init();
     initrd_init();
     vfs_seed_default_tree();
+    platform_services_init();
 
     /* ── Phase 10: Storage Drivers & Filesystems ── */
     blockdev_init();

@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "../drivers/framebuffer.h"
 #include "../vfs/vfs.h"
+#include "../services/platform.h"
 #include "../log/logger.h"
 
 #define FM_PATH_CAP 128u
@@ -35,13 +36,13 @@ static int text_equal(const char* a, const char* b) {
     return *a == *b;
 }
 static uint32_t count_entries(vfs_node_t* dir) {
-    uint32_t count = 0;
-    while (vfs_readdir(dir, count)) ++count;
-    return count;
+    return platform_storage_count(dir);
 }
 static vfs_node_t* entry_at(uint32_t index) {
-    if (!current_directory || !(current_directory->flags & VFS_DIRECTORY)) return 0;
-    return vfs_readdir(current_directory, index);
+    if (!current_directory || !platform_storage_is_directory(current_directory)) return 0;
+    platform_fs_entry_t entry;
+    if (platform_storage_list(current_directory, index, &entry) != PLATFORM_OK) return 0;
+    return entry.handle;
 }
 
 static void draw_preview(void) {
@@ -81,8 +82,8 @@ static void redraw_entries(void) {
     theme_palette_t* palette = theme_get_current();
     fb_fill_rect(fm_win->x + 8, fm_win->y + 36, fm_win->width - 16,
                  fm_win->height - 44, fm_win->bg_color);
-    current_directory = vfs_lookup(current_path);
-    if (!current_directory || !(current_directory->flags & VFS_DIRECTORY)) {
+    current_directory = platform_storage_lookup(current_path);
+    if (!current_directory || !platform_storage_is_directory(current_directory)) {
         font_draw_string("Directory unavailable", fm_win->x + 16, fm_win->y + 44,
                          palette->text_color, 0);
         entry_count = 0;
@@ -131,7 +132,7 @@ void file_manager_init(void) {
 }
 void file_manager_open_window(const char* initial_path) {
     if (initial_path && initial_path[0]) text_copy(current_path, initial_path, sizeof(current_path));
-    if (!vfs_lookup(current_path)) text_copy(current_path, "/home/user", sizeof(current_path));
+    if (!platform_storage_lookup(current_path)) text_copy(current_path, "/home/user", sizeof(current_path));
     if (fm_win) {
         fm_win->active = 1;
         fm_win->minimized = 0;
@@ -148,7 +149,7 @@ window_t* file_manager_get_window(void) { return fm_win; }
 
 void file_manager_navigate(const char* path) {
     if (!path || !path[0]) return;
-    vfs_node_t* node = vfs_lookup(path);
+    vfs_node_t* node = platform_storage_lookup(path);
     if (!node || !(node->flags & VFS_DIRECTORY)) return;
     if (!text_copy(current_path, path, sizeof(current_path))) return;
     page_start = 0;
@@ -200,7 +201,7 @@ int file_manager_open_entry(uint32_t index) {
     vfs_node_t* node = entry_at(index);
     if (!node) return 0;
     selected_entry = (int32_t)index;
-    if (node->flags & VFS_DIRECTORY) {
+    if (platform_storage_is_directory(node)) {
         char next[FM_PATH_CAP];
         uint32_t p = 0;
         if (text_equal(current_path, "/")) next[p++] = '/';
@@ -214,7 +215,7 @@ int file_manager_open_entry(uint32_t index) {
         return 1;
     }
 
-    uint64_t got = vfs_read(node, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
+    uint64_t got = platform_storage_read(node, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
     preview_text[got < sizeof(preview_text) ? got : sizeof(preview_text) - 1] = '\0';
     text_copy(preview_name, node->name, sizeof(preview_name));
     if (!preview_win) preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 280, 170, 450, 190, 0x00020617);
@@ -228,16 +229,16 @@ int file_manager_open_entry(uint32_t index) {
 }
 void file_manager_create_folder(const char* name) {
     if (!name || !name[0]) return;
-    if (!current_directory) current_directory = vfs_lookup(current_path);
-    if (vfs_create_child(current_directory, name, VFS_DIRECTORY)) {
+    if (!current_directory) current_directory = platform_storage_lookup(current_path);
+    if (platform_storage_create_directory(current_directory, name) == PLATFORM_OK) {
         redraw_entries();
         klog(LOG_INFO, "Created RAM-backed folder");
     } else klog(LOG_WARNING, "Folder creation failed (invalid or duplicate name)");
 }
 void file_manager_create_file(const char* name, const char* content) {
     if (!name || !name[0]) return;
-    if (!current_directory) current_directory = vfs_lookup(current_path);
-    if (vfs_create_ram_file(current_directory, name, content ? content : "")) {
+    if (!current_directory) current_directory = platform_storage_lookup(current_path);
+    if (platform_storage_create_text_file(current_directory, name, content ? content : "") == PLATFORM_OK) {
         redraw_entries();
         klog(LOG_INFO, "Created RAM-backed file");
     } else klog(LOG_WARNING, "File creation failed (invalid name, duplicate or allocation error)");
