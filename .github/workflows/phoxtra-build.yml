@@ -47,6 +47,8 @@ jobs:
         run: python3 scripts/check_storage_safety.py
       - name: Audit network implementation integrity
         run: python3 scripts/check_network_integrity.py
+      - name: Audit prototype claim integrity
+        run: python3 scripts/check_prototype_claims.py
       - name: Test ELF64 image validation
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
