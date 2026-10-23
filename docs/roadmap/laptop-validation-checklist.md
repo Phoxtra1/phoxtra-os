@@ -59,6 +59,19 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 **Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Do not treat this as persistent-storage validation.
 
+## 5. Application environment and integrated workspace
+
+- [ ] Press `A` to open Application Center and verify it renders without permanently covering or corrupting the desktop.
+- [ ] Confirm Shell Console, Files, and System Status open their existing native panels.
+- [ ] Inspect Phoxtra and external product entries; catalogue visibility must not be mistaken for successful application launch.
+- [ ] Press `W` to inspect Amineva Workspace and verify Docs, Sheets, Slides, Forms, and Drive are described as one integrated suite.
+- [ ] Press `B` to return to the catalogue and `Q` to close it; verify desktop input continues to work.
+- [ ] Record external launch hand-off, account sign-in, shared files, marketplace installation, and offline support as not implemented unless each is separately connected and tested.
+
+**Integration limitation:** Application Center currently provides native panel entry points and planned integration metadata. It does not yet launch external Amineva products, provide the full Amineva Workspace runtime, or install third-party apps.
+
+**Storage warning:** The current VFS is RAM-backed; created files are temporary and lost at reboot. Record storage-device detection only. Do not write to or format the laptop's internal drive.
+
 ## 5. Application Center and publisher boundaries
 
 - [ ] Confirm Phoxtra native panels/system applications are identified as published by Phoxtra.
