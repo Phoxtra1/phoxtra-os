@@ -80,7 +80,7 @@ vfs_node_t* fat32_mount(block_device_t* dev, const char* mount_point) {
 }
 
 void fat32_init(void) {
-    klog(LOG_INFO, "FAT32 Filesystem Driver Subsystem Initialized");
-    block_device_t* p3 = blockdev_get("sata0p3");
+    klog(LOG_INFO, "FAT32 demo adapter initialized; on-disk FAT32 parsing is not implemented");
+    block_device_t* p3 = blockdev_get("ramdisk0p3");
     if (p3) fat32_mount(p3, "/home");
 }
