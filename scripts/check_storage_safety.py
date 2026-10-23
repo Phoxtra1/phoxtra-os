@@ -10,6 +10,30 @@ def read(path):
     return (root / path).read_text(encoding="utf-8")
 
 errors = []
+
+# Guard boundary handling and reject malformed/overlapping partition declarations.
+partitions = read("kernel/storage/partition.c")
+blockdev = read("kernel/storage/blockdev.c")
+ramdisk = read("kernel/storage/ahci.c")
+ext2 = read("kernel/storage/ext2.c")
+fat32 = read("kernel/storage/fat32.c")
+if "lba >= part->sector_count" not in partitions or "count == 0" not in partitions:
+    errors.append("partition reads must reject zero-length and out-of-range requests")
+if "ranges_overlap" not in partitions or "MBR_BOOT_ACTIVE" not in partitions:
+    errors.append("partition parser must validate overlap and MBR boot-indicator fields")
+if "is_extended_partition" not in partitions or "extended partition skipped" not in partitions:
+    errors.append("unsupported MBR extended-partition chains must not be exposed as ordinary filesystems")
+if "blockdev_register" not in blockdev or "duplicate pointer or name" not in blockdev:
+    errors.append("block-device registry must reject duplicate registrations")
+if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
+    errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
+if "No storage writes are enabled" not in ramdisk or "return -1;" not in ramdisk:
+    errors.append("RAM test backend must not enable writes")
+for label, source in (("Ext2", ext2), ("FAT32", fat32)):
+    if "file->size - offset" not in source:
+        errors.append(f"{label} demo reads must avoid offset-plus-size overflow")
+    if "if (!file)" not in source:
+        errors.append(f"{label} demo mount must handle metadata allocation failure")
 partition = read("kernel/storage/partition.c")
 parse = re.search(r"int partition_parse\(block_device_t\* master\)\s*\{(.*?)\n\}", partition, re.S)
 if not parse:
