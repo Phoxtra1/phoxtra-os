@@ -11,7 +11,6 @@
 
 #define REG_CTRL   0x0000
 #define REG_STATUS 0x0008
-#define REG_EERD   0x0014
 #define REG_RCTL   0x0100
 #define REG_TCTL   0x0400
 #define REG_TIPG   0x0410
@@ -96,7 +95,7 @@ void e1000_init(void) {
 
     uint64_t mmio_base = (uint64_t)(pci.bar0 & ~0x0Fu);
     uint32_t bar_type = (pci.bar0 >> 1) & 0x3u;
-    if ((pci.bar0 & 1u) || bar_type == 1u || !mmio_base) {
+    if ((pci.bar0 & 1u) || (bar_type == 1u || bar_type == 3u) || !mmio_base) {
         fail_init("e1000 initialization failed: unsupported I/O or reserved BAR type");
         return;
     }
