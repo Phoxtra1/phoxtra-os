@@ -68,7 +68,7 @@ typedef struct ahci_physical_drive {
     volatile hba_port_t* port;
     ahci_port_dma_t* dma;
     uint8_t active;
-    uint8_t busy;
+    volatile uint32_t busy;
     uint8_t port_index;
     uint8_t read_confirmed;
 } ahci_physical_drive_t;
