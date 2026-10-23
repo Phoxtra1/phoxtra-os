@@ -20,7 +20,6 @@ int ethernet_receive_frame(netdev_t* dev, const uint8_t* frame, uint32_t len) {
     if (!dev || !frame || len < sizeof(eth_header_t) || len > 1518u) return -1;
     const eth_header_t* header = (const eth_header_t*)frame;
     uint16_t type = ntohs(header->ethertype);
-    dev->rx_packets++; dev->rx_bytes += len;
     if (type == ETHERTYPE_ARP)
         return arp_receive_packet(dev, frame + sizeof(*header), len - (uint32_t)sizeof(*header));
     if (type == ETHERTYPE_IPV4) return -2; /* IPv4 input validation/dispatch not yet implemented. */
