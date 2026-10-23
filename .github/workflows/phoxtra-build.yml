@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
-          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none \
+          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
