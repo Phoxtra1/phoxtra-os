@@ -56,6 +56,7 @@ extern "C" {
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
 #include "../services/platform.h"
+#include "../services/hardware_probe.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 #include "../ai/dipa_nl.h"
@@ -201,6 +202,7 @@ void system_init()
     partition_init();
     ext2_init();
     fat32_init();
+    phoxtra_hardware_probe_log();
 
     klog(LOG_KERNEL, "All subsystems initialized");
 }
