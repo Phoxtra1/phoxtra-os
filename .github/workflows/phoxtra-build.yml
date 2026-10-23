@@ -49,6 +49,10 @@ jobs:
           sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
       - name: Audit storage write safety
         run: python3 scripts/check_storage_safety.py
+      - name: Test partition and storage boundaries
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
+          /tmp/test_partition_validation
       - name: Audit network implementation integrity
         run: python3 scripts/check_network_integrity.py
       - name: Audit prototype claim integrity
