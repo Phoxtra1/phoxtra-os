@@ -51,6 +51,29 @@ static void print_reg(const char* name, uint64_t val, bool newline) {
     }
 }
 
+static void print_stack_trace(uint64_t rbp, uint64_t rsp) {
+    console::write("Stack trace (raw return addresses):\n");
+    serial::write("Stack trace (raw return addresses):\n");
+
+    /* Keep the walk bounded and monotonic; never chase arbitrary frame chains. */
+    if (!rbp || rbp < rsp || rbp - rsp > 65536ULL || (rbp & 0x7ULL)) {
+        console::write("  Frame chain unavailable.\n");
+        serial::write("  Frame chain unavailable.\n");
+        return;
+    }
+
+    for (unsigned depth = 0; depth < 8; ++depth) {
+        if (rbp < rsp || rbp - rsp > 65536ULL || (rbp & 0x7ULL)) break;
+        const uint64_t* frame = (const uint64_t*)(uintptr_t)rbp;
+        uint64_t next = frame[0];
+        uint64_t return_address = frame[1];
+        if (!return_address) break;
+        print_reg("  RETURN: ", return_address, true);
+        if (next <= rbp || next - rsp > 65536ULL || next - rbp > 65536ULL) break;
+        rbp = next;
+    }
+}
+
 extern "C" void kernel_panic(const char* exception_name, struct registers* regs) {
     // Disable interrupts immediately
     asm volatile("cli");
@@ -98,6 +121,7 @@ extern "C" void kernel_panic(const char* exception_name, struct registers* regs)
         print_reg("RFL: ", regs->rflags, false); print_reg("SS:  ", saved_ss, true);
         print_reg("VECTOR: ", regs->int_no, false); print_reg("ERR: ", regs->err_code, true);
         if (regs->int_no == 14) print_reg("CR2: ", read_cr2(), true);
+        if ((regs->cs & 0x3u) == 0) print_stack_trace(regs->rbp, saved_rsp);
     } else {
         console::write("No register dump available.\n");
         serial::write("No register dump available.\n");
