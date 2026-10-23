@@ -45,7 +45,7 @@ void boot_screen_display(void) {
     console_write(" [BOOT]                             [BOOTABLE TEST BUILD]\n");
     console_write("  CPU .......... OK                  Memory ....... OK\n");
     console_write("  GDT .......... OK                  Scheduler .... OK\n");
-    console_write("  IDT .......... OK                  Storage ...... OK\n");
+    console_write("  IDT .......... OK                  Storage ...... RAM test only\n");
     console_write("  Timer ........ OK                  TPM 2.0 Engine OK\n");
     console_write("  Keyboard ..... OK                  Process ID ... OK\n");
     console_write("  TPM SPI ...... OK                  CAC & MAC .... OK\n");
