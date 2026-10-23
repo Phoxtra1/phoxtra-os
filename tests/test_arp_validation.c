@@ -8,12 +8,9 @@ static uint8_t last_tx[MAX_ETH_FRAME_LEN];
 static uint32_t last_tx_len;
 static unsigned tx_count;
 static uint64_t fake_ticks;
-uint64_t timer_get_ticks(void) { return fake_ticks; }
 
-void klog(log_level_t level, const char* message) {
-    (void)level;
-    (void)message;
-}
+uint64_t timer_get_ticks(void) { return fake_ticks; }
+void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 uint16_t ntohs(uint16_t value) { return htons(value); }
 
@@ -76,13 +73,14 @@ int main(void) {
     const uint32_t off_link_ip = ip4(10, 0, 0, 8);
     const uint32_t our_ip = ip4(192, 168, 1, 10);
 
+    fake_ticks = 0;
     setup_device(&dev);
     arp_init();
     uint32_t len = make_arp_frame(frame, peer_mac, peer_mac, ARP_OP_REQUEST,
                                   peer_ip, our_ip, NULL);
     CHECK("valid on-link ARP request receives a reply",
           ethernet_receive_frame(&dev, frame, len) == (int)(sizeof(eth_header_t) + sizeof(arp_header_t)));
-    CHECK("ARP reply uses the peer MAC as destination",
+    CHECK("ARP reply uses peer MAC as destination",
           last_tx_len == sizeof(eth_header_t) + sizeof(arp_header_t) &&
           memcmp(((eth_header_t*)last_tx)->dest_mac, peer_mac, ETH_ALEN) == 0);
     CHECK("ARP reply opcode is correct",
@@ -98,22 +96,33 @@ int main(void) {
     arp_init(); setup_device(&dev);
     len = make_arp_frame(frame, peer_mac, peer_mac, ARP_OP_REPLY,
                          peer_ip, ip4(192, 168, 1, 99), dev.mac_addr);
-    CHECK("unsolicited ARP reply addressed to another IP is rejected",
-          ethernet_receive_frame(&dev, frame, len) == -1);
-    CHECK("unsolicited ARP reply cannot poison cache", arp_lookup(peer_ip, found) != 0);
+    CHECK("reply addressed to another IP is rejected", ethernet_receive_frame(&dev, frame, len) == -1);
+    CHECK("reply addressed to another IP cannot poison cache", arp_lookup(peer_ip, found) != 0);
 
     arp_init(); setup_device(&dev);
     len = make_arp_frame(frame, peer_mac, peer_mac, ARP_OP_REQUEST, off_link_ip, our_ip, NULL);
-    CHECK("off-link ARP request is not treated as a local peer",
-          ethernet_receive_frame(&dev, frame, len) == 0 && tx_count == 0);
+    CHECK("off-link ARP request is ignored", ethernet_receive_frame(&dev, frame, len) == 0 && tx_count == 0);
     CHECK("off-link sender is not learned", arp_lookup(off_link_ip, found) != 0);
 
     arp_init(); setup_device(&dev);
     len = make_arp_frame(frame, peer_mac, peer_mac, ARP_OP_REPLY, peer_ip, our_ip, dev.mac_addr);
-    CHECK("ARP reply addressed to this interface is accepted",
-          ethernet_receive_frame(&dev, frame, len) == 0);
-    CHECK("valid ARP reply learns the peer",
-          arp_lookup(peer_ip, found) == 0 && memcmp(found, peer_mac, ETH_ALEN) == 0);
+    CHECK("on-target but unsolicited ARP reply is rejected",
+          ethernet_receive_frame(&dev, frame, len) == -1);
+    CHECK("unsolicited on-target reply cannot poison cache", arp_lookup(peer_ip, found) != 0);
+    CHECK("ARP lookup request is transmitted", arp_send_request(&dev, peer_ip) > 0);
+    CHECK("reply matching outstanding lookup is accepted", ethernet_receive_frame(&dev, frame, len) == 0);
+    CHECK("solicited reply is cached", arp_lookup(peer_ip, found) == 0 &&
+          memcmp(found, peer_mac, ETH_ALEN) == 0);
+    CHECK("duplicate reply after request consumption is rejected",
+          ethernet_receive_frame(&dev, frame, len) == -1);
+
+    arp_init(); setup_device(&dev);
+    fake_ticks = 10;
+    CHECK("ARP lookup can be sent before timeout", arp_send_request(&dev, peer_ip) > 0);
+    fake_ticks = 311;
+    len = make_arp_frame(frame, peer_mac, peer_mac, ARP_OP_REPLY, peer_ip, our_ip, dev.mac_addr);
+    CHECK("expired ARP reply is rejected", ethernet_receive_frame(&dev, frame, len) == -1);
+    CHECK("expired reply cannot populate cache", arp_lookup(peer_ip, found) != 0);
 
     arp_init(); setup_device(&dev);
     len = make_arp_frame(frame, peer_mac, multicast_mac, ARP_OP_REQUEST, peer_ip, our_ip, NULL);
@@ -126,6 +135,8 @@ int main(void) {
     CHECK("broadcast sender MAC is rejected", ethernet_receive_frame(&dev, frame, len) == -1);
     CHECK("broadcast sender is not learned", arp_lookup(peer_ip, found) != 0);
 
+    CHECK("truncated Ethernet frame is rejected",
+          ethernet_receive_frame(&dev, frame, sizeof(eth_header_t) - 1u) == -1);
     printf("ARP validation regression tests passed.\n");
     return 0;
 }
