@@ -19,6 +19,8 @@ static window_t* app_win = 0;
 static window_t* focused_win = 0;
 static uint8_t app_view_detail = 0;
 static uint32_t app_selected_index = 0;
+static uint32_t app_page = 0;
+#define APP_CENTER_PAGE_SIZE 10u
 static window_t* drag_win = 0;
 static int32_t drag_dx = 0, drag_dy = 0;
 static int32_t selected_file_entry = -1;
@@ -74,8 +76,17 @@ static void wm_open_application_center(uint32_t selected_index, uint8_t detail) 
     if (!app_win) return;
     app_view_detail = detail;
     app_selected_index = selected_index;
+    if (!detail) app_page = 0;
     klog(LOG_INFO, detail ? "Application Center opened application details" : "Application Center opened");
-    if (detail && selected_index == 5u) klog(LOG_INFO, "Amineva Workspace entry opened");
+    if (detail) {
+        const platform_app_info_t* selected = 0;
+        if (platform_app_get(selected_index, &selected) == PLATFORM_OK && selected &&
+            selected->id && selected->id[0] == 'a' && selected->id[1] == 'm' &&
+            selected->id[2] == 'i' && selected->id[3] == 'n' &&
+            selected->id[4] == 'e' && selected->id[5] == 'v' &&
+            selected->id[6] == 'a' && selected->id[7] == '-' &&
+            selected->id[8] == 'w') klog(LOG_INFO, "Amineva Workspace entry opened");
+    }
     app_win->active = 1;
     app_win->minimized = 0;
     compositor_raise_window(app_win);
@@ -93,39 +104,52 @@ static void wm_draw_application_center(void) {
             return;
         }
         font_draw_string(app->name, app_win->x + 24, app_win->y + 58, palette->accent_primary, 0);
-        font_draw_string(app->category, app_win->x + 24, app_win->y + 84, palette->text_color, 0);
-        font_draw_string(app->description, app_win->x + 24, app_win->y + 116, palette->text_color, 0);
+        font_draw_string(app->publisher, app_win->x + 24, app_win->y + 84, palette->text_color, 0);
+        font_draw_string(app->category, app_win->x + 24, app_win->y + 110, palette->text_color, 0);
+        font_draw_string(app->application_type, app_win->x + 24, app_win->y + 136, palette->text_color, 0);
+        font_draw_string(app->description, app_win->x + 24, app_win->y + 164, palette->text_color, 0);
+        font_draw_string(app->launch_destination ? app->launch_destination : "Launch destination: not configured",
+                         app_win->x + 24, app_win->y + 192, palette->text_color, 0);
         if (app->state == PLATFORM_APP_AVAILABLE) {
-            font_draw_string("STATUS: AVAILABLE IN THIS BUILD", app_win->x + 24, app_win->y + 164, 0x0034D399, 0);
-            font_draw_string("Use the desktop dock or keyboard shortcut to open this panel.", app_win->x + 24, app_win->y + 194, palette->text_color, 0);
+            font_draw_string("STATUS: AVAILABLE IN THIS BUILD", app_win->x + 24, app_win->y + 226, 0x0034D399, 0);
+            font_draw_string("This native panel has an internal route.", app_win->x + 24, app_win->y + 252, palette->text_color, 0);
         } else {
-            font_draw_string("STATUS: INTEGRATION NOT CONNECTED IN THIS BUILD", app_win->x + 24, app_win->y + 164, 0x00F59E0B, 0);
-            font_draw_string("This is an honest entry point, not a claim that the app has launched.", app_win->x + 24, app_win->y + 194, palette->text_color, 0);
+            font_draw_string("STATUS: INTEGRATION NOT CONNECTED IN THIS BUILD", app_win->x + 24, app_win->y + 226, 0x00F59E0B, 0);
+            font_draw_string("Catalogue entry only; no application launch is claimed.", app_win->x + 24, app_win->y + 252, palette->text_color, 0);
         }
-        if (app_selected_index == 6u) {
-            font_draw_string("AMINEVA WORKSPACE", app_win->x + 24, app_win->y + 252, palette->accent_primary, 0);
-            font_draw_string("Docs | Sheets | Slides | Forms | Drive and collaboration", app_win->x + 24, app_win->y + 282, palette->text_color, 0);
-            font_draw_string("Account sign-in, shared files and service hand-off are not wired yet.", app_win->x + 24, app_win->y + 312, palette->text_color, 0);
-            font_draw_string("Offline support is not asserted until implemented and tested.", app_win->x + 24, app_win->y + 342, palette->text_color, 0);
+        if (app->id && app->id[0] == 'a' && app->id[1] == 'm' && app->id[2] == 'i' &&
+            app->id[3] == 'n' && app->id[4] == 'e' && app->id[5] == 'v' &&
+            app->id[6] == 'a' && app->id[7] == '-' && app->id[8] == 'w') {
+            font_draw_string("PRODUCTIVITY SUITE", app_win->x + 24, app_win->y + 302, palette->accent_primary, 0);
+            font_draw_string("Docs | Sheets | Slides | Forms | Drive", app_win->x + 24, app_win->y + 332, palette->text_color, 0);
+            font_draw_string("One integrated Workspace entry, not five unrelated products.", app_win->x + 24, app_win->y + 362, palette->text_color, 0);
+            font_draw_string("Sign-in, shared files, launch hand-off and offline mode are unverified.", app_win->x + 24, app_win->y + 392, palette->text_color, 0);
         }
         font_draw_string("B: back to applications", app_win->x + 24, app_win->y + 520, palette->accent_secondary, 0);
         return;
     }
 
-    font_draw_string("Browse Phoxtra applications and Amineva Global services.", app_win->x + 24, app_win->y + 48, palette->text_color, 0);
-    font_draw_string("Select an entry to open its panel or inspect its integration status.", app_win->x + 24, app_win->y + 70, palette->text_color, 0);
-    for (uint32_t i = 0; i < platform_app_count(); ++i) {
+    font_draw_string("Application Center - publisher identities stay separate.", app_win->x + 24, app_win->y + 48, palette->text_color, 0);
+    font_draw_string("Phoxtra apps | Amineva Global | independent services | third-party marketplace", app_win->x + 24, app_win->y + 70, palette->text_color, 0);
+    uint32_t total = platform_app_count();
+    uint32_t start = app_page * APP_CENTER_PAGE_SIZE;
+    uint32_t stop = start + APP_CENTER_PAGE_SIZE;
+    if (stop > total) stop = total;
+    for (uint32_t i = start; i < stop; ++i) {
         const platform_app_info_t* app = 0;
         if (platform_app_get(i, &app) != PLATFORM_OK || !app) continue;
-        uint32_t row_y = app_win->y + 94u + i * 38u;
+        uint32_t row_y = app_win->y + 94u + (i - start) * 38u;
         uint32_t row_color = (i == app_selected_index) ? palette->titlebar_bg : palette->window_bg;
         platform_display_fill_rect(app_win->x + 18u, row_y, app_win->width - 36u, 34u, row_color);
         font_draw_string(app->name, app_win->x + 28u, row_y + 5u, palette->text_color, 0);
-        font_draw_string(app->category, app_win->x + 280u, row_y + 5u, palette->text_color, 0);
-        font_draw_string(app->state == PLATFORM_APP_AVAILABLE ? "READY" : "PLANNED", app_win->x + 610u, row_y + 5u,
+        font_draw_string(app->publisher, app_win->x + 250u, row_y + 5u, palette->text_color, 0);
+        font_draw_string(app->category, app_win->x + 445u, row_y + 5u, palette->text_color, 0);
+        font_draw_string(app->state == PLATFORM_APP_AVAILABLE ? "READY" : "PLANNED",
+                         app_win->x + 670u, row_y + 5u,
                          app->state == PLATFORM_APP_AVAILABLE ? 0x0034D399 : 0x00F59E0B, 0);
     }
-    font_draw_string("A: open catalogue  |  W: Amineva Workspace  |  B: close details", app_win->x + 24, app_win->y + 548, palette->accent_secondary, 0);
+    font_draw_string(app_page == 0 ? "Page 1/2" : "Page 2/2", app_win->x + 24u, app_win->y + 500u, palette->accent_secondary, 0);
+    font_draw_string("[: previous page  ]: next page  W: Workspace  Q: close", app_win->x + 24u, app_win->y + 526u, palette->accent_secondary, 0);
 }
 
 static void wm_draw_pointer(void) {
@@ -258,15 +282,18 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
                 app_view_detail = 0;
                 return;
             }
-        } else if (y >= app_win->y + 94u && y < app_win->y + 94u + platform_app_count() * 38u) {
-            uint32_t index = (y - app_win->y - 94u) / 38u;
+        } else if (y >= app_win->y + 94u && y < app_win->y + 94u + APP_CENTER_PAGE_SIZE * 38u) {
+            uint32_t index = app_page * APP_CENTER_PAGE_SIZE + (y - app_win->y - 94u) / 38u;
             const platform_app_info_t* app = 0;
             if (platform_app_get(index, &app) == PLATFORM_OK && app) {
                 app_selected_index = index;
-                if (index == 0u) { app_win->active = 0; wm_restore_window(term_win); }
-                else if (index == 1u) { app_win->active = 0; file_manager_open_window("/home/user"); fm_win = file_manager_get_window(); wm_restore_window(fm_win); }
-                else if (index == 2u) { app_win->active = 0; wm_restore_window(sec_win); }
-                else wm_open_application_center(index, 1u);
+                if (app->id && app->id[0] == 't' && app->id[1] == 'e') {
+                    app_win->active = 0; wm_restore_window(term_win);
+                } else if (app->id && app->id[0] == 'f' && app->id[1] == 'i') {
+                    app_win->active = 0; file_manager_open_window("/home/user"); fm_win = file_manager_get_window(); wm_restore_window(fm_win);
+                } else if (app->id && app->id[0] == 's' && app->id[1] == 'y') {
+                    app_win->active = 0; wm_restore_window(sec_win);
+                } else wm_open_application_center(index, 1u);
             }
         }
         return;
@@ -310,8 +337,25 @@ static void wm_handle_key(char key) {
         return;
     }
     if (key == 'a' || key == 'A') { wm_open_application_center(0u, 0u); return; }
-    if (key == 'w' || key == 'W') { wm_open_application_center(5u, 1u); return; }
+    if (key == 'w' || key == 'W') {
+        for (uint32_t i = 0; i < platform_app_count(); ++i) {
+            const platform_app_info_t* app = 0;
+            if (platform_app_get(i, &app) == PLATFORM_OK && app && app->id &&
+                app->id[0] == 'a' && app->id[1] == 'm' && app->id[2] == 'i' &&
+                app->id[3] == 'n' && app->id[4] == 'e' && app->id[5] == 'v' &&
+                app->id[6] == 'a' && app->id[7] == '-' && app->id[8] == 'w') {
+                wm_open_application_center(i, 1u); return;
+            }
+        }
+        return;
+    }
     if ((key == 'b' || key == 'B') && app_win && app_win->active && app_view_detail) { app_view_detail = 0; return; }
+    if (app_win && app_win->active && !app_view_detail && (key == '[' || key == ']')) {
+        uint32_t pages = (platform_app_count() + APP_CENTER_PAGE_SIZE - 1u) / APP_CENTER_PAGE_SIZE;
+        if (key == '[' && app_page > 0) --app_page;
+        if (key == ']' && app_page + 1u < pages) ++app_page;
+        return;
+    }
     if ((key == 'q' || key == 'Q') && app_win && app_win->active) {
         app_win->active = 0;
         app_view_detail = 0;
