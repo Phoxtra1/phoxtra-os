@@ -22,6 +22,8 @@ typedef struct memory_disk {
 static uint8_t valid_image[TEST_IMAGE_BYTES];
 static uint8_t corrupt_image[TEST_IMAGE_BYTES];
 static uint8_t unsupported_image[TEST_IMAGE_BYTES];
+static const char file_text[] = "Phoxtra ext2 read OK\n";
+static const char nested_text[] = "Nested file OK\n";
 static memory_disk_t valid_disk = {valid_image, sizeof(valid_image), 0, 0};
 static memory_disk_t corrupt_disk = {corrupt_image, sizeof(corrupt_image), 0, 0};
 static memory_disk_t unsupported_disk = {unsupported_image, sizeof(unsupported_image), 0, 0};
@@ -107,9 +109,9 @@ static void make_valid_ext2(uint8_t* image) {
 
     /* Inodes 2..5: root directory, root file, subdirectory, nested file. */
     set_inode(image, 2u, 0x41EDu, TEST_BLOCK_SIZE, 7u, 2u);
-    set_inode(image, 3u, 0x81A4u, 22u, 8u, 1u);
+    set_inode(image, 3u, 0x81A4u, (uint32_t)(sizeof(file_text) - 1u), 8u, 1u);
     set_inode(image, 4u, 0x41EDu, TEST_BLOCK_SIZE, 9u, 2u);
-    set_inode(image, 5u, 0x81A4u, 16u, 10u, 1u);
+    set_inode(image, 5u, 0x81A4u, (uint32_t)(sizeof(nested_text) - 1u), 10u, 1u);
 
     uint8_t* root = image + 7u * TEST_BLOCK_SIZE;
     set_dir_entry(root, 0u, 2u, 12u, ".");
@@ -122,8 +124,8 @@ static void make_valid_ext2(uint8_t* image) {
     set_dir_entry(subdir, 12u, 2u, 12u, "..");
     set_dir_entry(subdir, 24u, 5u, 1000u, "NESTED");
 
-    memcpy(image + 8u * TEST_BLOCK_SIZE, "Phoxtra ext2 read OK\n", 22u);
-    memcpy(image + 10u * TEST_BLOCK_SIZE, "Nested file OK\n", 16u);
+    memcpy(image + 8u * TEST_BLOCK_SIZE, file_text, sizeof(file_text) - 1u);
+    memcpy(image + 10u * TEST_BLOCK_SIZE, nested_text, sizeof(nested_text) - 1u);
 }
 #define CHECK(label, expression) do { \
     if (!(expression)) { fprintf(stderr, "FAIL: %s\n", label); return 1; } \
@@ -151,15 +153,15 @@ int main(void) {
     CHECK("root directory entries resolve to the correct file", file != NULL && file->flags == VFS_FILE);
     memset(output, 0, sizeof(output));
     uint64_t n = vfs_read(file, 0, sizeof(output) - 1u, output);
-    CHECK("on-disk file data is read through VFS", n == 22u && memcmp(output, "Phoxtra ext2 read OK\n", 22u) == 0);
+    CHECK("on-disk file data is read through VFS", n == sizeof(file_text) - 1u && memcmp(output, file_text, sizeof(file_text) - 1u) == 0);
     memset(output, 0, sizeof(output));
-    n = vfs_read(file, 7u, 5u, output);
+    n = vfs_read(file, 8u, 5u, output);
     CHECK("file reads support offsets and bounded lengths", n == 5u && memcmp(output, "ext2 ", 5u) == 0);
     vfs_node_t* nested = vfs_lookup("/disk0p1/SUBDIR/NESTED");
     CHECK("nested directories are parsed safely", nested != NULL && nested->flags == VFS_FILE);
     memset(output, 0, sizeof(output));
     n = vfs_read(nested, 0u, sizeof(output) - 1u, output);
-    CHECK("nested file content is read correctly", n == 16u && memcmp(output, "Nested file OK\n", 16u) == 0);
+    CHECK("nested file content is read correctly", n == sizeof(nested_text) - 1u && memcmp(output, nested_text, sizeof(nested_text) - 1u) == 0);
     CHECK("VFS writes fail closed for ext2 files", vfs_write(file, 0u, 1u, (const uint8_t*)"x") == 0);
     CHECK("ext2 mount never calls the disk write callback",
           valid_disk.write_calls == 0 && corrupt_disk.write_calls == 0 && unsupported_disk.write_calls == 0);
