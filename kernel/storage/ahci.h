@@ -1,4 +1,5 @@
 #ifndef PHOXTRA_AHCI_H
+/* Current implementation is a RAM-backed test device, not a hardware AHCI driver. */
 #define PHOXTRA_AHCI_H
 
 #include "blockdev.h"
