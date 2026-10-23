@@ -176,11 +176,18 @@ static int ahci_issue_data_command(ahci_physical_drive_t* drive, uint8_t command
     port->ci = 1u;             /* Slot zero; this driver serializes each port. */
 
     uint32_t spins = 0;
+    int task_error = 0;
     while ((port->ci & 1u) && spins++ < AHCI_POLL_LIMIT) {
-        if (port->is & AHCI_PXIS_TFES) return -1;
+        if (port->is & AHCI_PXIS_TFES) task_error = 1;
     }
-    if (port->ci & 1u) return -1;
-    if ((port->is & AHCI_PXIS_TFES) || (port->tfd & ATA_STATUS_ERR)) return -1;
+    if (port->ci & 1u) {
+        /* Never reuse a DMA buffer while the controller may still be accessing it. */
+        (void)stop_port_engine(port);
+        drive->active = 0;
+        klog(LOG_ERROR, "AHCI: command timed out; port disabled to protect DMA buffers");
+        return -1;
+    }
+    if (task_error || (port->is & AHCI_PXIS_TFES) || (port->tfd & ATA_STATUS_ERR)) return -1;
     return 0;
 }
 
@@ -263,9 +270,14 @@ static int prepare_physical_port(volatile hba_port_t* port, uint32_t index) {
 
     drive->device.name[0] = 's'; drive->device.name[1] = 'a';
     drive->device.name[2] = 't'; drive->device.name[3] = 'a';
-    drive->device.name[4] = (char)('0' + (index / 10u));
-    drive->device.name[5] = (char)('0' + (index % 10u));
-    drive->device.name[6] = '\0';
+    if (index < 10u) {
+        drive->device.name[4] = (char)('0' + index);
+        drive->device.name[5] = '\0';
+    } else {
+        drive->device.name[4] = (char)('0' + (index / 10u));
+        drive->device.name[5] = (char)('0' + (index % 10u));
+        drive->device.name[6] = '\0';
+    }
 
     if (blockdev_register(&drive->device) != 0) {
         drive->active = 0;
