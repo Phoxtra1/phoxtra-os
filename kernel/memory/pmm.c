@@ -182,8 +182,9 @@ void* pmm_alloc_page(void) {
 }
 
 void* pmm_alloc_contiguous_pages(size_t page_count) {
-    if (!page_count || page_count > total_pages_count) return NULL;
     const uint64_t first_usable = RESERVED_LOW_BYTES / PAGE_SIZE;
+    if (!page_count || page_count > total_pages_count || total_pages_count <= first_usable)
+        return NULL;
     if ((uint64_t)page_count > total_pages_count - first_usable) return NULL;
 
     for (uint64_t first = first_usable;
