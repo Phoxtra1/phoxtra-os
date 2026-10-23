@@ -146,9 +146,15 @@ void vmm_switch_page_directory(uint64_t cr3_phys) {
 }
 
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
+    if (!pml4_phys) return -1;
+    /* Ring 3 may only map lower-half canonical virtual addresses. */
+    if (virt >= 0x0000800000000000ULL) return -1;
     uint64_t* target_pml4 = (uint64_t*)pml4_phys;
-    if (!target_pml4) target_pml4 = pml4_root;
-    if (!target_pml4) target_pml4 = (uint64_t*)(read_cr3() & ~0xFFFULL);
+    uint64_t* kernel_pml4 = (uint64_t*)vmm_get_kernel_page_directory();
+    if (!target_pml4 || target_pml4 == kernel_pml4) {
+        klog(LOG_WARNING, "VMM: refusing user mapping in the kernel page directory");
+        return -1;
+    }
 
     uint64_t pml4_idx = (virt >> 39) & 0x1FF;
     uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
@@ -164,8 +170,13 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         for (int i = 0; i < 512; i++) pdpt[i] = 0;
         target_pml4[pml4_idx] = ((uint64_t)pdpt) | user_flags | VMM_FLAG_WRITABLE;
     } else {
+        /* This PML4 entry may be shared with the kernel address space.
+           Never make a shared supervisor mapping user-accessible. */
+        if (!(target_pml4[pml4_idx] & VMM_FLAG_USER)) {
+            klog(LOG_WARNING, "VMM: refusing user mapping in shared supervisor PML4 slot");
+            return -1;
+        }
         pdpt = (uint64_t*)(target_pml4[pml4_idx] & ~0xFFF);
-        target_pml4[pml4_idx] |= user_flags;
     }
 
     uint64_t* pdt;
@@ -175,8 +186,11 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         for (int i = 0; i < 512; i++) pdt[i] = 0;
         pdpt[pdpt_idx] = ((uint64_t)pdt) | user_flags | VMM_FLAG_WRITABLE;
     } else {
+        if (!(pdpt[pdpt_idx] & VMM_FLAG_USER)) {
+            klog(LOG_WARNING, "VMM: refusing user mapping through shared supervisor PDPT slot");
+            return -1;
+        }
         pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
-        pdpt[pdpt_idx] |= user_flags;
     }
 
     uint64_t* pt;
@@ -186,8 +200,11 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         for (int i = 0; i < 512; i++) pt[i] = 0;
         pdt[pdt_idx] = ((uint64_t)pt) | user_flags | VMM_FLAG_WRITABLE;
     } else {
+        if (!(pdt[pdt_idx] & VMM_FLAG_USER)) {
+            klog(LOG_WARNING, "VMM: refusing user mapping through shared supervisor PD slot");
+            return -1;
+        }
         pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
-        pdt[pdt_idx] |= user_flags;
     }
 
     pt[pt_idx] = (phys & ~0xFFF) | user_flags;
