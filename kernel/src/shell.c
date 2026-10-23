@@ -187,13 +187,13 @@ static void cmd_help(void) {
     console_write("  ps         - List all processes\n");
     console_write("  pid        - Current process ID\n");
     console_write("  memory     - Memory usage summary\n");
-    console_write("  cpu        - CPU and scheduler state\n");
+    console_write("  cpu        - CPU, timer and scheduler readiness status\n");
     console_write("  usermode   - Show user-mode runtime implementation status\n");
     console_write("  disks      - List storage block devices & partition table\n");
     console_write("  storage    - Milestone 0.7.0 Storage Driver & Filesystem Audit\n");
     console_write("  tpm        - Show TPM hardware-driver status\n");
-    console_write("  identity   - Cryptographic SHA-256 Process Identity Status\n");
-    console_write("  audit      - Immutable Kernel Security Event Audit Logger\n");
+    console_write("  identity   - Show process SHA-256 fingerprints (not attestation)\n");
+    console_write("  audit      - Show volatile in-memory audit events\n");
     console_write("  caps       - Capability Access Control (CAC) Bitmask Permissions\n");
     console_write("  mac        - Mandatory Access Control (MAC) Security Domains\n");
     console_write("  stackguard - Show stack/guard-page implementation status\n");
@@ -230,11 +230,13 @@ static void cmd_help(void) {
 
 static void cmd_about(void) {
     console_write("\nAKWAABA - PHOXTRA OS\n");
-    console_write("Secure Identity Operating System\n");
-    console_write("Version : Experimental bootable test prototype\n");
-    console_write("Arch    : x86_64 64-bit Long Mode\n");
-    console_write("Features: Hardware TPM 2.0, CAC/MAC Security, TCP/IP, VBE GUI, ELF64 Runtime, SDK\n");
-    console_write("Install : Not implemented; storage is volatile RAM only\n\n");
+    console_write("Stage   : Experimental bootable x86_64 prototype\n");
+    console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
+    console_write("Storage : Volatile RAM test environment; persistent disk support unavailable\n");
+    console_write("Network : e1000 hardware path under development; full TCP/IP/TLS unavailable\n");
+    console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
+    console_write("Mobile  : ARM64 phone build not implemented\n");
+    console_write("Install : Not implemented; do not install to an internal disk\n\n");
 }
 
 static void cmd_disks(void) {
@@ -286,61 +288,40 @@ static void cmd_tpm(void) {
 }
 
 static void cmd_identity(void) {
-    console_write("\n=== Cryptographic Process Identity Attestation ===\n");
-    console_write("PID  NAME             STATUS      SHA-256 PROCESS HASH\n");
-    console_write("---  ---------------  ----------  ----------------------------------------\n");
-
+    console_write("\n=== Process SHA-256 Fingerprints (Not Attestation) ===\n");
+    console_write("Hashes identify bytes; no trusted digital signature or TPM attestation is available.\n");
+    console_write("PID  NAME             STATUS      SHA-256 FINGERPRINT\n");
     struct pcb** table = process_table();
     uint32_t count = process_count();
-
-    for (uint32_t i = 0; i < count; i++) {
-        struct pcb* pcb = table[i];
-        if (!pcb) continue;
-
-        print_dec(pcb->pid);
-        console_write("    ");
-        print_str_pad(pcb->name, 17);
-
-        if (pcb->identity_status == IDENTITY_STATUS_VERIFIED) {
-            console_write("VERIFIED    ");
-        } else {
-            console_write("UNVERIFIED  ");
-        }
-
-        char hash_hex[65];
-        process_identity_get_hash_hex(pcb, hash_hex);
-        for (int h = 0; h < 32; h++) console_put_char(hash_hex[h]);
+    for (uint32_t i = 0; i < count; ++i) {
+        struct pcb* pcb = table[i]; if (!pcb) continue;
+        print_dec(pcb->pid); console_write("    "); print_str_pad(pcb->name,17);
+        console_write("UNVERIFIED  ");
+        char hash_hex[65]; process_identity_get_hash_hex(pcb, hash_hex);
+        for (int h = 0; h < 64; ++h) console_put_char(hash_hex[h]);
         console_write("\n");
     }
     console_write("\n");
 }
 
 static void cmd_audit(void) {
-    console_write("\n=== Immutable Kernel Security Event Audit Log ===\n");
+    console_write("\n=== In-Memory Kernel Audit Events ===\n");
+    console_write("This log is volatile and is not immutable or tamper-resistant.\n");
     console_write("TIME(TICKS)  PID  EVENT TYPE             MESSAGE\n");
-    console_write("-----------  ---  ---------------------  -----------------------------------\n");
-
     uint32_t count = audit_get_count();
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; ++i) {
         const audit_event_t* ev = audit_get_event(i);
         if (!ev) continue;
-
-        print_dec(ev->timestamp);
-        console_write("          ");
-        print_dec(ev->pid);
-        console_write("    ");
-
+        print_dec(ev->timestamp); console_write("          "); print_dec(ev->pid); console_write("    ");
         switch (ev->event_type) {
-            case AUDIT_TYPE_HARDWARE_ATTESTATION: print_str_pad("HW_ATTESTATION", 23); break;
-            case AUDIT_TYPE_PROCESS_BINDING:      print_str_pad("PROCESS_BINDING", 23); break;
-            case AUDIT_TYPE_PRIVILEGE_TRANSITION: print_str_pad("PRIV_TRANSITION", 23); break;
-            case AUDIT_TYPE_SYSCALL_GATE:         print_str_pad("SYSCALL_GATE", 23); break;
-            case AUDIT_TYPE_POLICY_VIOLATION:     print_str_pad("POLICY_VIOLATION", 23); break;
-            default:                              print_str_pad("UNKNOWN_EVENT", 23); break;
+            case AUDIT_TYPE_HARDWARE_ATTESTATION: print_str_pad("HW_ATTESTATION",23); break;
+            case AUDIT_TYPE_PROCESS_BINDING: print_str_pad("PROCESS_BINDING",23); break;
+            case AUDIT_TYPE_PRIVILEGE_TRANSITION: print_str_pad("PRIV_TRANSITION",23); break;
+            case AUDIT_TYPE_SYSCALL_GATE: print_str_pad("SYSCALL_GATE",23); break;
+            case AUDIT_TYPE_POLICY_VIOLATION: print_str_pad("POLICY_VIOLATION",23); break;
+            default: print_str_pad("UNKNOWN_EVENT",23); break;
         }
-
-        console_write(ev->message);
-        console_write("\n");
+        console_write(ev->message); console_write("\n");
     }
     console_write("\n");
 }
@@ -589,22 +570,16 @@ static void cmd_fm(void) {
 }
 
 static void cmd_store(const char* arg) {
-    console_write("\n=== PHOXTRA APP STORE CATALOG (cloud.phoxtra.com/store) ===\n");
-    console_write("Connecting to Phoxtra Cloud Repository ... VERIFIED\n\n");
-    console_write("APP NAME             CATEGORY      FORMAT     STATUS\n");
-    console_write("-----------------------------------------------------------\n");
-    console_write("amineva-workspace    Productivity  Native .pxa INSTALLED\n");
-    console_write("signal-desktop       Messaging     Flatpak     AVAILABLE\n");
-    console_write("telegram-desktop     Messaging     Flatpak     AVAILABLE\n");
-    console_write("whatsapp-desktop     Messaging     PWA WebKit  AVAILABLE\n");
-    console_write("vlc-media-player     Media         Flatpak     AVAILABLE\n");
-    console_write("phoxtra-downloader   Media / Video ELF64 CLI   INSTALLED\n");
-    console_write("adesua-learning      Education     Native .pxa INSTALLED\n\n");
+    console_write("\n=== Application Store Status ===\n");
+    console_write("Online store connection : NOT IMPLEMENTED\n");
+    console_write("Package manager         : NOT IMPLEMENTED\n");
+    console_write("Signature verification  : NOT AVAILABLE\n");
+    console_write("The Application Center is a local catalogue, not a connected package store.\n");
     if (arg && arg[0]) {
-        console_write("Installing package: "); console_write(arg); console_write(" ...\n");
-        console_write("[1/3] Signature Verification (PhoxtraID Root CA) ... PASSED\n");
-        console_write("[2/3] Hardware TPM 2.0 Hash Check (SHA-256) ....... PASSED\n");
+        console_write("Requested package: "); console_write(arg); console_write("\n");
+        console_write("No package was downloaded or installed.\n");
     }
+    console_write("\n");
 }
 
 static void cmd_update(void) {
@@ -740,14 +715,12 @@ static void cmd_memory(void) {
 }
 
 static void cmd_cpu(void) {
-    console_write("\nCPU State:\n");
+    console_write("\nCPU/Kernel State:\n");
     console_write("  Architecture : x86_64 (Long Mode)\n");
-    console_write("  Scheduler    : Round-Robin (preemptive, 100ms slice)\n");
-    console_write("  Interrupts   : Enabled\n");
-    console_write("  Timer Freq   : 100 Hz\n");
-    console_write("  Uptime Ticks : ");
-    print_dec(scheduler_get_uptime_ticks());
-    console_write("\n\n");
+    console_write("  Timer         : 100 Hz PIT configured\n");
+    console_write("  Interrupts    : Enabled in the main event loop\n");
+    console_write("  Scheduler     : Experimental; process queue/context switching not validated\n");
+    console_write("  Uptime ticks  : "); print_dec(scheduler_get_uptime_ticks()); console_write("\n\n");
 }
 
 static void cmd_usermode(void) {
