@@ -10,8 +10,15 @@ typedef struct heap_block {
     struct heap_block* next;
 } heap_block_t;
 
+typedef struct heap_large_allocation {
+    size_t page_count;
+    struct heap_large_allocation* next;
+} heap_large_allocation_t;
+
 static heap_block_t* heap_start = NULL;
+static heap_large_allocation_t* large_allocations = NULL;
 #define HEAP_HEADER_SIZE ((sizeof(heap_block_t) + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u))
+#define HEAP_LARGE_HEADER_SIZE ((sizeof(heap_large_allocation_t) + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u))
 
 static size_t align_size(size_t size) {
     if (size > (size_t)-1 - (HEAP_ALIGNMENT - 1u)) return 0;
@@ -35,23 +42,37 @@ static heap_block_t* heap_add_page(void) {
     return block;
 }
 
+static void* heap_alloc_large(size_t size) {
+    if (size > (size_t)-1 - HEAP_LARGE_HEADER_SIZE - (PAGE_SIZE - 1u)) return NULL;
+    size_t page_count = (size + HEAP_LARGE_HEADER_SIZE + PAGE_SIZE - 1u) / PAGE_SIZE;
+    if (!page_count) return NULL;
+    void* base = pmm_alloc_contiguous_pages(page_count);
+    if (!base) return NULL;
+    heap_large_allocation_t* allocation = (heap_large_allocation_t*)base;
+    allocation->page_count = page_count;
+    allocation->next = large_allocations;
+    large_allocations = allocation;
+    return (void*)((uint8_t*)base + HEAP_LARGE_HEADER_SIZE);
+}
+
 void heap_init(void) {
     heap_start = NULL;
+    large_allocations = NULL;
     if (!heap_add_page()) {
         klog(LOG_ERROR, "Kernel heap initialization failed: no physical page available");
         return;
     }
-    klog(LOG_KERNEL, "Kernel heap initialized with an on-demand page pool");
+    klog(LOG_KERNEL, "Kernel heap initialized with on-demand small blocks and contiguous large allocations");
 }
 
 void* kmalloc(size_t requested_size) {
     size_t size = align_size(requested_size);
     if (!size) return NULL;
-    /* This allocator currently stores each block in one physical page. */
-    if (size > PAGE_SIZE - HEAP_HEADER_SIZE) {
-        klog(LOG_WARNING, "kmalloc: request exceeds the current single-page block limit");
-        return NULL;
-    }
+
+    /* Keep small allocations in independent one-page pools. Larger objects
+       (including process stacks) receive a contiguous physical page run. */
+    if (size > PAGE_SIZE - HEAP_HEADER_SIZE)
+        return heap_alloc_large(size);
 
     for (;;) {
         heap_block_t* current = heap_start;
@@ -92,7 +113,27 @@ void kfree(void* ptr) {
         }
         current = current->next;
     }
-    if (!current) return; /* Ignore pointers not owned by this heap. */
+
+    if (!current) {
+        heap_large_allocation_t* previous = NULL;
+        heap_large_allocation_t* allocation = large_allocations;
+        while (allocation) {
+            void* payload = (void*)((uint8_t*)allocation + HEAP_LARGE_HEADER_SIZE);
+            if (payload == ptr) {
+                size_t page_count = allocation->page_count;
+                uintptr_t base = (uintptr_t)allocation;
+                heap_large_allocation_t* next = allocation->next;
+                if (previous) previous->next = next;
+                else large_allocations = next;
+                for (size_t i = 0; i < page_count; ++i)
+                    pmm_free_page((void*)(base + i * PAGE_SIZE));
+                return;
+            }
+            previous = allocation;
+            allocation = allocation->next;
+        }
+        return; /* Ignore foreign pointers and duplicate frees. */
+    }
 
     /* Coalesce only when two block headers really are physically adjacent. */
     current = heap_start;
