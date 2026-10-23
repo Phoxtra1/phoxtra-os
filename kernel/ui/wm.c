@@ -15,7 +15,10 @@ static window_t* term_win = 0;
 static window_t* sec_win = 0;
 static window_t* mon_win = 0;
 static window_t* fm_win = 0;
+static window_t* app_win = 0;
 static window_t* focused_win = 0;
+static uint8_t app_view_detail = 0;
+static uint32_t app_selected_index = 0;
 static window_t* drag_win = 0;
 static int32_t drag_dx = 0, drag_dy = 0;
 static int32_t selected_file_entry = -1;
@@ -32,7 +35,9 @@ void wm_init(void) {
     term_win = compositor_create_window("PHOXTRA TERMINAL", 170, 54, 400, 300, 0x00020617);
     file_manager_open_window("/home/user");
     fm_win = file_manager_get_window();
-    sec_win = compositor_create_window("SECURITY AND SYSTEM STATUS", 170, 374, 832, 310, 0x00020617);
+    sec_win = compositor_create_window("SYSTEM STATUS", 170, 374, 832, 310, 0x00020617);
+    app_win = compositor_create_window("APPLICATION CENTER", 150, 64, 800, 610, 0x00020617);
+    if (app_win) app_win->active = 0;
     focused_win = term_win;
     (void)mon_win;
 }
@@ -55,13 +60,70 @@ static void wm_draw_window_contents(void) {
         font_draw_string("Terminal shell is available after leaving the desktop.", term_win->x + 16, term_win->y + 76, 0x00F8FAFC, 0);
         font_draw_string("Esc: return to shell", term_win->x + 16, term_win->y + 102, 0x0094A3B8, 0);
         font_draw_string("F: show file manager", term_win->x + 16, term_win->y + 124, 0x0094A3B8, 0);
+        font_draw_string("A: open Application Center", term_win->x + 16, term_win->y + 146, 0x0094A3B8, 0);
     }
     if (sec_win && sec_win->active && !sec_win->minimized) {
         font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
-        font_draw_string("VFS workspace: temporary RAM storage", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
-        font_draw_string("Input: PS/2 keyboard and mouse when detected", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
-        font_draw_string("Persistent storage and application launching are not yet complete.", sec_win->x + 16, sec_win->y + 122, 0x0094A3B8, 0);
+        font_draw_string("Storage: temporary RAM-backed VFS", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
+        font_draw_string("Input: detected keyboard and PS/2 pointer", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
+        font_draw_string("Press A for Phoxtra and Amineva application entries.", sec_win->x + 16, sec_win->y + 122, 0x0094A3B8, 0);
     }
+}
+
+static void wm_open_application_center(uint32_t selected_index, uint8_t detail) {
+    if (!app_win) return;
+    app_view_detail = detail;
+    app_selected_index = selected_index;
+    app_win->active = 1;
+    app_win->minimized = 0;
+    compositor_raise_window(app_win);
+    focused_win = app_win;
+}
+
+static void wm_draw_application_center(void) {
+    if (!app_win || !app_win->active || app_win->minimized) return;
+    theme_palette_t* palette = theme_get_current();
+    if (app_view_detail) {
+        const platform_app_info_t* app = 0;
+        if (platform_app_get(app_selected_index, &app) != PLATFORM_OK || !app) {
+            font_draw_string("Application entry is unavailable.", app_win->x + 24, app_win->y + 70, palette->text_color, 0);
+            font_draw_string("Press B to return to the catalogue.", app_win->x + 24, app_win->y + 104, palette->text_color, 0);
+            return;
+        }
+        font_draw_string(app->name, app_win->x + 24, app_win->y + 58, palette->accent_primary, 0);
+        font_draw_string(app->category, app_win->x + 24, app_win->y + 84, palette->text_color, 0);
+        font_draw_string(app->description, app_win->x + 24, app_win->y + 116, palette->text_color, 0);
+        if (app->state == PLATFORM_APP_AVAILABLE) {
+            font_draw_string("STATUS: AVAILABLE IN THIS BUILD", app_win->x + 24, app_win->y + 164, 0x0034D399, 0);
+            font_draw_string("Use the desktop dock or keyboard shortcut to open this panel.", app_win->x + 24, app_win->y + 194, palette->text_color, 0);
+        } else {
+            font_draw_string("STATUS: INTEGRATION NOT CONNECTED IN THIS BUILD", app_win->x + 24, app_win->y + 164, 0x00F59E0B, 0);
+            font_draw_string("This is an honest entry point, not a claim that the app has launched.", app_win->x + 24, app_win->y + 194, palette->text_color, 0);
+        }
+        if (app_selected_index == 6u) {
+            font_draw_string("AMINEVA WORKSPACE", app_win->x + 24, app_win->y + 252, palette->accent_primary, 0);
+            font_draw_string("Docs | Sheets | Slides | Forms | Drive and collaboration", app_win->x + 24, app_win->y + 282, palette->text_color, 0);
+            font_draw_string("Account sign-in, shared files and service hand-off are not wired yet.", app_win->x + 24, app_win->y + 312, palette->text_color, 0);
+            font_draw_string("Offline support is not asserted until implemented and tested.", app_win->x + 24, app_win->y + 342, palette->text_color, 0);
+        }
+        font_draw_string("B: back to applications", app_win->x + 24, app_win->y + 520, palette->accent_secondary, 0);
+        return;
+    }
+
+    font_draw_string("Browse Phoxtra applications and Amineva Global services.", app_win->x + 24, app_win->y + 48, palette->text_color, 0);
+    font_draw_string("Select an entry to open its panel or inspect its integration status.", app_win->x + 24, app_win->y + 70, palette->text_color, 0);
+    for (uint32_t i = 0; i < platform_app_count(); ++i) {
+        const platform_app_info_t* app = 0;
+        if (platform_app_get(i, &app) != PLATFORM_OK || !app) continue;
+        uint32_t row_y = app_win->y + 94u + i * 38u;
+        uint32_t row_color = (i == app_selected_index) ? palette->titlebar_bg : palette->window_bg;
+        platform_display_fill_rect(app_win->x + 18u, row_y, app_win->width - 36u, 34u, row_color);
+        font_draw_string(app->name, app_win->x + 28u, row_y + 5u, palette->text_color, 0);
+        font_draw_string(app->category, app_win->x + 280u, row_y + 5u, palette->text_color, 0);
+        font_draw_string(app->state == PLATFORM_APP_AVAILABLE ? "READY" : "PLANNED", app_win->x + 610u, row_y + 5u,
+                         app->state == PLATFORM_APP_AVAILABLE ? 0x0034D399 : 0x00F59E0B, 0);
+    }
+    font_draw_string("A: open catalogue  |  W: Amineva Workspace  |  B: close details", app_win->x + 24, app_win->y + 548, palette->accent_secondary, 0);
 }
 
 static void wm_draw_pointer(void) {
@@ -96,6 +158,7 @@ static void wm_render_desktop(void) {
     wm_draw_desktop_icons();
     wm_draw_window_contents();
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
+    wm_draw_application_center();
     wm_draw_pointer();
     platform_display_present();
 }
@@ -118,9 +181,7 @@ static void wm_handle_dock_click(uint32_t x) {
     } else if (x < 315) {
         wm_restore_window(sec_win);
     } else if (x < 430) {
-        file_manager_open_window("/home/user");
-        fm_win = file_manager_get_window();
-        wm_restore_window(fm_win);
+        wm_open_application_center(0u, 0u);
     }
 }
 
@@ -189,6 +250,26 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
         return;
     }
 
+    if (win == app_win) {
+        if (app_view_detail) {
+            if (y >= app_win->y + app_win->height - 70u) {
+                app_view_detail = 0;
+                return;
+            }
+        } else if (y >= app_win->y + 94u && y < app_win->y + 94u + platform_app_count() * 38u) {
+            uint32_t index = (y - app_win->y - 94u) / 38u;
+            const platform_app_info_t* app = 0;
+            if (platform_app_get(index, &app) == PLATFORM_OK && app) {
+                app_selected_index = index;
+                if (index == 0u) { app_win->active = 0; wm_restore_window(term_win); }
+                else if (index == 1u) { app_win->active = 0; file_manager_open_window("/home/user"); fm_win = file_manager_get_window(); wm_restore_window(fm_win); }
+                else if (index == 2u) { app_win->active = 0; wm_restore_window(sec_win); }
+                else wm_open_application_center(index, 1u);
+            }
+        }
+        return;
+    }
+
     if (win == fm_win) {
         int index = file_manager_hit_test(x, y);
         if (index >= 0) {
@@ -226,6 +307,9 @@ static void wm_handle_key(char key) {
         wm_restore_window(fm_win);
         return;
     }
+    if (key == 'a' || key == 'A') { wm_open_application_center(0u, 0u); return; }
+    if (key == 'w' || key == 'W') { wm_open_application_center(6u, 1u); return; }
+    if ((key == 'b' || key == 'B') && app_win && app_win->active && app_view_detail) { app_view_detail = 0; return; }
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
     if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
 
@@ -234,6 +318,7 @@ static void wm_handle_key(char key) {
     if (key == '2') { theme_set(THEME_CYBER_SAPPHIRE); return; }
     if (key == '3') { theme_set(THEME_EMERALD_DARK); return; }
 
+    if (focused_win == app_win && app_win && app_win->active) return;
     if (focused_win != fm_win || !fm_win || !fm_win->active) return;
     if (key == '\b') {
         file_manager_go_parent();
