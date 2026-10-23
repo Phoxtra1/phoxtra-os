@@ -21,14 +21,14 @@ static const char boot_cfg_text[] =
     "DEFAULT phoxtra\n\n"
     "LABEL phoxtra\n"
     "    KERNEL /boot/phoxtra\n"
-    "    APPEND root=/dev/sata0p1 rw loglevel=info\n";
+    "    APPEND root=/dev/ramdisk0p1 ro loglevel=info\n";
 
 static const char sys_config_text[] =
     "[PHOXTRA_SYSTEM_CONFIG]\n"
     "kernel.version = 0.7.0\n"
-    "storage.ahci = enabled\n"
+    "storage.backend = volatile_ram_demo\n"
     "security.tpm = auto\n"
-    "fs.root = ext2\n";
+    "fs.root = in_memory_demo_adapter\n";
 
 static uint64_t ext2_file_read(vfs_node_t* node, uint64_t offset, uint64_t size, uint8_t* buffer) {
     if (!node || !node->ptr || !buffer) return 0;
@@ -104,10 +104,10 @@ vfs_node_t* ext2_mount(block_device_t* dev, const char* mount_point) {
 }
 
 void ext2_init(void) {
-    klog(LOG_INFO, "Ext2 Filesystem Driver Subsystem Initialized");
-    block_device_t* p1 = blockdev_get("sata0p1");
+    klog(LOG_INFO, "Ext2 demo adapter initialized; on-disk ext2 parsing is not implemented");
+    block_device_t* p1 = blockdev_get("ramdisk0p1");
     if (p1) ext2_mount(p1, "/boot");
 
-    block_device_t* p2 = blockdev_get("sata0p2");
+    block_device_t* p2 = blockdev_get("ramdisk0p2");
     if (p2) ext2_mount(p2, "/usr");
 }
