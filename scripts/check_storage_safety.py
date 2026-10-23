@@ -39,12 +39,6 @@ install_fn = re.search(r"static void cmd_installer\(void\)\s*\{(.*?)\n\}", shell
 if not install_fn or "not available" not in install_fn.group(1) or "installer_start" in install_fn.group(1):
     errors.append("shell installer command must report unavailable and perform no installation")
 
-if errors:
-    print("Storage safety audit FAILED:")
-    for error in errors:
-        print(f" - {error}")
-    sys.exit(1)
-
 if "services/hardware_probe.c" not in read("kernel/CMakeLists.txt"):
     errors.append("hardware readiness probe must be compiled into the kernel")
 if "phoxtra_hardware_probe_log();" not in read("kernel/src/init.cpp"):
@@ -56,4 +50,10 @@ if "PHOXTRA_HWPROBE_READY" not in read(".github/workflows/phoxtra-build.yml"):
 if 'kstrcmp(input, "hardware") == 0' not in read("kernel/src/shell.c"):
     errors.append("read-only hardware report must be accessible through the shell")
 
-print("Storage safety audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled.")
+if errors:
+    print("Storage and hardware readiness audit FAILED:")
+    for error in errors:
+        print(f" - {error}")
+    sys.exit(1)
+
+print("Storage and hardware readiness audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled; hardware probe is integrated.")
