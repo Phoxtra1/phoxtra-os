@@ -33,6 +33,10 @@ if "pci_get_device_count()" not in e1000 or "REG_TDBAL" not in e1000 or "REG_RDB
     errors.append("e1000 driver must discover PCI hardware and configure DMA rings")
 if "192, 168, 1, 150" in e1000 or "MAC: 52:54:00:12:34:56" in e1000:
     errors.append("e1000 must not report fabricated MAC or static network configuration")
+if "arp_receive_packet" not in arp or "ntohs(req->opcode)" not in arp:
+    errors.append("ARP receive path must validate and process hardware packet headers")
+if "void net_poll(void)" not in read("kernel/net/netdev.c") or "net_poll();" not in read("kernel/ui/wm.c"):
+    errors.append("hardware packet receive must be polled from the desktop event loop")
 if errors:
     print("Network integrity audit FAILED:")
     for error in errors: print(" - " + error)
