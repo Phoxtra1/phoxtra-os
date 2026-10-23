@@ -106,20 +106,14 @@ jobs:
                   i += 1
               assert magic == b'P6' and int(maxval) == 255
               return int(width), int(height), data[i:]
-          def region(path, x0, y0, x1, y1):
-              width, height, pixels = ppm_pixels(path)
-              assert x1 <= width and y1 <= height
-              return b''.join(
-                  pixels[(y * width + x0) * 3:(y * width + x1) * 3]
-                  for y in range(y0, y1)
-              )
-          # Cursor begins at screen center (512,384); after +40,+40 its 12x18
-          # sprite occupies this region. The return trip must restore it exactly.
-          before = region('/tmp/phoxtra-cursor-before.ppm', 548, 420, 572, 446)
-          moved = region('/tmp/phoxtra-cursor-moved.ppm', 548, 420, 572, 446)
-          after = region('/tmp/phoxtra-cursor-after.ppm', 548, 420, 572, 446)
-          assert moved != before, 'QEMU pointer movement was not visible in the destination region'
-          assert after == before, 'cursor movement left stale framebuffer pixels'
+          # Compare the full framebuffer rather than assuming QEMU's mouse
+          # backend maps relative movement to a particular pixel rectangle.
+          before = ppm_pixels('/tmp/phoxtra-cursor-before.ppm')
+          moved = ppm_pixels('/tmp/phoxtra-cursor-moved.ppm')
+          after = ppm_pixels('/tmp/phoxtra-cursor-after.ppm')
+          assert before[:2] == moved[:2] == after[:2], 'screenshot dimensions changed during cursor test'
+          assert moved[2] != before[2], 'QEMU pointer movement did not change the framebuffer'
+          assert after[2] == before[2], 'cursor return left stale framebuffer pixels'
           print('Cursor movement and trail-free return test passed')
           PY
           # Select the PS/2 mouse and move from its initial center to the first folder cell (~635,150).
