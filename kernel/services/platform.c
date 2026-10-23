@@ -8,7 +8,7 @@
 #include "../security/capability.h"
 #include "../log/logger.h"
 
-#define PLATFORM_APP_COUNT 11u
+#define PLATFORM_APP_COUNT 10u
 
 static uint8_t initialized;
 static uint32_t status_flags;
@@ -35,7 +35,6 @@ static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
     { "terminal", "Shell Console", "Phoxtra", "Kernel shell access; desktop terminal emulation is not yet implemented", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
     { "file-manager", "Files", "Phoxtra", "Browse the current RAM-backed filesystem", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
     { "system-status", "System Status", "Phoxtra", "View current OS, input and storage status", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
-    { "app-center", "Application Center", "Phoxtra", "Browse registered Phoxtra and Amineva application entry points", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
     { "settings", "Settings", "Phoxtra", "Unified device and desktop settings; implementation planned", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
     { "phoxtra-diagnostics", "Phoxtra Diagnostics", "Phoxtra", "System diagnostics application; full interactive panel planned", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
     { "amineva-workspace", "Amineva Workspace", "Amineva Global", "Workspace entry for supported productivity tools and shared services; integration pending", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
