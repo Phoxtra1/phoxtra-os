@@ -59,7 +59,20 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 **Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Do not treat this as persistent-storage validation.
 
-## 5. Reliability and evidence
+## 5. Application Center and publisher boundaries
+
+- [ ] Confirm Phoxtra native panels/system applications are identified as published by Phoxtra.
+- [ ] Confirm Amineva Global entries are limited to AgroClimate, Adesua, DataLens, Inventra, Sikasem, and Amineva Workspace.
+- [ ] Confirm Amineva Workspace is presented as one integrated productivity suite covering Docs, Sheets, Slides, and Drive (plus Forms).
+- [ ] Confirm Amnewsworld News and Amnewsworld Radio and Media are published by independent Amnewsworld, not Amineva Global.
+- [ ] Confirm the planned App Marketplace is separate from native apps and does not claim an install flow exists.
+- [ ] Inspect each detail page for distinct publisher, category, application type, launch destination, and state.
+- [ ] Confirm external products with no configured destination are marked planned and cannot falsely appear launched.
+- [ ] Use `W` to open Amineva Workspace, `B` to return to the catalogue, `[` and `]` to paginate, and `Q` to close the catalogue.
+
+**Integration limitation:** Catalogue metadata does not implement external launch hand-off, app installation, shared accounts, persistent storage, or offline support. These capabilities remain unverified until implemented and tested.
+
+## 6. Reliability and evidence
 
 - [ ] Leave the desktop running and interacting for at least 15 minutes.
 - [ ] Repeat a boot and the core input/desktop checks.
@@ -78,7 +91,7 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 | File manager and windows | Not started | | |
 | Stability / reboot | Not started | | |
 
-## 6. Acceptance gate
+## 7. Acceptance gate
 
 The laptop milestone is **not passed** until the boot, display, keyboard, pointer, desktop-interaction, and stability checks have been completed on the physical laptop; release-blocking defects have been fixed and retested; and the result is recorded above.
 
