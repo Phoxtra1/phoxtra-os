@@ -11,6 +11,7 @@ extern "C" {
 #define BLOCKDEV_FLAG_READONLY  0x01
 #define BLOCKDEV_FLAG_REMOVABLE 0x02
 #define BLOCKDEV_FLAG_PARTITION 0x04
+#define BLOCKDEV_FLAG_SIMULATED  0x08
 
 typedef struct block_device {
     char name[32];

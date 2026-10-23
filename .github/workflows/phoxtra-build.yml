@@ -17,6 +17,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+      - name: Audit storage write safety
+        run: python3 scripts/check_storage_safety.py
       - name: Configure
         run: cmake -B build -S .
       - name: Build kernel
@@ -57,6 +59,8 @@ jobs:
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
+          grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
+          grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
