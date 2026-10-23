@@ -61,6 +61,8 @@ jobs:
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
           grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
+          grep -q 'PHOXTRA_HWPROBE_READY' /tmp/phoxtra-serial.log
+          grep -q 'Hardware probe: no physical block-device driver is registered' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
