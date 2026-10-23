@@ -76,7 +76,7 @@ jobs:
           # Exercise the application catalogue and Amineva Workspace entry.
           { for key in a w b; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
-            grep -q 'Amineva Workspace entry opened' /tmp/phoxtra-serial.log && break
+            grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
             sleep 0.25
           done
           grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
