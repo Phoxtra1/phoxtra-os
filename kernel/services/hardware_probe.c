@@ -32,7 +32,7 @@ static void count_block_devices(phoxtra_hardware_report_t* report) {
         if (device->flags & BLOCKDEV_FLAG_SIMULATED) {
             ++report->simulated_block_devices;
         } else {
-            ++report->registered_physical_block_devices;
+            ++report->registered_non_simulated_block_devices;
         }
     }
 }
@@ -50,7 +50,7 @@ int phoxtra_hardware_probe_collect(phoxtra_hardware_report_t* report) {
     report->pci_usb_controllers = 0;
     report->block_devices = 0;
     report->simulated_block_devices = 0;
-    report->registered_physical_block_devices = 0;
+    report->registered_non_simulated_block_devices = 0;
     report->display_width = 0;
     report->display_height = 0;
     report->display_bits_per_pixel = 0;
@@ -92,8 +92,8 @@ void phoxtra_hardware_probe_log(void) {
     if (report.simulated_block_devices > 0) {
         klog(LOG_INFO, "Hardware probe: simulated RAM test storage is present");
     }
-    if (report.registered_physical_block_devices == 0) {
-        klog(LOG_WARNING, "Hardware probe: no physical block-device driver is registered");
+    if (report.registered_non_simulated_block_devices == 0) {
+        klog(LOG_WARNING, "Hardware probe: no non-simulated block-device driver is registered");
     } else {
         klog(LOG_INFO, "Hardware probe: non-simulated block devices are registered");
     }
