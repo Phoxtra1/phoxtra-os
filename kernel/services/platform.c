@@ -8,7 +8,7 @@
 #include "../security/capability.h"
 #include "../log/logger.h"
 
-#define PLATFORM_APP_COUNT 5u
+#define PLATFORM_APP_COUNT 10u
 
 static uint8_t initialized;
 static uint32_t status_flags;
@@ -32,11 +32,16 @@ static const platform_product_profile_t active_profile = {
 #endif
 
 static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
-    { "terminal", "Shell Console", "System", "Kernel shell command interface; desktop terminal emulator is not yet implemented", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
-    { "file-manager", "Files", "Productivity", "VFS file and folder browser", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
-    { "settings", "Settings", "System", "Future unified device and desktop settings", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
-    { "amineva-workspace", "Amineva Workspace", "Productivity", "Foundation entry for Docs, Sheets, Slides and collaboration tools", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
-    { "app-center", "App Center", "Software", "Future signed package discovery and installation", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED }
+    { "terminal", "Shell Console", "Phoxtra", "Kernel shell access; desktop terminal emulation is not yet implemented", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
+    { "file-manager", "Files", "Phoxtra", "Browse the current RAM-backed filesystem", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
+    { "system-status", "System Status", "Phoxtra", "View current OS, input and storage status", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
+    { "settings", "Settings", "Phoxtra", "Unified device and desktop settings; implementation planned", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "phoxtra-diagnostics", "Phoxtra Diagnostics", "Phoxtra", "System diagnostics application; full interactive panel planned", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "amineva-workspace", "Amineva Workspace", "Amineva Global", "Workspace entry for supported productivity tools and shared services; integration pending", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "amnewsworld", "Amnewsworld", "Amineva Global", "News portal integration entry; launch hand-off is not configured", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "agroclimate", "AgroClimate", "Amineva Global", "Agriculture and climate intelligence entry; integration pending", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "adesua", "Adesua", "Amineva Global", "Practical and formula intelligence learning platform; integration pending", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
+    { "datalens", "DataLens", "Amineva Global", "IT services and data-management entry; integration pending", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED }
 };
 
 static int text_equal(const char* a, const char* b) {

@@ -2,7 +2,7 @@ name: Phoxtra OS build
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -73,6 +73,14 @@ jobs:
             sleep 0.25
           done
           [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
+          # Exercise the application catalogue and Amineva Workspace entry.
+          { for key in a w b q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
+          grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
           # Move the cursor away and back. Compare only its destination area so
           # unrelated dynamic taskbar content cannot cause a false failure.
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 0\n'; sleep 0.2; printf 'screendump /tmp/phoxtra-cursor-before.ppm\n'; sleep 0.5; printf 'mouse_move 40 40\n'; sleep 0.5; printf 'screendump /tmp/phoxtra-cursor-moved.ppm\n'; sleep 0.2; printf 'mouse_move -40 -40\n'; sleep 0.5; printf 'screendump /tmp/phoxtra-cursor-after.ppm\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
