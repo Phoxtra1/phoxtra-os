@@ -2,8 +2,7 @@
 #include "pmm.h"
 #include "../log/logger.h"
 
-#define HEAP_INITIAL_PAGES 4096 // 16MB heap
-#define HEAP_ALIGNMENT 8
+#define HEAP_ALIGNMENT 16u
 
 typedef struct heap_block {
     size_t size;
@@ -13,70 +12,92 @@ typedef struct heap_block {
 
 static heap_block_t* heap_start = NULL;
 
-void heap_init(void) {
-    // Allocate contiguous pages for kernel heap pool
-    void* first_page = pmm_alloc_page();
-    for (int i = 1; i < HEAP_INITIAL_PAGES; i++) {
-        pmm_alloc_page(); // reserve block pool
-    }
-
-    if (!first_page) {
-        klog(LOG_ERROR, "Heap initialization failed: PMM page allocation failed");
-        return;
-    }
-
-    heap_start = (heap_block_t*)first_page;
-    heap_start->size = (HEAP_INITIAL_PAGES * PAGE_SIZE) - sizeof(heap_block_t);
-    heap_start->is_free = 1;
-    heap_start->next = NULL;
-
-    klog(LOG_KERNEL, "Kernel Heap started");
+static size_t align_size(size_t size) {
+    if (size > (size_t)-1 - (HEAP_ALIGNMENT - 1u)) return 0;
+    return (size + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u);
 }
 
-void* kmalloc(size_t size) {
-    if (size == 0) return NULL;
-
-    // Align size
-    size = (size + (HEAP_ALIGNMENT - 1)) & ~(HEAP_ALIGNMENT - 1);
-
-    heap_block_t* current = heap_start;
-    while (current) {
-        if (current->is_free && current->size >= size) {
-            // Split block if excess size is large enough
-            if (current->size >= size + sizeof(heap_block_t) + HEAP_ALIGNMENT) {
-                heap_block_t* new_block = (heap_block_t*)((uint8_t*)current + sizeof(heap_block_t) + size);
-                new_block->size = current->size - size - sizeof(heap_block_t);
-                new_block->is_free = 1;
-                new_block->next = current->next;
-
-                current->size = size;
-                current->next = new_block;
-            }
-
-            current->is_free = 0;
-            return (void*)((uint8_t*)current + sizeof(heap_block_t));
-        }
-        current = current->next;
+static heap_block_t* heap_add_page(void) {
+    void* page = pmm_alloc_page();
+    if (!page) return NULL;
+    heap_block_t* block = (heap_block_t*)page;
+    block->size = PAGE_SIZE - sizeof(*block);
+    block->is_free = 1;
+    block->next = NULL;
+    if (!heap_start) {
+        heap_start = block;
+    } else {
+        heap_block_t* tail = heap_start;
+        while (tail->next) tail = tail->next;
+        tail->next = block;
     }
+    return block;
+}
 
-    klog(LOG_WARNING, "kmalloc: Out of memory block!");
-    return NULL;
+void heap_init(void) {
+    heap_start = NULL;
+    if (!heap_add_page()) {
+        klog(LOG_ERROR, "Kernel heap initialization failed: no physical page available");
+        return;
+    }
+    klog(LOG_KERNEL, "Kernel heap initialized with an on-demand page pool");
+}
+
+void* kmalloc(size_t requested_size) {
+    size_t size = align_size(requested_size);
+    if (!size) return NULL;
+
+    for (;;) {
+        heap_block_t* current = heap_start;
+        while (current) {
+            if (current->is_free && current->size >= size) {
+                if (current->size >= size + sizeof(heap_block_t) + HEAP_ALIGNMENT) {
+                    heap_block_t* remainder = (heap_block_t*)((uint8_t*)current +
+                        sizeof(heap_block_t) + size);
+                    remainder->size = current->size - size - sizeof(heap_block_t);
+                    remainder->is_free = 1;
+                    remainder->next = current->next;
+                    current->size = size;
+                    current->next = remainder;
+                }
+                current->is_free = 0;
+                return (void*)((uint8_t*)current + sizeof(heap_block_t));
+            }
+            current = current->next;
+        }
+
+        /* Physical pages are not guaranteed contiguous: add a separate block. */
+        if (!heap_add_page()) {
+            klog(LOG_WARNING, "kmalloc: physical memory exhausted");
+            return NULL;
+        }
+    }
 }
 
 void kfree(void* ptr) {
     if (!ptr) return;
-
-    heap_block_t* block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));
-    block->is_free = 1;
-
-    // Coalesce free blocks
     heap_block_t* current = heap_start;
+    while (current) {
+        void* payload = (void*)((uint8_t*)current + sizeof(heap_block_t));
+        if (payload == ptr) {
+            if (current->is_free) return;
+            current->is_free = 1;
+            break;
+        }
+        current = current->next;
+    }
+    if (!current) return; /* Ignore pointers not owned by this heap. */
+
+    /* Coalesce only when two block headers really are physically adjacent. */
+    current = heap_start;
     while (current && current->next) {
-        if (current->is_free && current->next->is_free) {
-            current->size += sizeof(heap_block_t) + current->next->size;
-            current->next = current->next->next;
+        heap_block_t* next = current->next;
+        uint8_t* end = (uint8_t*)current + sizeof(heap_block_t) + current->size;
+        if (current->is_free && next->is_free && end == (uint8_t*)next) {
+            current->size += sizeof(heap_block_t) + next->size;
+            current->next = next->next;
         } else {
-            current = current->next;
+            current = next;
         }
     }
 }
