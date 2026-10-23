@@ -29,6 +29,7 @@ This checklist is a test record. Do not mark a test passed unless it was perform
    Compare the displayed hash with the value in `phoxtra.iso.sha256`. Stop if they differ.
 4. Use Rufus or a comparable USB imaging tool to write the ISO to a spare USB drive. Writing the image erases that USB drive; confirm the selected device carefully.
 5. Back up important laptop data and save work. Use the laptop's one-time boot menu to boot from the USB. Do not choose any option that formats or installs to the laptop's internal drive.
+6. At the Phoxtra shell prompt, type `gui` and press Enter to open the desktop.
 
 ## 3. Boot and hardware checks
 
