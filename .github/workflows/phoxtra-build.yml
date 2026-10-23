@@ -82,8 +82,23 @@ jobs:
       - name: Boot ISO and check desktop framebuffer
         shell: bash
         run: |
-          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
-          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
+          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-ahci-test.img
+          truncate -s 64M /tmp/phoxtra-ahci-test.img
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          image = Path('/tmp/phoxtra-ahci-test.img')
+          sector = bytearray(512)
+          # One valid read-only MBR partition wholly within this 64 MiB test image.
+          struct.pack_into('<B3sB3sII', sector, 446, 0, b'\x00\x02\x00', 0x83,
+                           b'\xFE\xFF\xFF', 2048, 120000)
+          sector[510:512] = b'\x55\xAA'
+          with image.open('r+b') as handle:
+              handle.write(sector)
+          PY
+          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
+            -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,readonly=on \
+            -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
@@ -108,7 +123,9 @@ jobs:
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
           grep -q 'PHOXTRA_HWPROBE_READY' /tmp/phoxtra-serial.log
           grep -q 'e1000 hardware driver initialized' /tmp/phoxtra-serial.log
-          grep -q 'Hardware probe: no non-simulated block-device driver is registered' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: confirmed read-only sector I/O on SATA device' /tmp/phoxtra-serial.log
+          grep -q 'Hardware probe: non-simulated block devices are registered' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
