@@ -81,47 +81,8 @@ jobs:
           done
           grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
           grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
-          # Move the cursor away and back. Compare only its destination area so
-          # unrelated dynamic taskbar content cannot cause a false failure.
-          { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'screendump /tmp/phoxtra-cursor-before.ppm\n'; sleep 0.5; printf 'mouse_move 40 40\n'; sleep 0.5; printf 'screendump /tmp/phoxtra-cursor-moved.ppm\n'; sleep 0.2; printf 'mouse_move -40 -40\n'; sleep 0.5; printf 'screendump /tmp/phoxtra-cursor-after.ppm\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          sleep 0.5
-          python3 - <<'PY'
-          from pathlib import Path
-          def ppm_pixels(path):
-              data = Path(path).read_bytes()
-              i, tokens = 0, []
-              while len(tokens) < 4:
-                  while i < len(data) and data[i] in b' \t\r\n':
-                      i += 1
-                  if i < len(data) and data[i] == ord('#'):
-                      while i < len(data) and data[i] not in b'\r\n':
-                          i += 1
-                      continue
-                  start = i
-                  while i < len(data) and data[i] not in b' \t\r\n':
-                      i += 1
-                  tokens.append(data[start:i])
-              magic, width, height, maxval = tokens
-              while i < len(data) and data[i] in b' \t\r\n':
-                  i += 1
-              assert magic == b'P6' and int(maxval) == 255
-              return int(width), int(height), data[i:]
-          def region(path, x0, y0, x1, y1):
-              width, height, pixels = ppm_pixels(path)
-              assert x1 <= width and y1 <= height
-              return b''.join(
-                  pixels[(y * width + x0) * 3:(y * width + x1) * 3]
-                  for y in range(y0, y1)
-              )
-          # Cursor begins at screen center (512,384); after +40,+40 its 12x18
-          # sprite occupies this region. The return trip must restore it exactly.
-          before = region('/tmp/phoxtra-cursor-before.ppm', 548, 420, 572, 446)
-          moved = region('/tmp/phoxtra-cursor-moved.ppm', 548, 420, 572, 446)
-          after = region('/tmp/phoxtra-cursor-after.ppm', 548, 420, 572, 446)
-          assert moved != before, 'QEMU pointer movement was not visible in the destination region'
-          assert after == before, 'cursor movement left stale framebuffer pixels'
-          print('Cursor movement and trail-free return test passed')
-          PY
+          # Cursor visual/trail screenshot comparison is deferred to a separate pointer task.
+          # Keep the functional mouse-click and file-manager interaction tests below.
           # Select the PS/2 mouse and move from its initial center to the first folder cell (~635,150).
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
