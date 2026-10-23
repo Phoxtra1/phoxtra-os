@@ -146,9 +146,13 @@ void vmm_switch_page_directory(uint64_t cr3_phys) {
 }
 
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
+    if (!pml4_phys) return -1;
     uint64_t* target_pml4 = (uint64_t*)pml4_phys;
-    if (!target_pml4) target_pml4 = pml4_root;
-    if (!target_pml4) target_pml4 = (uint64_t*)(read_cr3() & ~0xFFFULL);
+    uint64_t* kernel_pml4 = (uint64_t*)vmm_get_kernel_page_directory();
+    if (!target_pml4 || target_pml4 == kernel_pml4) {
+        klog(LOG_WARNING, "VMM: refusing user mapping in the kernel page directory");
+        return -1;
+    }
 
     uint64_t pml4_idx = (virt >> 39) & 0x1FF;
     uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
