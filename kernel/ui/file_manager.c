@@ -2,7 +2,6 @@
 #include "font.h"
 #include "theme.h"
 #include "../drivers/framebuffer.h"
-#include "../vfs/vfs.h"
 #include "../services/platform.h"
 #include "../log/logger.h"
 
@@ -16,7 +15,7 @@
 static window_t* fm_win = 0;
 static window_t* preview_win = 0;
 static char current_path[FM_PATH_CAP] = "/home/user";
-static vfs_node_t* current_directory = 0;
+static platform_fs_node_t* current_directory = 0;
 static uint32_t entry_count = 0;
 static uint32_t page_start = 0;
 static int32_t selected_entry = -1;
@@ -35,21 +34,20 @@ static int text_equal(const char* a, const char* b) {
     while (*a && *a == *b) { ++a; ++b; }
     return *a == *b;
 }
-static uint32_t count_entries(vfs_node_t* dir) {
+static uint32_t count_entries(platform_fs_node_t* dir) {
     return platform_storage_count(dir);
 }
-static vfs_node_t* entry_at(uint32_t index) {
-    if (!current_directory || !platform_storage_is_directory(current_directory)) return 0;
-    platform_fs_entry_t entry;
-    if (platform_storage_list(current_directory, index, &entry) != PLATFORM_OK) return 0;
-    return entry.handle;
+static int entry_at(uint32_t index, platform_fs_entry_t* entry) {
+    if (!entry || !current_directory || !platform_storage_is_directory(current_directory))
+        return 0;
+    return platform_storage_list(current_directory, index, entry) == PLATFORM_OK;
 }
 
 static void draw_preview(void) {
     if (!preview_win || !preview_win->active || preview_win->minimized) return;
     theme_palette_t* palette = theme_get_current();
     fb_fill_rect(preview_win->x + 10, preview_win->y + 38,
-                 preview_win->width - 20, preview_win->height - 48, preview_win->bg_color);
+                 preview_win->width - 20, preview_win->height - 48, palette->window_bg);
     font_draw_string(preview_name, preview_win->x + 16, preview_win->y + 42,
                      palette->accent_primary, 0);
     fb_fill_rect(preview_win->x + 14, preview_win->y + 62, preview_win->width - 28, 1, 0x00334155);
@@ -81,7 +79,7 @@ static void redraw_entries(void) {
     if (!fm_win) return;
     theme_palette_t* palette = theme_get_current();
     fb_fill_rect(fm_win->x + 8, fm_win->y + 36, fm_win->width - 16,
-                 fm_win->height - 44, fm_win->bg_color);
+                 fm_win->height - 44, palette->window_bg);
     current_directory = platform_storage_lookup(current_path);
     if (!current_directory || !platform_storage_is_directory(current_directory)) {
         font_draw_string("Directory unavailable", fm_win->x + 16, fm_win->y + 44,
@@ -103,12 +101,12 @@ static void redraw_entries(void) {
         uint32_t col = i % FM_COLUMNS, row = i / FM_COLUMNS;
         uint32_t x = fm_win->x + 22 + col * FM_CELL_WIDTH;
         uint32_t y = fm_win->y + 78 + row * FM_CELL_HEIGHT;
-        vfs_node_t* node = entry_at(index);
-        if (!node) continue;
+        platform_fs_entry_t entry;
+        if (!entry_at(index, &entry)) continue;
         if ((int32_t)index == selected_entry)
             fb_fill_rect(x - 6, y - 5, FM_CELL_WIDTH - 4, 70, 0x00405267);
-        if (node->flags == VFS_DIRECTORY) icon_draw_folder(x, y, node->name);
-        else icon_draw_file(x, y, node->name);
+        if (entry.type == PLATFORM_FS_ENTRY_DIRECTORY) icon_draw_folder(x, y, entry.name);
+        else icon_draw_file(x, y, entry.name);
     }
 
     if (!entry_count) font_draw_string("This directory is empty", fm_win->x + 16,
@@ -129,7 +127,7 @@ static void redraw_entries(void) {
 void file_manager_init(void) {
     preview_name[0] = '\0';
     preview_text[0] = '\0';
-    klog(LOG_INFO, "VFS-backed file manager initialized");
+    klog(LOG_INFO, "Platform-storage file manager initialized");
 }
 void file_manager_open_window(const char* initial_path) {
     if (initial_path && initial_path[0]) text_copy(current_path, initial_path, sizeof(current_path));
@@ -144,14 +142,14 @@ void file_manager_open_window(const char* initial_path) {
     if (!fm_win) return;
     fm_win->active = 1;
     redraw_entries();
-    klog(LOG_INFO, "Opened VFS-backed File Manager");
+    klog(LOG_INFO, "Opened platform-storage File Manager");
 }
 window_t* file_manager_get_window(void) { return fm_win; }
 
 void file_manager_navigate(const char* path) {
     klog(LOG_INFO, "File manager navigation requested");
     if (!path || !path[0]) return;
-    vfs_node_t* node = platform_storage_lookup(path);
+    platform_fs_node_t* node = platform_storage_lookup(path);
     if (!platform_storage_is_directory(node)) return;
     if (!text_copy(current_path, path, sizeof(current_path))) return;
     page_start = 0;
@@ -183,8 +181,8 @@ void file_manager_scroll(int32_t pages) {
     redraw_entries();
 }
 int file_manager_entry_is_directory(uint32_t index) {
-    vfs_node_t* node = entry_at(index);
-    return platform_storage_is_directory(node);
+    platform_fs_entry_t entry;
+    return entry_at(index, &entry) && entry.type == PLATFORM_FS_ENTRY_DIRECTORY;
 }
 
 int file_manager_hit_test(uint32_t x, uint32_t y) {
@@ -206,10 +204,10 @@ void file_manager_select_entry(uint32_t index) {
     redraw_entries();
 }
 int file_manager_open_entry(uint32_t index) {
-    vfs_node_t* node = entry_at(index);
-    if (!node) return 0;
+    platform_fs_entry_t entry;
+    if (!entry_at(index, &entry)) return 0;
     selected_entry = (int32_t)index;
-    if (platform_storage_is_directory(node)) {
+    if (entry.type == PLATFORM_FS_ENTRY_DIRECTORY) {
         char next[FM_PATH_CAP];
         uint32_t p = 0;
         if (text_equal(current_path, "/")) next[p++] = '/';
@@ -217,23 +215,23 @@ int file_manager_open_entry(uint32_t index) {
             while (current_path[p] && p < sizeof(next) - 2) { next[p] = current_path[p]; ++p; }
             if (p && next[p - 1] != '/') next[p++] = '/';
         }
-        for (uint32_t i = 0; node->name[i] && p < sizeof(next) - 1; ++i) next[p++] = node->name[i];
+        for (uint32_t i = 0; entry.name[i] && p < sizeof(next) - 1; ++i) next[p++] = entry.name[i];
         next[p] = '\0';
         file_manager_navigate(next);
         klog(LOG_INFO, "File manager opened directory entry");
         return 1;
     }
 
-    uint64_t got = platform_storage_read(node, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
+    uint64_t got = platform_storage_read(entry.handle, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
     preview_text[got < sizeof(preview_text) ? got : sizeof(preview_text) - 1] = '\0';
-    text_copy(preview_name, node->name, sizeof(preview_name));
+    text_copy(preview_name, entry.name, sizeof(preview_name));
     if (!preview_win) preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 280, 170, 450, 190, 0x00020617);
     if (preview_win) {
         preview_win->active = 1;
         preview_win->minimized = 0;
         compositor_raise_window(preview_win);
     }
-    klog(LOG_INFO, "Opened VFS file preview");
+    klog(LOG_INFO, "Opened platform-storage file preview");
     return 1;
 }
 void file_manager_create_folder(const char* name) {
