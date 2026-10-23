@@ -7,6 +7,8 @@
 static uint8_t last_tx[MAX_ETH_FRAME_LEN];
 static uint32_t last_tx_len;
 static unsigned tx_count;
+static uint64_t fake_ticks;
+uint64_t timer_get_ticks(void) { return fake_ticks; }
 
 void klog(log_level_t level, const char* message) {
     (void)level;
