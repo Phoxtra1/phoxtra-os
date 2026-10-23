@@ -12,9 +12,6 @@
  * flush semantics, and recovery implementation exist.
  */
 
-#define AHCI_PCI_CLASS       0x01u
-#define AHCI_PCI_SUBCLASS    0x06u
-#define AHCI_PCI_PROGIF      0x01u
 #define AHCI_BAR_WINDOW      0x1100u
 #define AHCI_PORTS           32u
 #define AHCI_POLL_LIMIT      1000000u
@@ -390,7 +387,7 @@ int ahci_read_sectors(block_device_t* dev, uint64_t lba, uint32_t count, uint8_t
             break;
         }
         const uint8_t* src = drive->dma->data;
-        for (uint32_t byte = 0; byte < RAM_TEST_SECTOR_SIZE; ++byte) out[i * RAM_TEST_SECTOR_SIZE + byte] = src[byte];
+        for (uint32_t byte = 0; byte < RAM_TEST_SECTOR_SIZE; ++byte) out[(uint64_t)i * RAM_TEST_SECTOR_SIZE + byte] = src[byte];
     }
     __sync_lock_release(&drive->busy);
     return result;
