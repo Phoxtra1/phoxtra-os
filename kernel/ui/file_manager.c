@@ -47,7 +47,7 @@ static void draw_preview(void) {
     if (!preview_win || !preview_win->active || preview_win->minimized) return;
     theme_palette_t* palette = theme_get_current();
     fb_fill_rect(preview_win->x + 10, preview_win->y + 38,
-                 preview_win->width - 20, preview_win->height - 48, preview_win->bg_color);
+                 preview_win->width - 20, preview_win->height - 48, palette->window_bg);
     font_draw_string(preview_name, preview_win->x + 16, preview_win->y + 42,
                      palette->accent_primary, 0);
     fb_fill_rect(preview_win->x + 14, preview_win->y + 62, preview_win->width - 28, 1, 0x00334155);
@@ -79,7 +79,7 @@ static void redraw_entries(void) {
     if (!fm_win) return;
     theme_palette_t* palette = theme_get_current();
     fb_fill_rect(fm_win->x + 8, fm_win->y + 36, fm_win->width - 16,
-                 fm_win->height - 44, fm_win->bg_color);
+                 fm_win->height - 44, palette->window_bg);
     current_directory = platform_storage_lookup(current_path);
     if (!current_directory || !platform_storage_is_directory(current_directory)) {
         font_draw_string("Directory unavailable", fm_win->x + 16, fm_win->y + 44,
