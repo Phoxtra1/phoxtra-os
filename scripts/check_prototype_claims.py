@@ -18,6 +18,27 @@ for label, (path, needles) in checks.items():
     for needle in needles:
         if needle in body:
             errors.append(f"{label} still contains unsupported-success marker: {needle}")
+# Shell diagnostics must not turn missing implementations into positive status reports.
+shell = read("kernel/src/shell.c")
+for marker in (
+    "COMMERCIAL PRODUCTION LAUNCH", "0% packet loss", "100% Genuine & Authentic",
+    "3D Vector Lock", "All Enterprise Components Unlocked", "RING 3 Userland Isolation",
+    "Immutable Kernel Security Event Audit Log", "Phoxtra Store App Index & Signatures",
+    "Hardware TPM 2.0, CAC/MAC Security, TCP/IP, VBE GUI, ELF64 Runtime, SDK"
+):
+    if marker in shell:
+        errors.append(f"shell still contains unsupported success claim: {marker}")
+for path, marker in (
+    ("kernel/services/entitlements.c", "return 1;"),
+    ("kernel/ai/dipa_core.c", "dipa_active = 1"),
+    ("kernel/services/phoxair.c", "active_targets = 4"),
+    ("kernel/sdk/sdk.c", "return 64;"),
+    ("kernel/security/process_identity.c", "authority_secret_key"),
+    ("kernel/memory/heap_audit.c", "0 orphaned pointers, 0 memory leaks detected"),
+    ("kernel/process/stress.c", "All tasks verified under timer preemption")
+):
+    if marker in read(path):
+        errors.append(f"{path} still contains unsupported-success marker: {marker}")
 guard = read("kernel/security/stack_guard.c")
 if "vmm_unmap_page(guard_page_addr)" in guard or "Guard Page mapped" in guard:
     errors.append("stack guard must not unmap an arbitrary stack page or claim a guard page exists")
