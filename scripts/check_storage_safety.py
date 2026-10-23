@@ -27,8 +27,10 @@ if "blockdev_register" not in blockdev or "duplicate pointer or name" not in blo
     errors.append("block-device registry must reject duplicate registrations")
 if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
     errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
-if "No storage writes are enabled" not in ramdisk or "return -1;" not in ramdisk:
-    errors.append("RAM test backend must not enable writes")
+for write_fn in ("ram_test_write_sectors", "ahci_write_sectors"):
+    write_match = re.search(r"\\bint\\s+" + write_fn + r"\\s*\\([^)]*\\)\\s*\\{([^}]*)\\}", ramdisk, re.S)
+    if not write_match or not re.search(r"\\breturn\\s+-1\\s*;", write_match.group(1)):
+        errors.append(f"{write_fn} must fail closed; storage writes are not implemented")
 for label, source in (("Ext2", ext2), ("FAT32", fat32)):
     if "file->size - offset" not in source:
         errors.append(f"{label} demo reads must avoid offset-plus-size overflow")
