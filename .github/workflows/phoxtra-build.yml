@@ -66,6 +66,13 @@ jobs:
             sleep 0.25
           done
           grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
+          # Exercise all three built-in themes and return to the flagship theme.
+          { for key in 1 2 3 1; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ] && break
+            sleep 0.25
+          done
+          [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
           # Select the PS/2 mouse and move from its initial center to the first folder cell (~635,150).
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 0\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
