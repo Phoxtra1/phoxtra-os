@@ -74,7 +74,7 @@ jobs:
           done
           [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
           # Exercise the application catalogue and Amineva Workspace entry.
-          { for key in a w b; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { for key in a w b q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
             grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
             sleep 0.25
