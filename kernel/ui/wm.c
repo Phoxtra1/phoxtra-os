@@ -143,7 +143,6 @@ static void wm_draw_application_center(void) {
         platform_display_fill_rect(app_win->x + 18u, row_y, app_win->width - 36u, 34u, row_color);
         font_draw_string(app->name, app_win->x + 28u, row_y + 5u, palette->text_color, 0);
         font_draw_string(app->publisher, app_win->x + 250u, row_y + 5u, palette->text_color, 0);
-        font_draw_string(app->category, app_win->x + 445u, row_y + 5u, palette->text_color, 0);
         font_draw_string(app->state == PLATFORM_APP_AVAILABLE ? "READY" : "PLANNED",
                          app_win->x + 670u, row_y + 5u,
                          app->state == PLATFORM_APP_AVAILABLE ? 0x0034D399 : 0x00F59E0B, 0);
