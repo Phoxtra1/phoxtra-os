@@ -148,6 +148,13 @@ void pmm_init(uint64_t mem_size) {
 
     /* Never allocate low memory, boot structures, page tables, or the kernel. */
     reserve_range(0, RESERVED_LOW_BYTES);
+    /* framebuffer_init reads the Multiboot2 tags later, so keep the full info
+       block reserved until all boot-time consumers have finished with it. */
+    if (boot_magic == MB2_BOOT_MAGIC && boot_info_phys) {
+        const mb2_info_header_t* info = (const mb2_info_header_t*)(uintptr_t)boot_info_phys;
+        if (info->total_size >= sizeof(*info) && info->total_size <= 16u * 1024u * 1024u)
+            reserve_range(boot_info_phys, (uint64_t)boot_info_phys + info->total_size);
+    }
     uint64_t kernel_start = (uint64_t)&__kernel_start;
     uint64_t kernel_end = (uint64_t)&__kernel_end;
     if (kernel_end > kernel_start) reserve_range(kernel_start, kernel_end);
