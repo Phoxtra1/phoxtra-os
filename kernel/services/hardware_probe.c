@@ -98,7 +98,7 @@ void phoxtra_hardware_probe_log(void) {
         klog(LOG_INFO, "Hardware probe: non-simulated block devices are registered");
     }
     if (!report.persistent_vfs_available) {
-        klog(LOG_WARNING, "Hardware probe: persistent filesystem service is not connected");
+        klog(LOG_WARNING, "Hardware probe: writable persistent filesystem service is not connected");
     }
     if (report.pci_storage_controllers > 0) {
         klog(LOG_INFO, "Hardware probe: PCI storage-class controller detected; driver support is not implied");

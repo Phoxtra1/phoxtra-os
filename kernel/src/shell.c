@@ -169,7 +169,7 @@ static void cmd_hardware(void) {
     console_write("Simulated RAM disks: "); print_dec(report.simulated_block_devices); console_write("\n");
     console_write("Non-simulated block-device drivers registered: ");
     print_dec(report.registered_non_simulated_block_devices); console_write("\n");
-    console_write("Persistent filesystem: ");
+    console_write("Writable persistent filesystem: ");
     console_write(report.persistent_vfs_available ? "available\n" : "not connected\n");
     console_write("Safety: this report is read-only; PCI detection does not mean a driver is implemented.\n\n");
     klog(LOG_INFO, "PHOXTRA_HARDWARE_REPORT_OK");
@@ -190,7 +190,7 @@ static void cmd_help(void) {
     console_write("  cpu        - CPU, timer and scheduler readiness status\n");
     console_write("  usermode   - Show user-mode runtime implementation status\n");
     console_write("  disks      - List storage block devices & partition table\n");
-    console_write("  storage    - Milestone 0.7.0 Storage Driver & Filesystem Audit\n");
+    console_write("  storage    - Read-only AHCI/SATA, partitions and ext2 status\n");
     console_write("  tpm        - Show TPM hardware-driver status\n");
     console_write("  identity   - Show process SHA-256 fingerprints (not attestation)\n");
     console_write("  audit      - Show volatile in-memory audit events\n");
@@ -232,7 +232,7 @@ static void cmd_about(void) {
     console_write("\nAKWAABA - PHOXTRA OS\n");
     console_write("Stage   : Experimental bootable x86_64 prototype\n");
     console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
-    console_write("Storage : Volatile RAM test environment; persistent disk support unavailable\n");
+    console_write("Storage : Experimental read-only AHCI/SATA and limited ext2 reads; writes disabled\n");
     console_write("Network : e1000 hardware path under development; full TCP/IP/TLS unavailable\n");
     console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
     console_write("Mobile  : ARM64 phone build not implemented\n");
@@ -240,7 +240,7 @@ static void cmd_about(void) {
 }
 
 static void cmd_disks(void) {
-    console_write("\nBlock Devices (physical hardware is not connected to this storage layer):\n");
+    console_write("\nDetected Block Devices (read-only inventory):\n");
     console_write("NAME       SECTORS      SIZE (MB)   TYPE / ACCESS\n");
     console_write("---------  -----------  ----------  -------------------------\n");
 
@@ -256,6 +256,7 @@ static void cmd_disks(void) {
         console_write("           ");
         if (dev->flags & BLOCKDEV_FLAG_PARTITION) console_write("Partition");
         else if (dev->flags & BLOCKDEV_FLAG_SIMULATED) console_write("Volatile RAM test disk");
+        else if (dev->flags & BLOCKDEV_FLAG_READONLY) console_write("Physical block device");
         else console_write("Unclassified device");
         if (dev->flags & BLOCKDEV_FLAG_READONLY) console_write(" [READ-ONLY]");
         console_write("\n");
@@ -265,12 +266,14 @@ static void cmd_disks(void) {
 
 static void cmd_storage(void) {
     console_write("\n=== Phoxtra Storage Safety Status ===\n");
-    console_write("[1/4] Physical SATA/NVMe controller driver ........ NOT IMPLEMENTED\n");
-    console_write("[2/4] Current block device ....................... Volatile RAM test disk\n");
-    console_write("[3/4] Partition-table scan ........................ READ-ONLY\n");
-    console_write("[4/4] Ext2/FAT32 support .......................... Demo adapters only\n");
-    console_write("\nSafety: internal-disk installation and partition formatting are unavailable.\n");
-    console_write("No persistent physical storage is mounted by this build.\n\n");
+    console_write("[1/5] Physical disk driver ....................... Experimental AHCI/SATA READ-ONLY\n");
+    console_write("[2/5] Supported disk geometry .................... ATA LBA48, 512-byte logical sectors\n");
+    console_write("[3/5] MBR partition discovery .................... READ-ONLY; bounds/overlap checked\n");
+    console_write("[4/5] On-disk ext2 filesystem .................... Limited READ-ONLY subset\n");
+    console_write("[5/5] NVMe and on-disk FAT32 ..................... NOT IMPLEMENTED\n");
+    console_write("\nNo disk writes, formatting, installer, or write-based recovery are enabled.\n");
+    console_write("Ext2 journals, indexed directories, and unsupported feature combinations are rejected.\n");
+    console_write("The desktop demo RAM filesystem is volatile; its files are lost at reboot.\n\n");
 }
 
 static void cmd_tpm(void) {
@@ -511,7 +514,8 @@ static void cmd_release(void) {
     console_write("Version : "); console_write(production_get_version()); console_write("\n");
     console_write("Support : "); console_write(production_get_lts_status()); console_write("\n");
     console_write("Physical laptop validation : PENDING\n");
-    console_write("Persistent storage/installer : NOT IMPLEMENTED\n");
+    console_write("Physical storage reads : EXPERIMENTAL, AHCI/SATA READ-ONLY\n");
+    console_write("Writable persistent storage/installer : NOT IMPLEMENTED\n");
     console_write("Mobile phone build : NOT IMPLEMENTED\n");
     console_write("Production certification : NOT PERFORMED\n\n");
 }
