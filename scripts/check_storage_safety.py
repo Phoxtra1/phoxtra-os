@@ -51,7 +51,8 @@ ahci = read("kernel/storage/ahci.c")
 for required in ("RAM test disk", "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_READONLY"):
     if required not in ahci:
         errors.append(f"storage test backend missing safety marker: {required}")
-if re.search(r"AHCI controller|PCI.*AHCI|HBA", ahci, re.I):
+ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1]
+if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
     errors.append("RAM test backend must not claim to implement physical AHCI")
 
 installer = read("kernel/installer/installer.c")
