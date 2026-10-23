@@ -933,6 +933,7 @@ void shell_start(void) {
     int input_len = 0;
 
     while (1) {
+        net_poll();
         char c = keyboard_get_char();
         if (c == '\n') {
             input[input_len] = '\0';
