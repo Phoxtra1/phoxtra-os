@@ -11,6 +11,7 @@ typedef struct heap_block {
 } heap_block_t;
 
 static heap_block_t* heap_start = NULL;
+#define HEAP_HEADER_SIZE ((sizeof(heap_block_t) + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u))
 
 static size_t align_size(size_t size) {
     if (size > (size_t)-1 - (HEAP_ALIGNMENT - 1u)) return 0;
@@ -21,7 +22,7 @@ static heap_block_t* heap_add_page(void) {
     void* page = pmm_alloc_page();
     if (!page) return NULL;
     heap_block_t* block = (heap_block_t*)page;
-    block->size = PAGE_SIZE - sizeof(*block);
+    block->size = PAGE_SIZE - HEAP_HEADER_SIZE;
     block->is_free = 1;
     block->next = NULL;
     if (!heap_start) {
@@ -51,17 +52,17 @@ void* kmalloc(size_t requested_size) {
         heap_block_t* current = heap_start;
         while (current) {
             if (current->is_free && current->size >= size) {
-                if (current->size >= size + sizeof(heap_block_t) + HEAP_ALIGNMENT) {
+                if (current->size >= size + HEAP_HEADER_SIZE + HEAP_ALIGNMENT) {
                     heap_block_t* remainder = (heap_block_t*)((uint8_t*)current +
-                        sizeof(heap_block_t) + size);
-                    remainder->size = current->size - size - sizeof(heap_block_t);
+                        HEAP_HEADER_SIZE + size);
+                    remainder->size = current->size - size - HEAP_HEADER_SIZE;
                     remainder->is_free = 1;
                     remainder->next = current->next;
                     current->size = size;
                     current->next = remainder;
                 }
                 current->is_free = 0;
-                return (void*)((uint8_t*)current + sizeof(heap_block_t));
+                return (void*)((uint8_t*)current + HEAP_HEADER_SIZE);
             }
             current = current->next;
         }
@@ -78,7 +79,7 @@ void kfree(void* ptr) {
     if (!ptr) return;
     heap_block_t* current = heap_start;
     while (current) {
-        void* payload = (void*)((uint8_t*)current + sizeof(heap_block_t));
+        void* payload = (void*)((uint8_t*)current + HEAP_HEADER_SIZE);
         if (payload == ptr) {
             if (current->is_free) return;
             current->is_free = 1;
@@ -92,9 +93,9 @@ void kfree(void* ptr) {
     current = heap_start;
     while (current && current->next) {
         heap_block_t* next = current->next;
-        uint8_t* end = (uint8_t*)current + sizeof(heap_block_t) + current->size;
+        uint8_t* end = (uint8_t*)current + HEAP_HEADER_SIZE + current->size;
         if (current->is_free && next->is_free && end == (uint8_t*)next) {
-            current->size += sizeof(heap_block_t) + next->size;
+            current->size += HEAP_HEADER_SIZE + next->size;
             current->next = next->next;
         } else {
             current = next;
