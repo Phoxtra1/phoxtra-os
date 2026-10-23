@@ -39,10 +39,21 @@ install_fn = re.search(r"static void cmd_installer\(void\)\s*\{(.*?)\n\}", shell
 if not install_fn or "not available" not in install_fn.group(1) or "installer_start" in install_fn.group(1):
     errors.append("shell installer command must report unavailable and perform no installation")
 
+if "services/hardware_probe.c" not in read("kernel/CMakeLists.txt"):
+    errors.append("hardware readiness probe must be compiled into the kernel")
+if "phoxtra_hardware_probe_log();" not in read("kernel/src/init.cpp"):
+    errors.append("hardware readiness probe must run after device initialization")
+if "PHOXTRA_HWPROBE_READY" not in read("kernel/services/hardware_probe.c"):
+    errors.append("hardware readiness probe must expose its CI marker")
+if "PHOXTRA_HWPROBE_READY" not in read(".github/workflows/phoxtra-build.yml"):
+    errors.append("QEMU CI must verify the hardware readiness probe")
+if 'kstrcmp(input, "hardware") == 0' not in read("kernel/src/shell.c"):
+    errors.append("read-only hardware report must be accessible through the shell")
+
 if errors:
-    print("Storage safety audit FAILED:")
+    print("Storage and hardware readiness audit FAILED:")
     for error in errors:
         print(f" - {error}")
     sys.exit(1)
 
-print("Storage safety audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled.")
+print("Storage and hardware readiness audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled; hardware probe is integrated.")

@@ -85,6 +85,7 @@ set(KERNEL_SOURCES
     ai/dipa_core.c
     services/phoxair.c
     services/platform.c
+    services/hardware_probe.c
     security/verify.c
     services/entitlements.c
     ai/dipa_nl.c
