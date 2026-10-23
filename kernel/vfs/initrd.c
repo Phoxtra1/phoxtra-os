@@ -11,7 +11,7 @@ static const char welcome_txt[] =
     "User-mode process execution: NOT IMPLEMENTED\n";
 static const char system_cfg[] =
     "# Phoxtra OS Configuration\n"
-    "kernel.version=0.2.0-alpha-prototype\n"
+    "kernel.version=experimental-x86_64-prototype\n"
     "security.isolation=not-validated\n"
     "syscall.fast_msr=entry-configured-user-runtime-unavailable\n"
     "vfs.devfs=enabled\n";
