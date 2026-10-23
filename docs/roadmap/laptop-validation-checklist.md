@@ -81,7 +81,7 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 **Integration limitation:** The Application Center currently provides native panel entry points and a catalogue of planned integrations. It does not yet launch the external Amineva applications or provide the full Amineva Workspace runtime. Record those as **Not implemented / Blocked**, not as a laptop hardware defect.
 
-**Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Check and record whether storage controllers/devices are detected, but do not write to or format the laptop's internal drive. This checklist does not treat RAM-backed files as persistent-storage validation.
+**Storage safety warning:** This build registers a 32 MiB volatile RAM test disk. It is not a physical SATA/AHCI/NVMe driver. The Ext2/FAT32 modules are demo adapters, not real on-disk filesystem implementations. Partition discovery is read-only; the installer and partition-formatting path are disabled. Files are temporary and lost on reboot. Do not run an installer, format a partition, or write to the laptop's internal drive. Record firmware/device information only; do not treat the simulated disk as evidence of physical storage support.
 
 ## 6. Reliability and evidence
 
@@ -107,4 +107,9 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 The laptop milestone is **not passed** until the boot, display, keyboard, pointer, desktop-interaction, and stability checks have been completed on the physical laptop; release-blocking defects have been fixed and retested; and the result is recorded above.
 
-Only after this gate passes may work proceed to the first dedicated Phoxtra hardware integration. A successful CMake build, ISO generation, or QEMU test is necessary evidence, but it does not replace physical-laptop validation.
+Only after this gate passes may work proceed to the first dedicated Phoxtra hardware integration. The Phase 8 preparation plan is documented in [phase8-hardware-integration-plan.md](phase8-hardware-integration-plan.md); it is gated and does not count as hardware validation. A successful CMake build, ISO generation, or QEMU test is necessary evidence, but it does not replace physical-laptop validation.
+
+
+## Storage safety automation
+
+CI runs `scripts/check_storage_safety.py` to guard against reintroducing automatic partition writes or a pretend installer. A passing static audit is a regression guard, not proof of physical storage driver support. See the [Phase 8 hardware integration plan](phase8-hardware-integration-plan.md).
