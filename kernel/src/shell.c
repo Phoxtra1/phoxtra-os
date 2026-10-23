@@ -167,8 +167,8 @@ static void cmd_hardware(void) {
     console_write("Pointer      : "); console_write(report.pointer_available ? "detected\n" : "not detected\n");
     console_write("Block devices: "); print_dec(report.block_devices); console_write("\n");
     console_write("Simulated RAM disks: "); print_dec(report.simulated_block_devices); console_write("\n");
-    console_write("Physical block-device drivers registered: ");
-    print_dec(report.registered_physical_block_devices); console_write("\n");
+    console_write("Non-simulated block-device drivers registered: ");
+    print_dec(report.registered_non_simulated_block_devices); console_write("\n");
     console_write("Persistent filesystem: ");
     console_write(report.persistent_vfs_available ? "available\n" : "not connected\n");
     console_write("Safety: this report is read-only; PCI detection does not mean a driver is implemented.\n\n");
