@@ -78,11 +78,11 @@ void compositor_render_frame(void) {
         fb_fill_rect(win->x + 8, win->y + 8, win->width, win->height, 0x55000000);
 
         // Window Body
-        fb_fill_rect(win->x, win->y, win->width, win->height, win->bg_color);
+        fb_fill_rect(win->x, win->y, win->width, win->height, palette->window_bg);
         fb_draw_rect(win->x, win->y, win->width, win->height, 0x00334155);
 
         // Window Title Bar
-        fb_fill_rect(win->x, win->y, win->width, 32, 0x001E293B);
+        fb_fill_rect(win->x, win->y, win->width, 32, palette->titlebar_bg);
         fb_draw_rect(win->x, win->y, win->width, 32, 0x00475569);
 
         // Action Buttons (Close / Minimize / Maximize)
@@ -95,14 +95,15 @@ void compositor_render_frame(void) {
     }
 
     // 3. Render Modern Desktop Taskbar / Dock
-    fb_fill_rect(0, FB_HEIGHT - 48, FB_WIDTH, 48, 0xCC0F172A);
+    fb_fill_rect(0, FB_HEIGHT - 48, FB_WIDTH, 48, palette->taskbar_bg);
     fb_draw_rect(0, FB_HEIGHT - 48, FB_WIDTH, 48, 0x00334155);
 
     // Taskbar Launcher Buttons & System Clock
-    fb_fill_rect(12, FB_HEIGHT - 40, 130, 32, 0x000F172A);
-    fb_draw_rect(12, FB_HEIGHT - 40, 130, 32, 0x0006B6D4);
-    phoxtra_logo_draw(16, FB_HEIGHT - 40, 32);
-    font_draw_string("PHOXTRA", 54, FB_HEIGHT - 30, 0x0038BDF8, 0x00000000);
+    fb_fill_rect(12, FB_HEIGHT - 40, 130, 32, palette->titlebar_bg);
+    fb_draw_rect(12, FB_HEIGHT - 40, 130, 32, palette->accent_secondary);
+    /* Compact, high-contrast branding aligned to the taskbar baseline. */
+    phoxtra_logo_draw(14, FB_HEIGHT - 37, 20);
+    font_draw_string_bold("PHOXTRA", 39, FB_HEIGHT - 30, palette->accent_primary, 0x00000000);
 
     font_draw_string("TERMINAL", 150, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("SECURITY", 240, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
