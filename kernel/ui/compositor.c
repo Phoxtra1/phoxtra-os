@@ -101,8 +101,9 @@ void compositor_render_frame(void) {
     // Taskbar Launcher Buttons & System Clock
     fb_fill_rect(12, FB_HEIGHT - 40, 130, 32, 0x000F172A);
     fb_draw_rect(12, FB_HEIGHT - 40, 130, 32, 0x0006B6D4);
-    phoxtra_logo_draw(16, FB_HEIGHT - 40, 32);
-    font_draw_string("PHOXTRA", 54, FB_HEIGHT - 30, 0x0038BDF8, 0x00000000);
+    /* Compact, high-contrast branding aligned to the taskbar baseline. */
+    phoxtra_logo_draw(14, FB_HEIGHT - 37, 20);
+    font_draw_string_bold("PHOXTRA", 39, FB_HEIGHT - 30, 0x00F8FAFC, 0x00000000);
 
     font_draw_string("TERMINAL", 150, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("SECURITY", 240, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
