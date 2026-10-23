@@ -70,6 +70,7 @@ typedef struct ahci_physical_drive {
     uint8_t active;
     uint8_t busy;
     uint8_t port_index;
+    uint8_t read_confirmed;
 } ahci_physical_drive_t;
 
 static ahci_physical_drive_t physical_drives[AHCI_PORTS];
@@ -226,6 +227,7 @@ static int prepare_physical_port(volatile hba_port_t* port, uint32_t index) {
     port->clbu = 0;
     port->fb = fb_phys;
     port->fbu = 0;
+    port->ie = 0;
     port->is = 0xFFFFFFFFu;
     port->serr = 0xFFFFFFFFu;
 
@@ -315,7 +317,7 @@ static int probe_ahci_controller(void) {
     pci_config_write32(controller->bus, controller->slot, controller->func, 0x04, command);
 
     volatile hba_mem_t* hba = (volatile hba_mem_t*)(uintptr_t)mmio_base;
-    hba->ghc |= AHCI_GHC_AE;
+    hba->ghc = (hba->ghc | AHCI_GHC_AE) & ~(1u << 1); /* Poll completions; keep HBA interrupts disabled. */
 
     /* Honor the optional BIOS/OS ownership handshake when the HBA advertises it. */
     if (hba->cap2 & 1u) {
@@ -388,6 +390,10 @@ int ahci_read_sectors(block_device_t* dev, uint64_t lba, uint32_t count, uint8_t
         }
         const uint8_t* src = drive->dma->data;
         for (uint32_t byte = 0; byte < RAM_TEST_SECTOR_SIZE; ++byte) out[(uint64_t)i * RAM_TEST_SECTOR_SIZE + byte] = src[byte];
+    }
+    if (result == 0 && !drive->read_confirmed) {
+        drive->read_confirmed = 1;
+        klog(LOG_INFO, "AHCI: confirmed read-only sector I/O on SATA device");
     }
     __sync_lock_release(&drive->busy);
     return result;
