@@ -57,9 +57,22 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 - [ ] Taskbar/dock actions restore the expected window.
 - [ ] No overlapping, clipped, or stale UI remains after interactions.
 
-**Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Do not treat this as persistent-storage validation.
+## 5. Application environment and integrated workspace
 
-## 5. Reliability and evidence
+- [ ] Press `A` to open the Application Center and verify it renders without covering or corrupting the desktop permanently.
+- [ ] Confirm native entries for Shell Console, Files, and System Status open the expected existing panels.
+- [ ] Inspect Phoxtra application entries and verify each row shows an accurate availability state.
+- [ ] Open the Amineva Workspace entry with `W`; verify the Docs, Sheets, Slides, Forms, Drive, and collaboration scope is described correctly.
+- [ ] Use `B` to return to the catalogue and `Q` to close it; verify the previous desktop window and input still work.
+- [ ] Confirm Amnewsworld, AgroClimate, Adesua, and DataLens are clearly marked as integrations pending until actual launch hand-off is implemented.
+- [ ] Do not mark external Amineva apps as launched merely because their catalogue entries are visible.
+- [ ] Do not claim account sign-in, shared files, online service hand-off, or offline support unless each capability is connected and separately tested.
+
+**Integration limitation:** The Application Center currently provides native panel entry points and a catalogue of planned integrations. It does not yet launch the external Amineva applications or provide the full Amineva Workspace runtime. Record those as **Not implemented / Blocked**, not as a laptop hardware defect.
+
+**Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Check and record whether storage controllers/devices are detected, but do not write to or format the laptop's internal drive. This checklist does not treat RAM-backed files as persistent-storage validation.
+
+## 6. Reliability and evidence
 
 - [ ] Leave the desktop running and interacting for at least 15 minutes.
 - [ ] Repeat a boot and the core input/desktop checks.
@@ -78,7 +91,7 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 | File manager and windows | Not started | | |
 | Stability / reboot | Not started | | |
 
-## 6. Acceptance gate
+## 7. Acceptance gate
 
 The laptop milestone is **not passed** until the boot, display, keyboard, pointer, desktop-interaction, and stability checks have been completed on the physical laptop; release-blocking defects have been fixed and retested; and the result is recorded above.
 
