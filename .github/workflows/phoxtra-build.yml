@@ -6,6 +6,19 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      create_draft_release:
+        description: "Create an UNPUBLISHED draft GitHub Release after every CI check passes"
+        required: true
+        type: boolean
+        default: false
+      release_tag:
+        description: "Unique version tag for the draft (example: v0.2.0-alpha.1); required only when draft release is enabled"
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   build-kernel-and-iso:
@@ -13,6 +26,19 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Validate optional draft-release request
+        if: github.event_name == 'workflow_dispatch' && inputs.create_draft_release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::A unique release_tag is required when draft release creation is enabled."
+            exit 1
+          fi
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$'; then
+            echo "::error::Use a version tag such as v0.2.0-alpha.1."
+            exit 1
+          fi
       - name: Install kernel and ISO build dependencies
         run: |
           sudo apt-get update
@@ -52,7 +78,6 @@ jobs:
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
           grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
-          # Wait until shell_start has completed framebuffer console rendering.
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
             sleep 0.5
@@ -72,14 +97,12 @@ jobs:
             sleep 0.25
           done
           grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
-          # Exercise all three built-in themes and return to the flagship theme.
           { for key in 1 2 3 1; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
             [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ] && break
             sleep 0.25
           done
           [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
-          # Exercise the application catalogue and Amineva Workspace entry.
           { for key in a w b q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
             grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
@@ -87,9 +110,7 @@ jobs:
           done
           grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
           grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
-          # Cursor visual/trail screenshot comparison is deferred to a separate pointer task.
-          # Keep the functional mouse-click and file-manager interaction tests below.
-          # Select the PS/2 mouse and move from its initial center to the first folder cell (~635,150).
+          # Cursor visual/trail comparison remains deferred; retain functional input checks.
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
           cat /tmp/phoxtra-serial.log
@@ -101,7 +122,6 @@ jobs:
           done
           grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           grep -q 'File manager navigated to directory' /tmp/phoxtra-serial.log
-          # Also verify keyboard-driven folder and file creation.
           { for key in f n c; do printf 'sendkey %s\n' "$key"; sleep 0.35; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
@@ -109,7 +129,6 @@ jobs:
           grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
-          # Leave the desktop event loop so the test can confirm a clean return to the shell.
           printf 'sendkey esc\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log && break
@@ -120,7 +139,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data = Path('/tmp/phoxtra-screen.ppm').read_bytes()
-          # Parse the PPM header, allowing whitespace/comments before pixel data.
           i = 0
           tokens = []
           while len(tokens) < 4:
@@ -144,7 +162,6 @@ jobs:
           colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
           print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
           assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
-          # Phoxtra brand mark is rendered in the left dock launcher at x=16,y=728.
           logo_colors = set()
           w, h = int(width), int(height)
           for y in range(728, min(760, h)):
@@ -179,3 +196,20 @@ jobs:
             build/phoxtra.iso.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create unpublished draft release (manual opt-in only)
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.create_draft_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: Phoxtra OS ${{ inputs.release_tag }} (Draft)
+          draft: true
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            This is an unpublished draft for internal review. It is not approved for public distribution.
+
+            Phoxtra OS is an experimental x86_64 operating-system prototype. See the repository README and release gates for current limitations. The ISO does not provide persistent physical-disk support or an installer; do not install it to an internal disk. Physical-laptop validation is still required. This is not a mobile-phone build.
+          files: |
+            build/phoxtra.iso
+            build/phoxtra.iso.sha256
