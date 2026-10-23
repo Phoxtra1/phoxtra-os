@@ -37,7 +37,7 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
     ip->protocol = protocol;
     ip->checksum = 0;
     ip->src_ip = dev->ip_addr;
-    ip->dest_ip = htonl(dest_ip);
+    ip->dest_ip = dest_ip;
     ip->checksum = net_checksum(ip, sizeof(ipv4_header_t));
     for (uint32_t i = 0; i < payload_len; ++i)
         packet[sizeof(ipv4_header_t) + i] = payload[i];
