@@ -21,7 +21,7 @@ This checklist is a test record. Do not mark a test passed unless it was perform
 ## 2. Prepare a bootable test USB
 
 1. Open the successful Phoxtra OS build run in GitHub Actions and download the artifact named `phoxtra-os-iso-<commit>`.
-2. Extract `build/phoxtra.iso` and its `build/phoxtra.iso.sha256` file from the artifact.
+2. Extract `phoxtra.iso` and `phoxtra.iso.sha256` from the artifact.
 3. On Windows, verify the checksum in PowerShell with:
    ```powershell
    Get-FileHash .\phoxtra.iso -Algorithm SHA256
