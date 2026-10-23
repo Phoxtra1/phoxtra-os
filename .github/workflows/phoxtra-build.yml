@@ -83,18 +83,18 @@ jobs:
               data = Path(path).read_bytes()
               i, tokens = 0, []
               while len(tokens) < 4:
-                  while i < len(data) and data[i] in b' \\t\\r\\n':
+                  while i < len(data) and data[i] in b' \t\r\n':
                       i += 1
                   if i < len(data) and data[i] == ord('#'):
-                      while i < len(data) and data[i] not in b'\\r\\n':
+                      while i < len(data) and data[i] not in b'\r\n':
                           i += 1
                       continue
                   start = i
-                  while i < len(data) and data[i] not in b' \\t\\r\\n':
+                  while i < len(data) and data[i] not in b' \t\r\n':
                       i += 1
                   tokens.append(data[start:i])
               magic, width, height, maxval = tokens
-              while i < len(data) and data[i] in b' \\t\\r\\n':
+              while i < len(data) and data[i] in b' \t\r\n':
                   i += 1
               assert magic == b'P6' and int(maxval) == 255
               return int(width), int(height), data[i:]
