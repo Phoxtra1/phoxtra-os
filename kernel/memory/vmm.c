@@ -147,6 +147,8 @@ void vmm_switch_page_directory(uint64_t cr3_phys) {
 
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
     if (!pml4_phys) return -1;
+    /* Ring 3 may only map lower-half canonical virtual addresses. */
+    if (virt >= 0x0000800000000000ULL) return -1;
     uint64_t* target_pml4 = (uint64_t*)pml4_phys;
     uint64_t* kernel_pml4 = (uint64_t*)vmm_get_kernel_page_directory();
     if (!target_pml4 || target_pml4 == kernel_pml4) {
