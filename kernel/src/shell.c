@@ -37,6 +37,7 @@
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
 #include "../services/platform.h"
+#include "../services/hardware_probe.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 
@@ -140,10 +141,45 @@ static void cmd_platform(void) {
     console_write("\n");
 }
 
+static void cmd_hardware(void) {
+    phoxtra_hardware_report_t report;
+    console_write("\n=== PHOXTRA HARDWARE READINESS (READ-ONLY) ===\n");
+    if (phoxtra_hardware_probe_collect(&report) != PLATFORM_OK) {
+        console_write("Hardware inventory failed. No changes were made.\n\n");
+        klog(LOG_ERROR, "PHOXTRA_HWPROBE_FAILED");
+        return;
+    }
+
+    console_write("Architecture : "); console_write(report.architecture); console_write("\n");
+    console_write("Boot mode    : "); console_write(report.boot_protocol); console_write("\n");
+    console_write("Profile      : "); console_write(report.product_profile); console_write("\n");
+    console_write("PCI devices  : "); print_dec(report.pci_devices); console_write("\n");
+    console_write("PCI storage controllers: "); print_dec(report.pci_storage_controllers); console_write("\n");
+    console_write("PCI display controllers: "); print_dec(report.pci_display_controllers); console_write("\n");
+    console_write("PCI network controllers: "); print_dec(report.pci_network_controllers); console_write("\n");
+    console_write("PCI USB controllers: "); print_dec(report.pci_usb_controllers); console_write("\n");
+    console_write("Display      : ");
+    if (report.display_available) {
+        print_dec(report.display_width); console_write("x"); print_dec(report.display_height);
+        console_write(" @ "); print_dec(report.display_bits_per_pixel); console_write(" bpp\n");
+    } else console_write("unavailable\n");
+    console_write("Keyboard API : "); console_write(report.keyboard_api_available ? "available\n" : "unavailable\n");
+    console_write("Pointer      : "); console_write(report.pointer_available ? "detected\n" : "not detected\n");
+    console_write("Block devices: "); print_dec(report.block_devices); console_write("\n");
+    console_write("Simulated RAM disks: "); print_dec(report.simulated_block_devices); console_write("\n");
+    console_write("Physical block-device drivers registered: ");
+    print_dec(report.registered_physical_block_devices); console_write("\n");
+    console_write("Persistent filesystem: ");
+    console_write(report.persistent_vfs_available ? "available\n" : "not connected\n");
+    console_write("Safety: this report is read-only; PCI detection does not mean a driver is implemented.\n\n");
+    klog(LOG_INFO, "PHOXTRA_HARDWARE_REPORT_OK");
+}
+
 static void cmd_help(void) {
     console_write("Available commands:\n");
     console_write("  help       - Show this message\n");
     console_write("  platform   - Inspect shared services and active product profile\n");
+    console_write("  hardware   - Read-only hardware readiness inventory\n");
     console_write("  about      - OS information\n");
     console_write("  clear      - Clear the screen\n");
     console_write("  ticks      - System timer ticks\n");
@@ -905,6 +941,7 @@ void shell_start(void) {
             if (input_len > 0) {
                 if      (kstrcmp(input, "help")     == 0) cmd_help();
                 else if (kstrcmp(input, "platform") == 0) cmd_platform();
+                else if (kstrcmp(input, "hardware") == 0) cmd_hardware();
                 else if (kstrcmp(input, "about")    == 0) cmd_about();
                 else if (kstrcmp(input, "clear")    == 0) { console_clear(); }
                 else if (kstrcmp(input, "ticks")    == 0) cmd_ticks();
