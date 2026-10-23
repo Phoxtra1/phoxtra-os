@@ -4,6 +4,16 @@
 
 This checklist is a test record. Do not mark a test passed unless it was performed on the physical laptop and its result was observed.
 
+## Automated preflight evidence (CI only)
+
+- Workflow run: https://github.com/Phoxtra1/phoxtra-os/actions/runs/39895758147
+- Commit: `7422912b2c0c4514c42d79f1087919a553cdd2bd`
+- CI conclusion: **Passed** on 2026-10-23.
+- Passed in CI: kernel build; desktop and embedded product-profile builds; ISO generation and non-empty artifact verification; QEMU boot and framebuffer checks; theme switching; Application Center and Workspace catalogue access; functional mouse click and file-manager navigation; RAM-backed file/folder creation; screenshot rendering checks; ISO checksum generation and artifact publication.
+- Published ISO artifact: `phoxtra-os-iso-7422912b2c0c4514c42d79f1087919a553cdd2bd` (available from the workflow run's Artifacts section).
+- Physical laptop validation: **Not yet performed**. CI results do not pass Phase 7's hardware acceptance gate.
+- Pointer artwork redesign: **Deferred as a separate task**. Do not change the pointer artwork during Phase 7. Still record basic pointer/touchpad functionality during laptop validation; report visual artifacts as observed rather than silently treating them as passed.
+
 ## 1. Test machine and media
 
 - Date/time of test:
@@ -64,7 +74,8 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 - [ ] Inspect Phoxtra application entries and verify each row shows an accurate availability state.
 - [ ] Open the Amineva Workspace entry with `W`; verify the Docs, Sheets, Slides, Forms, Drive, and collaboration scope is described correctly.
 - [ ] Use `B` to return to the catalogue and `Q` to close it; verify the previous desktop window and input still work.
-- [ ] Confirm Amnewsworld, AgroClimate, Adesua, and DataLens are clearly marked as integrations pending until actual launch hand-off is implemented.
+- [ ] Confirm Amnewsworld is identified as an independent media organization, with its news and radio/media-service entry points separate from Amineva Global.
+- [ ] Confirm Amineva Global product entries are AgroClimate, Adesua, DataLens, Inventra, Sikasem, and Amineva Workspace; verify all external launch states remain pending until actual launch hand-off is implemented.
 - [ ] Do not mark external Amineva apps as launched merely because their catalogue entries are visible.
 - [ ] Do not claim account sign-in, shared files, online service hand-off, or offline support unless each capability is connected and separately tested.
 
@@ -84,7 +95,8 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 | Test / symptom | Result | Evidence or notes | Retest result |
 |---|---|---|---|
-| Boot and display | Not started | | |
+| CI build, ISO, and QEMU preflight | Passed in CI; not physical-laptop evidence | Run 39895758147, commit 7422912b2c0c4514c42d79f1087919a553cdd2bd | N/A |
+| Physical laptop boot and display | Not started | | |
 | Keyboard | Not started | | |
 | Pointer / touchpad | Not started | | |
 | Themes and typography | Not started | | |
