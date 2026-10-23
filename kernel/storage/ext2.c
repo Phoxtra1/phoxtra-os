@@ -47,6 +47,7 @@ typedef struct ext2_node_data {
     uint32_t inode_number;
     ext2_inode_t inode;
     uint64_t size;
+    uint8_t read_confirmed;
 } ext2_node_data_t;
 
 typedef struct {
@@ -267,6 +268,10 @@ static uint64_t ext2_file_read(vfs_node_t* node, uint64_t offset,
     }
 
     kfree(block_buffer);
+    if (done && !data->read_confirmed) {
+        data->read_confirmed = 1;
+        klog(LOG_INFO, "Ext2: confirmed read-only file data access");
+    }
     return done;
 }
 
