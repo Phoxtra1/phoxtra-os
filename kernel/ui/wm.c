@@ -65,12 +65,30 @@ static void wm_draw_window_contents(void) {
 }
 
 static void wm_draw_pointer(void) {
+    /* Draw one crisp monochrome arrow into the backbuffer. The desktop is
+       fully repainted before this function runs, so no previous cursor pixels
+       are carried into the next frame. */
+    static const char* const arrow[18] = {
+        "X...........", "XX..........", "XW..........", "XWW.........",
+        "XWWW........", "XWWWW.......", "XWWWWW......", "XWWWWWW.....",
+        "XWWWWWWW....", "XWWWWWWWW...", "XWWWWXXXXX...", "XXWWX.......",
+        ".XWWX.......", ".XWWX.......", "..XWWX......", "..XWWX......",
+        "..XX........", "..X........."
+    };
     int32_t px = 0, py = 0;
     if (platform_input_pointer_position(&px, &py) != PLATFORM_OK) return;
-    if (px < 0 || py < 0 || px >= FB_WIDTH || py >= FB_HEIGHT) return;
-    platform_display_fill_rect((uint32_t)px, (uint32_t)py, 2, 15, 0x00FFFFFF);
-    platform_display_fill_rect((uint32_t)px, (uint32_t)py, 8, 2, 0x00FFFFFF);
-    platform_display_fill_rect((uint32_t)(px + 2 < FB_WIDTH ? px + 2 : px), (uint32_t)(py + 3 < FB_HEIGHT ? py + 3 : py), 2, 9, 0x00000000);
+    if (px < 0 || py < 0 || px >= (int32_t)FB_WIDTH || py >= (int32_t)FB_HEIGHT) return;
+
+    for (uint32_t row = 0; row < 18u; ++row) {
+        for (uint32_t col = 0; col < 12u; ++col) {
+            char mark = arrow[row][col];
+            if (mark == '.') continue;
+            uint32_t x = (uint32_t)px + col;
+            uint32_t y = (uint32_t)py + row;
+            if (x >= FB_WIDTH || y >= FB_HEIGHT) continue;
+            platform_display_put_pixel(x, y, mark == 'W' ? 0x00FFFFFFu : 0x00030A16u);
+        }
+    }
 }
 
 static void wm_render_desktop(void) {
