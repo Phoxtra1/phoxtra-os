@@ -312,6 +312,13 @@ static void wm_handle_key(char key) {
     if (key == 'a' || key == 'A') { wm_open_application_center(0u, 0u); return; }
     if (key == 'w' || key == 'W') { wm_open_application_center(5u, 1u); return; }
     if ((key == 'b' || key == 'B') && app_win && app_win->active && app_view_detail) { app_view_detail = 0; return; }
+    if ((key == 'q' || key == 'Q') && app_win && app_win->active) {
+        app_win->active = 0;
+        app_view_detail = 0;
+        klog(LOG_INFO, "Application Center closed");
+        wm_restore_window(term_win);
+        return;
+    }
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
     if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
 
