@@ -10,6 +10,7 @@
 extern "C" {
 #endif
 
+void pmm_set_boot_info(uint32_t magic, uint32_t info_phys);
 void pmm_init(uint64_t mem_size);
 void* pmm_alloc_page(void);
 void pmm_free_page(void* ptr);
