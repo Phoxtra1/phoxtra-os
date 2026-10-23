@@ -152,7 +152,12 @@ The objective is to make Phoxtra a usable operating system, not just a bootable 
 ---
 
 ### Phase 8: First Dedicated Phoxtra Hardware Integration
-Only after the standard-laptop validation gate passes, adapt and validate Phoxtra OS on the first dedicated Phoxtra device. Start with a documented target specification and bring-up plan, then verify boot firmware, CPU/board support, display, input, storage, power, thermals, and device-specific drivers. Keep a fallback/recovery method and rerun the relevant OS and application acceptance tests on the target hardware.
+
+**Current substage: software readiness and integration preparation in progress.** The read-only `hardware` shell report inventories the active x86_64/Multiboot2 profile, display/input availability, PCI device classes, simulated storage, and whether real block-device/persistent filesystem services are registered. It must not be mistaken for physical-device support.
+
+Continue preparation and automated validation while Phase 7 physical testing is pending. The dedicated-board bring-up gate remains: do not start target-specific board drivers or claim Phase 7 passed until the standard-laptop acceptance checklist has real test evidence. Before hardware bring-up, select a target board and record firmware, CPU, memory, display, input, storage, power/thermal, peripherals, and recovery requirements. Preserve read-only storage discovery until a separately reviewed safe storage design exists.
+
+See [the Phase 8 hardware integration plan](phase8-hardware-integration-plan.md) for current implementation status and the required gate.
 
 ---
 
