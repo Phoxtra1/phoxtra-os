@@ -229,6 +229,11 @@ static void wm_handle_key(char key) {
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
     if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
 
+    /* Quick theme selectors make all built-in palettes testable from the desktop. */
+    if (key == '1') { theme_set(THEME_MIDNIGHT_GOLD); return; }
+    if (key == '2') { theme_set(THEME_CYBER_SAPPHIRE); return; }
+    if (key == '3') { theme_set(THEME_EMERALD_DARK); return; }
+
     if (focused_win != fm_win || !fm_win || !fm_win->active) return;
     if (key == '\b') {
         file_manager_go_parent();
