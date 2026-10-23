@@ -141,3 +141,18 @@ jobs:
             /tmp/phoxtra-screen.ppm
             /tmp/phoxtra-serial.log
           if-no-files-found: warn
+
+      - name: Generate ISO checksum
+        if: success()
+        run: sha256sum build/phoxtra.iso > build/phoxtra.iso.sha256
+
+      - name: Publish validated Phoxtra OS ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoxtra-os-iso-${{ github.sha }}
+          path: |
+            build/phoxtra.iso
+            build/phoxtra.iso.sha256
+          if-no-files-found: error
+          retention-days: 14
