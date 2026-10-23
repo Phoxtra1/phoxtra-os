@@ -10,6 +10,7 @@
 #include "keyboard.h"
 #include "timer.h"
 #include "../services/platform.h"
+#include "../net/netdev.h"
 
 static window_t* term_win = 0;
 static window_t* sec_win = 0;
