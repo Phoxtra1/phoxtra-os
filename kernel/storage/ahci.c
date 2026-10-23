@@ -40,6 +40,14 @@ int ahci_write_sectors(block_device_t* dev, uint64_t lba, uint32_t count, const 
 }
 
 void ahci_init(void) {
+    if (ram_test_storage) {
+        klog(LOG_INFO, "Storage: RAM test disk is already initialized");
+        return;
+    }
+    if (blockdev_get("ramdisk0")) {
+        klog(LOG_WARNING, "Storage: ramdisk0 name is already registered; refusing to replace another device");
+        return;
+    }
     ram_test_storage = (uint8_t*)kmalloc((uint64_t)RAM_TEST_SECTOR_COUNT * RAM_TEST_SECTOR_SIZE);
     if (!ram_test_storage) {
         klog(LOG_ERROR, "Storage: failed to allocate RAM test disk");
