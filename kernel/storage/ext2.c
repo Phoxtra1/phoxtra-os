@@ -9,6 +9,7 @@
 #define EXT2_MAX_DEPTH 24u
 #define EXT2_SUPERBLOCK_OFFSET 1024u
 #define EXT2_SUPERBLOCK_SIZE 1024u
+#define EXT2_VALID_FS 0x0001u
 #define EXT2_GROUP_DESC_SIZE 32u
 #define EXT2_INODE_SIZE_MIN 128u
 #define EXT2_ROOT_INODE 2u
@@ -465,6 +466,10 @@ static vfs_node_t* ext2_mount_readonly(block_device_t* dev, const char* mount_po
     if (ext2_read_bytes(dev, EXT2_SUPERBLOCK_OFFSET, sizeof(super_raw), super_raw) != 0)
         return (void*)0;
     if (le16(super_raw + 56) != EXT2_SUPER_MAGIC) return (void*)0;
+    if (le16(super_raw + 58) != EXT2_VALID_FS) {
+        klog(LOG_WARNING, "Ext2: filesystem state is unclean or marked with errors; refusing mount without a recovery checker");
+        return (void*)0;
+    }
 
     uint32_t inodes_count = le32(super_raw + 0);
     uint32_t blocks_count = le32(super_raw + 4);

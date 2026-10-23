@@ -69,7 +69,8 @@ if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
 # Physical ext2 mounts must require read-only partitions and expose no write callback.
 for required in ("ext2_mount_readonly", "EXT2_SUPER_MAGIC", "ext2_get_data_block",
                  "BLOCKDEV_FLAG_READONLY", "BLOCKDEV_FLAG_PARTITION",
-                 "EXT2_FEATURE_COMPAT_HAS_JOURNAL", "EXT2_INDEX_FL"):
+                 "EXT2_FEATURE_COMPAT_HAS_JOURNAL", "EXT2_INDEX_FL", "EXT2_VALID_FS",
+                 "filesystem state is unclean or marked with errors"):
     if required not in ext2:
         errors.append(f"read-only ext2 implementation missing validation: {required}")
 if "node->write =" in ext2 or "ext2_file_write" in ext2:

@@ -16,7 +16,7 @@ The storage path is intentionally read-only. CI on 2026-10-23 passed a QEMU inte
 
 The ext2 reader only mounts physical partitions marked read-only. It validates the superblock, group geometry, group descriptor table, inode table bounds, file and directory structures, and block references. It supports 1 KiB, 2 KiB, and 4 KiB blocks and maps direct, single-indirect, double-indirect, and triple-indirect file blocks. Supported regular files are exposed with VFS read callbacks; nodes receive no write callback.
 
-The current subset deliberately rejects or does not support journaled filesystems, indexed directories, unsupported feature bits, malformed directory entries, and invalid metadata. FAT32 is still a sample in-memory VFS adapter; it is not an on-disk FAT32 implementation.
+The current subset deliberately rejects or does not support unclean/error-marked filesystems, journaled filesystems, indexed directories, unsupported feature bits, malformed directory entries, and invalid metadata. No filesystem repair checker exists, so a superblock that does not report a clean state is left unmounted rather than being read speculatively. FAT32 is still a sample in-memory VFS adapter; it is not an on-disk FAT32 implementation.
 
 ## Non-negotiable safety rules
 

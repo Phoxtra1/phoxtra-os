@@ -22,11 +22,13 @@ typedef struct memory_disk {
 static uint8_t valid_image[TEST_IMAGE_BYTES];
 static uint8_t corrupt_image[TEST_IMAGE_BYTES];
 static uint8_t unsupported_image[TEST_IMAGE_BYTES];
+static uint8_t unclean_image[TEST_IMAGE_BYTES];
 static const char file_text[] = "Phoxtra ext2 read OK\n";
 static const char nested_text[] = "Nested file OK\n";
 static memory_disk_t valid_disk = {valid_image, sizeof(valid_image), 0, 0};
 static memory_disk_t corrupt_disk = {corrupt_image, sizeof(corrupt_image), 0, 0};
 static memory_disk_t unsupported_disk = {unsupported_image, sizeof(unsupported_image), 0, 0};
+static memory_disk_t unclean_disk = {unclean_image, sizeof(unclean_image), 0, 0};
 
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 void* kmalloc(size_t size) { return malloc(size); }
@@ -102,6 +104,7 @@ static void make_valid_ext2(uint8_t* image) {
     put32(sb + 32, 63u); /* blocks per group */
     put32(sb + 40, 16u); /* inodes per group */
     put16(sb + 56, EXT2_SUPER_MAGIC);
+    put16(sb + 58, 1u); /* EXT2_VALID_FS: clean filesystem state */
     put32(sb + 76, 0u);  /* revision 0: 128-byte inodes */
 
     /* Group descriptor table is block 2; inode table starts at block 5. */
@@ -133,18 +136,21 @@ static void make_valid_ext2(uint8_t* image) {
 } while (0)
 
 int main(void) {
-    block_device_t valid_dev, corrupt_dev, unsupported_dev;
+    block_device_t valid_dev, corrupt_dev, unsupported_dev, unclean_dev;
     uint8_t output[128];
 
     make_valid_ext2(valid_image);
     memcpy(corrupt_image, valid_image, sizeof(valid_image));
     memcpy(unsupported_image, valid_image, sizeof(valid_image));
+    memcpy(unclean_image, valid_image, sizeof(valid_image));
     put16(corrupt_image + 7u * TEST_BLOCK_SIZE + 24u + 4u, 0u);
     put32(unsupported_image + 1024u + 96u, 0x80u);
+    put16(unclean_image + 1024u + 58u, 2u); /* EXT2_ERROR_FS */
 
     setup_device(&valid_dev, "disk0p1", &valid_disk);
     setup_device(&corrupt_dev, "bad0p1", &corrupt_disk);
     setup_device(&unsupported_dev, "bad1p1", &unsupported_disk);
+    setup_device(&unclean_dev, "bad2p1", &unclean_disk);
 
     vfs_init();
     vfs_node_t* mount = ext2_mount(&valid_dev, "/disk0p1");
@@ -170,8 +176,11 @@ int main(void) {
           ext2_mount(&corrupt_dev, "/bad0p1") == NULL && vfs_lookup("/bad0p1") == NULL);
     CHECK("unsupported incompatibility features reject the mount",
           ext2_mount(&unsupported_dev, "/bad1p1") == NULL && vfs_lookup("/bad1p1") == NULL);
+    CHECK("unclean or error-marked ext2 filesystems are rejected",
+          ext2_mount(&unclean_dev, "/bad2p1") == NULL && vfs_lookup("/bad2p1") == NULL);
     CHECK("failed mount attempts do not issue disk writes",
-          corrupt_disk.write_calls == 0 && unsupported_disk.write_calls == 0);
+          corrupt_disk.write_calls == 0 && unsupported_disk.write_calls == 0 &&
+          unclean_disk.write_calls == 0);
 
     printf("Read-only ext2 regression tests passed.\n");
     return 0;
