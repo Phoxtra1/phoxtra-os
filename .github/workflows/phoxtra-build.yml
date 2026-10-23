@@ -46,7 +46,7 @@ jobs:
       - name: Install kernel and ISO build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
       - name: Audit storage write safety
         run: python3 scripts/check_storage_safety.py
       - name: Test partition and storage boundaries
