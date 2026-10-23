@@ -1,6 +1,6 @@
 # Phase 8 — First Dedicated Phoxtra Hardware Integration Plan
 
-**Status: BLOCKED pending Phase 7 physical-laptop acceptance.** This document is preparation only. It does not authorize hardware integration or mark the laptop gate as passed.
+**Status: IN PROGRESS — software readiness and integration preparation.** Target-specific dedicated-board bring-up remains gated on Phase 7 physical-laptop acceptance and selection of an actual Phoxtra hardware target. This work does not mark Phase 7 passed.
 
 ## 1. Current platform reality
 
@@ -10,11 +10,17 @@
 - The installer and partition formatting path are disabled. Partition discovery must never initialize, rewrite, or format a disk.
 - No dedicated Phoxtra board, CPU, firmware, display, power, thermal, or peripheral specification is approved in this plan yet.
 
-## 2. Phase 7 prerequisite gate
+## 2. Phase 8 software readiness work
 
-Do not begin target-specific driver work until the standard-laptop checklist is recorded as passed, including boot/reboot, display, keyboard, pointer/touchpad functionality, desktop interaction, stability, and accurate storage-device reporting. CI/QEMU results alone are not enough.
+The current Phase 8 software-preparation slice adds a read-only hardware readiness report, available in the shell as `hardware`, and emits a startup inventory marker for CI. It reports the x86_64/Multiboot2 target, product profile, display and input availability, PCI device classes, simulated block-device count, and whether a non-simulated block-device driver or persistent filesystem is registered.
 
-## 3. Target definition required before bring-up
+The report is observational only. PCI class detection is not proof that the matching device driver works. A simulated RAM disk is not physical storage, and this report does not access, format, or write a physical disk. The current kernel does not yet implement real AHCI/NVMe or on-disk Ext2/FAT32 support.
+
+## 3. Phase 7 prerequisite gate
+
+The user may defer physical testing until their schedule allows; repository preparation can continue meanwhile. Do not declare Phase 7 passed or begin target-specific dedicated-board driver work until the standard-laptop checklist is recorded as passed, including boot/reboot, display, keyboard, pointer/touchpad functionality, desktop interaction, stability, and accurate storage-device reporting. CI/QEMU results alone are not enough.
+
+## 4. Target definition required before bring-up
 
 When Phase 7 passes, create a reviewed target specification that records:
 
@@ -28,7 +34,7 @@ When Phase 7 passes, create a reviewed target specification that records:
 
 Do not guess these specifications before a real target board is selected.
 
-## 4. Bring-up sequence
+## 5. Bring-up sequence
 
 1. Verify firmware boot and serial/diagnostic output.
 2. Confirm CPU features and memory map without modifying persistent storage.
@@ -39,6 +45,6 @@ Do not guess these specifications before a real target board is selected.
 7. Re-run kernel builds, ISO/profile checks where applicable, automated boot tests, and target-specific tests.
 8. Record failures and retest before advancing.
 
-## 5. Acceptance evidence
+## 6. Acceptance evidence
 
 Phase 8 can be marked passed only after the selected dedicated device boots reliably and the required display, input, storage safety, power/thermal, recovery, and stability tests have recorded evidence. Until then, its status remains blocked/not started.
