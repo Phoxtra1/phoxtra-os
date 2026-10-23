@@ -45,4 +45,15 @@ if errors:
         print(f" - {error}")
     sys.exit(1)
 
+if "services/hardware_probe.c" not in read("kernel/CMakeLists.txt"):
+    errors.append("hardware readiness probe must be compiled into the kernel")
+if "phoxtra_hardware_probe_log();" not in read("kernel/src/init.cpp"):
+    errors.append("hardware readiness probe must run after device initialization")
+if "PHOXTRA_HWPROBE_READY" not in read("kernel/services/hardware_probe.c"):
+    errors.append("hardware readiness probe must expose its CI marker")
+if "PHOXTRA_HWPROBE_READY" not in read(".github/workflows/phoxtra-build.yml"):
+    errors.append("QEMU CI must verify the hardware readiness probe")
+if 'kstrcmp(input, "hardware") == 0' not in read("kernel/src/shell.c"):
+    errors.append("read-only hardware report must be accessible through the shell")
+
 print("Storage safety audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled.")
