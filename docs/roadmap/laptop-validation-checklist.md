@@ -6,11 +6,11 @@ This checklist is a test record. Do not mark a test passed unless it was perform
 
 ## Automated preflight evidence (CI only)
 
-- Workflow run: https://github.com/Phoxtra1/phoxtra-os/actions/runs/39895758147
-- Commit: `7422912b2c0c4514c42d79f1087919a553cdd2bd`
+- Workflow run: https://github.com/Phoxtra1/phoxtra-os/actions/runs/39920496962
+- Commit: `cda6ab0199545c02670537d2e1e8997eaaeb284c`
 - CI conclusion: **Passed** on 2026-10-23.
-- Passed in CI: kernel build; desktop and embedded product-profile builds; ISO generation and non-empty artifact verification; QEMU boot and framebuffer checks; theme switching; Application Center and Workspace catalogue access; functional mouse click and file-manager navigation; RAM-backed file/folder creation; screenshot rendering checks; ISO checksum generation and artifact publication.
-- Published ISO artifact: `phoxtra-os-iso-7422912b2c0c4514c42d79f1087919a553cdd2bd` (available from the workflow run's Artifacts section).
+- Passed in CI: storage, network, and prototype-claim audits; ARP, partition-boundary, read-only ext2, and ELF validation tests; kernel and desktop/embedded profile builds; ISO generation; QEMU desktop interactions; AHCI/SATA read-only sector I/O; read-only mounting of a real ext2 test partition and file reading through the VFS; verification that the original QEMU disk fixture SHA-256 was unchanged; ISO checksum generation and artifact publication.
+- Published ISO artifact: `phoxtra-os-iso-cda6ab0199545c02670537d2e1e8997eaaeb284c` (available from the workflow run's Artifacts section).
 - Physical laptop validation: **Not yet performed**. CI results do not pass Phase 7's hardware acceptance gate.
 - Pointer artwork redesign: **Deferred as a separate task**. Do not change the pointer artwork during Phase 7. Still record basic pointer/touchpad functionality during laptop validation; report visual artifacts as observed rather than silently treating them as passed.
 
@@ -81,7 +81,7 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 
 **Integration limitation:** The Application Center currently provides native panel entry points and a catalogue of planned integrations. It does not yet launch the external Amineva applications or provide the full Amineva Workspace runtime. Record those as **Not implemented / Blocked**, not as a laptop hardware defect.
 
-**Storage safety warning:** This build registers a 32 MiB volatile RAM test disk. It is not a physical SATA/AHCI/NVMe driver. The Ext2/FAT32 modules are demo adapters, not real on-disk filesystem implementations. Partition discovery is read-only; the installer and partition-formatting path are disabled. Files are temporary and lost on reboot. Do not run an installer, format a partition, or write to the laptop's internal drive. Record firmware/device information only; do not treat the simulated disk as evidence of physical storage support.
+**Storage safety warning:** The prototype has an experimental read-only AHCI/SATA path limited to ATA LBA48 disks with 512-byte logical sectors, plus a limited read-only ext2 subset for supported partitions. These paths passed automated QEMU tests but are not validated on this physical laptop. NVMe and on-disk FAT32 are unsupported; unsupported ext2 features are rejected. Partition discovery, physical storage reads, and ext2 access are read-only. The installer, formatting, physical writes, and write-based recovery are disabled. The separate 32 MiB RAM test disk is volatile and its demo files are lost on reboot. Do not install or format the laptop's internal drive.
 
 ## 6. Reliability and evidence
 

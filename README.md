@@ -1,6 +1,6 @@
 # Phoxtra OS
 
-**Phoxtra OS is an experimental x86_64 operating-system prototype under active development.** Its current bootable ISO brings up a kernel, a graphical desktop environment, keyboard and pointer interaction in the tested virtual machine, a small set of built-in system panels, and an application catalogue. Automated CI builds the ISO and exercises core desktop interactions in QEMU.
+**Phoxtra OS is an experimental x86_64 operating-system prototype under active development.** Its current bootable ISO brings up a kernel, a graphical desktop environment, keyboard and pointer interaction in the tested virtual machine, a small set of built-in system panels, and an application catalogue. Automated CI builds the ISO and exercises core desktop interactions in QEMU, including read-only AHCI/SATA sector I/O and reading a file from a test ext2 partition.
 
 The long-term Phoxtra direction includes software integrated with Phoxtra devices. This repository currently validates an x86_64 prototype; it is **not** a production-ready general-purpose operating system, and this ISO is **not** a mobile-phone build.
 
@@ -25,15 +25,18 @@ A successful CI run proves that those automated checks passed for the tested bui
 - Built-in Shell Console, Files, and System Status catalogue panels.
 - Theme switching, Application Center, and a read-only `hardware` diagnostic report.
 - A shared platform service interface and a catalogue that distinguishes available native panels from planned integrations.
-- Storage-safety controls that keep partition discovery read-only, identify the RAM disk as simulated, and leave disk installation/formatting disabled.
+- Experimental PCI AHCI/SATA read support for ATA LBA48 disks with 512-byte logical sectors; physical disks and discovered MBR partitions are exposed read-only.
+- A limited read-only ext2 path exposes supported on-disk files through the VFS; CI tests it against a temporary QEMU SATA disk.
+- Storage-safety controls identify the RAM disk as simulated and keep physical writes, installation, and formatting disabled.
 - Automated build, product-profile, QEMU, rendering, and storage/hardware-readiness checks.
 
 ## Important limitations
 
 These are known scope limitations, not features to assume are present:
 
-- **No persistent physical-disk storage is connected.** The current block device is a volatile, read-only 32 MiB RAM test disk. Files created in the RAM-backed environment are lost at reboot.
-- The Ext2/FAT32 components are demo in-memory VFS adapters, not complete on-disk filesystem drivers.
+- **Writable persistent storage is not implemented.** The experimental AHCI/SATA path currently reads only supported ATA LBA48 disks with 512-byte logical sectors; it is not validated on a physical laptop, and NVMe is unsupported.
+- The on-disk ext2 implementation is a limited read-only subset. It rejects journaled filesystems, indexed directories, and unsupported feature combinations; there is no ext2 write path. The FAT32 component remains an in-memory demo adapter, not an on-disk FAT32 driver.
+- The 32 MiB RAM test disk used for desktop demonstrations is volatile. Files in RAM-backed demo folders are lost at reboot.
 - **The installer is disabled.** Do not install or format a laptop's internal drive with this prototype.
 - Amineva Global products and Amnewsworld entries in the Application Center are catalogue entries. Only the listed native panels are currently marked available; external apps are not yet launchable from Phoxtra.
 - **Amineva Workspace is not yet integrated as a functioning suite.** Docs, Sheets, Slides, Forms, Drive, account sign-in, cross-application file access, and offline operation must not be considered available from the OS until their real service/runtime connections are implemented and tested.
@@ -45,7 +48,7 @@ These are known scope limitations, not features to assume are present:
 
 ## Build and test
 
-The project is built on Ubuntu in GitHub Actions. For local development, install the project's build dependencies (CMake, build tools, NASM, GRUB/ISO tools, QEMU, socat, and Python 3), then run:
+The project is built on Ubuntu in GitHub Actions. For local development, install the project's build dependencies (CMake, build tools, NASM, GRUB/ISO tools, QEMU, socat, e2fsprogs, and Python 3), then run:
 
 ```bash
 python3 scripts/check_storage_safety.py
@@ -79,4 +82,4 @@ The release workflow supports creating an **unpublished draft GitHub Release** f
 
 Phoxtra OS can be described honestly as an early-stage, bootable desktop OS prototype with automated QEMU evidence and a staged hardware-readiness plan. Suitable opportunities may include prototype-development grants, R&D support, incubators, university or maker-lab programmes, and hardware/operating-system innovation support. Eligibility and fit depend on each funder's criteria; no funding outcome is guaranteed.
 
-Do not claim production readiness, persistent disk support, finished Amineva Workspace integration, mobile-phone support, or successful physical hardware validation until the corresponding work has been implemented and evidenced.
+Do not claim production readiness, writable persistent-disk support, finished Amineva Workspace integration, mobile-phone support, or successful physical hardware validation until the corresponding work has been implemented and evidenced.

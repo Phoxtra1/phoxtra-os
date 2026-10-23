@@ -169,7 +169,7 @@ static void cmd_hardware(void) {
     console_write("Simulated RAM disks: "); print_dec(report.simulated_block_devices); console_write("\n");
     console_write("Non-simulated block-device drivers registered: ");
     print_dec(report.registered_non_simulated_block_devices); console_write("\n");
-    console_write("Persistent filesystem: ");
+    console_write("Writable persistent filesystem: ");
     console_write(report.persistent_vfs_available ? "available\n" : "not connected\n");
     console_write("Safety: this report is read-only; PCI detection does not mean a driver is implemented.\n\n");
     klog(LOG_INFO, "PHOXTRA_HARDWARE_REPORT_OK");
@@ -187,42 +187,42 @@ static void cmd_help(void) {
     console_write("  ps         - List all processes\n");
     console_write("  pid        - Current process ID\n");
     console_write("  memory     - Memory usage summary\n");
-    console_write("  cpu        - CPU and scheduler state\n");
-    console_write("  usermode   - Test Ring 3 switch, MSR fast syscall & memory isolation\n");
+    console_write("  cpu        - CPU, timer and scheduler readiness status\n");
+    console_write("  usermode   - Show user-mode runtime implementation status\n");
     console_write("  disks      - List storage block devices & partition table\n");
-    console_write("  storage    - Milestone 0.7.0 Storage Driver & Filesystem Audit\n");
-    console_write("  tpm        - TPM 2.0 SPI Hardware Root of Trust Attestation Status\n");
-    console_write("  identity   - Cryptographic SHA-256 Process Identity Status\n");
-    console_write("  audit      - Immutable Kernel Security Event Audit Logger\n");
-    console_write("  caps       - Capability Access Control (CAC) Bitmask Permissions\n");
-    console_write("  mac        - Mandatory Access Control (MAC) Security Domains\n");
-    console_write("  stackguard - Stack Canary & Kernel Guard Page Protection Audit\n");
+    console_write("  storage    - Read-only AHCI/SATA, partitions and ext2 status\n");
+    console_write("  tpm        - Show TPM hardware-driver status\n");
+    console_write("  identity   - Show process SHA-256 fingerprints (not attestation)\n");
+    console_write("  audit      - Show volatile in-memory audit events\n");
+    console_write("  caps       - Display capability bitmasks (not globally enforced)\n");
+    console_write("  mac        - Display MAC policy integration status\n");
+    console_write("  stackguard - Show stack/guard-page implementation status\n");
     console_write("  ifconfig   - Display active network interfaces and IP addresses\n");
-    console_write("  ping       - Send ICMP Echo Request to remote IPv4 host\n");
-    console_write("  netstat    - List BSD Sockets and TCP/UDP transport protocol connections\n");
-    console_write("  dhcp       - Request dynamic IPv4 address lease via DHCP\n");
-    console_write("  dns        - Resolve hostname domain to IPv4 address\n");
-    console_write("  elf        - Parse & load ELF64 executable binary program\n");
-    console_write("  libc       - Audit native C standard library (phoxtra-libc) POSIX API\n");
+    console_write("  ping       - Show current ICMP diagnostic limitations\n");
+    console_write("  netstat    - Show socket-subsystem implementation status\n");
+    console_write("  dhcp       - Show DHCP lease support status\n");
+    console_write("  dns        - Show DNS resolver implementation status\n");
+    console_write("  elf        - Show ELF validation and execution support status\n");
+    console_write("  libc       - Show user-space C runtime support status\n");
     console_write("  gui        - Launch High-Resolution 1024x768 Desktop GUI Window Manager\n");
     console_write("  wm         - Audit Phoxtra Window Manager (phoxtra-wm) Compositor State\n");
-    console_write("  stress     - Preemption stress test under maximum process capacity (64 tasks)\n");
-    console_write("  heap       - Audit kernel heap memory allocations and leak detection\n");
-    console_write("  panic      - Test edge-case kernel fault recovery routines\n");
-    console_write("  sdk        - Audit Phoxtra Developer SDK Toolchain & Syscall Reference\n");
-    console_write("  release    - Display Phoxtra OS v1.0.0 Commercial Production Launch & LTS\n");
-    console_write("  userland   - Audit Ring 3 Userland Isolation & Memory Transition Engine\n");
+    console_write("  stress     - Show scheduler stress-test readiness\n");
+    console_write("  heap       - Run allocation smoke test; global leak tracking is unavailable\n");
+    console_write("  panic      - Show fault-injection and recovery test status\n");
+    console_write("  sdk        - Show user-space SDK implementation status\n");
+    console_write("  release    - Display current prototype and release-gate status\n");
+    console_write("  userland   - Show user-mode runtime readiness\n");
     console_write("  pci        - Scan PCI Express Bus for Hardware Controllers & Peripherals\n");
-    console_write("  installer  - Launch Phoxtra OS Bare-Metal Installation Wizard\n");
+    console_write("  installer  - Report installer availability (currently disabled)\n");
     console_write("  theme      - Switch Desktop Theme (midnight-gold, cyber-sapphire, emerald)\n");
     console_write("  fm         - Launch Phoxtra Graphical File Manager Window\n");
-    console_write("  store      - Launch Phoxtra App Store & Software Package Manager\n");
-    console_write("  update     - Audit Automated Over-The-Air (OTA) Cloud System Updates\n");
-    console_write("  mobile     - Inspect Phoxtra Mobile & Tablet OS Touch Compositor\n");
-    console_write("  dipa       - Execute Native Dipa AI Core Kernel & Shell Assistant\n");
-    console_write("  phoxair    - Monitor Phoxair Airspace & Telemetry Radar Daemon\n");
-    console_write("  verify     - Authenticate Document & Binary Signatures via Phoxtra Verify\n");
-    console_write("  license    - Audit Phoxtra Enterprise Subscriptions & Entitlements\n");
+    console_write("  store      - Show local catalogue and package-manager status\n");
+    console_write("  update     - Show online updater implementation status\n");
+    console_write("  mobile     - Show mobile-platform implementation status\n");
+    console_write("  dipa       - Show Dipa inference integration status\n");
+    console_write("  phoxair    - Show sensor/telemetry integration status\n");
+    console_write("  verify     - Show cryptographic verification availability\n");
+    console_write("  license    - Show local entitlement and license-service status\n");
     console_write("  vfs        - List virtual filesystem tree (/dev, /initrd, /boot, /home)\n");
     console_write("  cat        - Read file contents from VFS (e.g. cat /boot/phoxtra.cfg)\n");
     console_write("  reboot     - Reboot the system\n");
@@ -230,15 +230,17 @@ static void cmd_help(void) {
 
 static void cmd_about(void) {
     console_write("\nAKWAABA - PHOXTRA OS\n");
-    console_write("Secure Identity Operating System\n");
-    console_write("Version : Experimental bootable test prototype\n");
-    console_write("Arch    : x86_64 64-bit Long Mode\n");
-    console_write("Features: Hardware TPM 2.0, CAC/MAC Security, TCP/IP, VBE GUI, ELF64 Runtime, SDK\n");
-    console_write("Install : Not implemented; storage is volatile RAM only\n\n");
+    console_write("Stage   : Experimental bootable x86_64 prototype\n");
+    console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
+    console_write("Storage : Experimental read-only AHCI/SATA and limited ext2 reads; writes disabled\n");
+    console_write("Network : e1000 hardware path under development; full TCP/IP/TLS unavailable\n");
+    console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
+    console_write("Mobile  : ARM64 phone build not implemented\n");
+    console_write("Install : Not implemented; do not install to an internal disk\n\n");
 }
 
 static void cmd_disks(void) {
-    console_write("\nBlock Devices (physical hardware is not connected to this storage layer):\n");
+    console_write("\nDetected Block Devices (read-only inventory):\n");
     console_write("NAME       SECTORS      SIZE (MB)   TYPE / ACCESS\n");
     console_write("---------  -----------  ----------  -------------------------\n");
 
@@ -254,6 +256,7 @@ static void cmd_disks(void) {
         console_write("           ");
         if (dev->flags & BLOCKDEV_FLAG_PARTITION) console_write("Partition");
         else if (dev->flags & BLOCKDEV_FLAG_SIMULATED) console_write("Volatile RAM test disk");
+        else if (dev->flags & BLOCKDEV_FLAG_READONLY) console_write("Physical block device");
         else console_write("Unclassified device");
         if (dev->flags & BLOCKDEV_FLAG_READONLY) console_write(" [READ-ONLY]");
         console_write("\n");
@@ -263,283 +266,187 @@ static void cmd_disks(void) {
 
 static void cmd_storage(void) {
     console_write("\n=== Phoxtra Storage Safety Status ===\n");
-    console_write("[1/4] Physical SATA/NVMe controller driver ........ NOT IMPLEMENTED\n");
-    console_write("[2/4] Current block device ....................... Volatile RAM test disk\n");
-    console_write("[3/4] Partition-table scan ........................ READ-ONLY\n");
-    console_write("[4/4] Ext2/FAT32 support .......................... Demo adapters only\n");
-    console_write("\nSafety: internal-disk installation and partition formatting are unavailable.\n");
-    console_write("No persistent physical storage is mounted by this build.\n\n");
+    console_write("[1/5] Physical disk driver ....................... Experimental AHCI/SATA READ-ONLY\n");
+    console_write("[2/5] Supported disk geometry .................... ATA LBA48, 512-byte logical sectors\n");
+    console_write("[3/5] MBR partition discovery .................... READ-ONLY; bounds/overlap checked\n");
+    console_write("[4/5] On-disk ext2 filesystem .................... Limited READ-ONLY subset\n");
+    console_write("[5/5] NVMe and on-disk FAT32 ..................... NOT IMPLEMENTED\n");
+    console_write("\nNo disk writes, formatting, installer, or write-based recovery are enabled.\n");
+    console_write("Ext2 journals, indexed directories, and unsupported feature combinations are rejected.\n");
+    console_write("The desktop demo RAM filesystem is volatile; its files are lost at reboot.\n\n");
 }
 
 static void cmd_tpm(void) {
-    console_write("\n=== TPM 2.0 SPI Hardware Root of Trust ===\n");
+    console_write("\n=== TPM Hardware Status ===\n");
     tpm2_dev_t* dev = tpm2_get_device();
-    if (!dev) {
-        console_write("TPM 2.0 Hardware: Not Found\n\n");
+    if (!dev || !dev->hardware_attested) {
+        console_write("TPM hardware driver : NOT CONNECTED\n");
+        console_write("Hardware attestation: UNAVAILABLE\n");
+        console_write("PCR operations       : UNAVAILABLE\n\n");
         return;
     }
-
-    console_write("Hardware Status  : ");
-    console_write(dev->hardware_attested ? "Attested & Verified (SPI MMIO 0xFED40000)\n" : "Unverified\n");
-    console_write("Vendor Device    : ");
-    console_write(dev->vendor_id);
-    console_write("\nActive PCR Slots : ");
-    print_dec(dev->active_pcrs);
-    console_write("\n\nPCR Measurements (SHA-256 Digests):\n");
-
-    static const char hex_chars[] = "0123456789abcdef";
-    for (uint32_t pcr = 0; pcr < 4; pcr++) {
-        console_write("  PCR["); print_dec(pcr); console_write("] : ");
-        uint8_t digest[32];
-        tpm2_pcr_read(pcr, digest);
-        for (int i = 0; i < 16; i++) {
-            console_put_char(hex_chars[(digest[i] >> 4) & 0x0F]);
-            console_put_char(hex_chars[digest[i] & 0x0F]);
-        }
-        console_write("...\n");
-    }
-    console_write("\n");
+    console_write("Hardware attestation: reported by connected driver\n");
+    console_write("Vendor device        : "); console_write(dev->vendor_id); console_write("\n");
+    console_write("Active PCR slots     : "); print_dec(dev->active_pcrs); console_write("\n\n");
 }
 
 static void cmd_identity(void) {
-    console_write("\n=== Cryptographic Process Identity Attestation ===\n");
-    console_write("PID  NAME             STATUS      SHA-256 PROCESS HASH\n");
-    console_write("---  ---------------  ----------  ----------------------------------------\n");
-
+    console_write("\n=== Process SHA-256 Fingerprints (Not Attestation) ===\n");
+    console_write("Hashes identify bytes; no trusted digital signature or TPM attestation is available.\n");
+    console_write("PID  NAME             STATUS      SHA-256 FINGERPRINT\n");
     struct pcb** table = process_table();
     uint32_t count = process_count();
-
-    for (uint32_t i = 0; i < count; i++) {
-        struct pcb* pcb = table[i];
-        if (!pcb) continue;
-
-        print_dec(pcb->pid);
-        console_write("    ");
-        print_str_pad(pcb->name, 17);
-
-        if (pcb->identity_status == IDENTITY_STATUS_VERIFIED) {
-            console_write("VERIFIED    ");
-        } else {
-            console_write("UNVERIFIED  ");
-        }
-
-        char hash_hex[65];
-        process_identity_get_hash_hex(pcb, hash_hex);
-        for (int h = 0; h < 32; h++) console_put_char(hash_hex[h]);
+    for (uint32_t i = 0; i < count; ++i) {
+        struct pcb* pcb = table[i]; if (!pcb) continue;
+        print_dec(pcb->pid); console_write("    "); print_str_pad(pcb->name,17);
+        console_write("UNVERIFIED  ");
+        char hash_hex[65]; process_identity_get_hash_hex(pcb, hash_hex);
+        for (int h = 0; h < 64; ++h) console_put_char(hash_hex[h]);
         console_write("\n");
     }
     console_write("\n");
 }
 
 static void cmd_audit(void) {
-    console_write("\n=== Immutable Kernel Security Event Audit Log ===\n");
+    console_write("\n=== In-Memory Kernel Audit Events ===\n");
+    console_write("This log is volatile and is not immutable or tamper-resistant.\n");
     console_write("TIME(TICKS)  PID  EVENT TYPE             MESSAGE\n");
-    console_write("-----------  ---  ---------------------  -----------------------------------\n");
-
     uint32_t count = audit_get_count();
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; ++i) {
         const audit_event_t* ev = audit_get_event(i);
         if (!ev) continue;
-
-        print_dec(ev->timestamp);
-        console_write("          ");
-        print_dec(ev->pid);
-        console_write("    ");
-
+        print_dec(ev->timestamp); console_write("          "); print_dec(ev->pid); console_write("    ");
         switch (ev->event_type) {
-            case AUDIT_TYPE_HARDWARE_ATTESTATION: print_str_pad("HW_ATTESTATION", 23); break;
-            case AUDIT_TYPE_PROCESS_BINDING:      print_str_pad("PROCESS_BINDING", 23); break;
-            case AUDIT_TYPE_PRIVILEGE_TRANSITION: print_str_pad("PRIV_TRANSITION", 23); break;
-            case AUDIT_TYPE_SYSCALL_GATE:         print_str_pad("SYSCALL_GATE", 23); break;
-            case AUDIT_TYPE_POLICY_VIOLATION:     print_str_pad("POLICY_VIOLATION", 23); break;
-            default:                              print_str_pad("UNKNOWN_EVENT", 23); break;
+            case AUDIT_TYPE_HARDWARE_ATTESTATION: print_str_pad("HW_ATTESTATION",23); break;
+            case AUDIT_TYPE_PROCESS_BINDING: print_str_pad("PROCESS_BINDING",23); break;
+            case AUDIT_TYPE_PRIVILEGE_TRANSITION: print_str_pad("PRIV_TRANSITION",23); break;
+            case AUDIT_TYPE_SYSCALL_GATE: print_str_pad("SYSCALL_GATE",23); break;
+            case AUDIT_TYPE_POLICY_VIOLATION: print_str_pad("POLICY_VIOLATION",23); break;
+            default: print_str_pad("UNKNOWN_EVENT",23); break;
         }
-
-        console_write(ev->message);
-        console_write("\n");
+        console_write(ev->message); console_write("\n");
     }
     console_write("\n");
 }
 
 static void cmd_caps(void) {
-    console_write("\n=== Capability Access Control (CAC) Permissions ===\n");
-    console_write("PID  NAME             MAC DOMAIN  CAPABILITY SET\n");
-    console_write("---  ---------------  ----------  -----------------------------------\n");
-
+    console_write("\n=== Process Capability Metadata ===\n");
+    console_write("This table reports PCB bitmasks; it does not prove system-wide authorization enforcement.\n");
+    console_write("PID  NAME             MAC DOMAIN  CAPABILITY BITMASK\n");
     struct pcb** table = process_table();
     uint32_t count = process_count();
-
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; ++i) {
         struct pcb* pcb = table[i];
         if (!pcb) continue;
-
-        print_dec(pcb->pid);
-        console_write("    ");
-        print_str_pad(pcb->name, 17);
+        print_dec(pcb->pid); console_write("    "); print_str_pad(pcb->name, 17);
         print_str_pad(mac_label_to_string(pcb->mac_label), 12);
-
-        if (pcb->capabilities == CAP_ALL) {
-            console_write("[CAP_ALL (Kernel Master)]\n");
-        } else {
-            if (pcb->capabilities & CAP_SYS_ADMIN)      console_write("SYS_ADMIN ");
-            if (pcb->capabilities & CAP_DEV_ACCESS)     console_write("DEV_ACCESS ");
-            if (pcb->capabilities & CAP_IPC_SEND)       console_write("IPC_SEND ");
-            if (pcb->capabilities & CAP_SECURITY_AUDIT) console_write("AUDIT ");
-            console_write("\n");
+        console_write("0x"); 
+        static const char hex[] = "0123456789abcdef";
+        int started = 0;
+        for (int shift = 60; shift >= 0; shift -= 4) {
+            uint8_t digit = (uint8_t)((pcb->capabilities >> shift) & 0x0f);
+            if (digit || started || shift == 0) { console_put_char(hex[digit]); started = 1; }
         }
+        console_write("\n");
     }
     console_write("\n");
 }
 
 static void cmd_mac(void) {
-    console_write("\n=== Mandatory Access Control (MAC) Security Policies ===\n");
-    console_write("[1/3] VFS Security Domain Labels Assigned .............. OK\n");
-    console_write("[2/3] Non-discretionary IPC Message Filter ............ ACTIVE\n");
-    console_write("[3/3] Sandbox Isolation Domain Enforcement ........... ACTIVE\n");
-    console_write("\nDomain Rules:\n");
-    console_write("  - SYSTEM     : Unrestricted kernel operations\n");
-    console_write("  - SERVICE    : System daemons (Logger, Security, VFS)\n");
-    console_write("  - USER       : User apps (Cannot write to System objects)\n");
-    console_write("  - RESTRICTED : Isolated sandbox (No cross-domain IPC)\n\n");
+    console_write("\n=== Mandatory Access Control Policy Status ===\n");
+    console_write("Policy helper functions: PRESENT\n");
+    console_write("VFS access enforcement : NOT INTEGRATED END-TO-END\n");
+    console_write("IPC enforcement        : NOT INTEGRATED END-TO-END\n");
+    console_write("Process isolation      : NOT VALIDATED; user-mode runtime is incomplete\n\n");
 }
 
 static void cmd_stackguard(void) {
-    console_write("\n=== Stack Canary & Kernel Guard Page Engine ===\n");
-    console_write("Stack Guard State : ");
-    console_write(stack_guard_is_active() ? "ACTIVE (Hardware Entropy Seeded)\n" : "INACTIVE\n");
-    console_write("Canary Guard Seed : 0x");
-
-    static const char hex_chars[] = "0123456789abcdef";
-    for (int i = 56; i >= 0; i -= 8) {
-        uint8_t byte = (__stack_chk_guard >> i) & 0xFF;
-        console_put_char(hex_chars[(byte >> 4) & 0x0F]);
-        console_put_char(hex_chars[byte & 0x0F]);
-    }
-    console_write("\nGuard Page Status : 4KB Unmapped Page Boundaries below Stack Frames\n");
-    console_write("ASLR Base Entropy : Enabled (Page-aligned base randomization)\n\n");
+    console_write("\n=== Stack and Memory Protection Status ===\n");
+    console_write("Stack canary : prototype fallback only; compiler stack protection is not enabled\n");
+    console_write("Guard pages  : NOT IMPLEMENTED\n");
+    console_write("ASLR         : NOT IMPLEMENTED (trusted entropy source unavailable)\n\n");
 }
 
 static void cmd_ifconfig(void) {
-    console_write("\n=== Phoxtra Network Interfaces ===\n");
-    netdev_t* dev = netdev_get_default();
-    if (!dev) {
-        console_write("No network interface active.\n\n");
-        return;
+    console_write("\n=== Hardware Network Interfaces ===\n");
+    uint32_t count = netdev_count();
+    if (!count) { console_write("No supported hardware network interface is registered.\n\n"); return; }
+    for (uint32_t n = 0; n < count; ++n) {
+        netdev_t* dev = netdev_get_by_index(n);
+        if (!dev) continue;
+        console_write(dev->name); console_write(": link ");
+        console_write((dev->flags & 0x01u) ? "UP\n" : "DOWN\n");
+        if (dev->ip_addr) {
+            char ip[16], mask[16], gateway[16];
+            uint32_to_ip(dev->ip_addr, ip); uint32_to_ip(dev->netmask, mask); uint32_to_ip(dev->gateway, gateway);
+            console_write("  inet "); console_write(ip); console_write(" netmask "); console_write(mask);
+            console_write(" gateway "); console_write(gateway); console_write("\n");
+        } else console_write("  IPv4: not configured (DHCP is not implemented)\n");
+        console_write("  ether ");
+        static const char hex[] = "0123456789abcdef";
+        for (int i = 0; i < ETH_ALEN; ++i) {
+            console_put_char(hex[(dev->mac_addr[i] >> 4) & 0x0f]);
+            console_put_char(hex[dev->mac_addr[i] & 0x0f]);
+            if (i + 1 < ETH_ALEN) console_put_char(':');
+        }
+        console_write("\n  RX packets "); print_dec(dev->rx_packets); console_write(" bytes "); print_dec(dev->rx_bytes);
+        console_write("\n  TX packets "); print_dec(dev->tx_packets); console_write(" bytes "); print_dec(dev->tx_bytes);
+        console_write("\n");
     }
-
-    console_write("eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500\n");
-    console_write("        inet ");
-    char ip_buf[16];
-    uint32_to_ip(dev->ip_addr, ip_buf);
-    console_write(ip_buf);
-
-    console_write("  netmask ");
-    uint32_to_ip(dev->netmask, ip_buf);
-    console_write(ip_buf);
-
-    console_write("  gateway ");
-    uint32_to_ip(dev->gateway, ip_buf);
-    console_write(ip_buf);
-
-    console_write("\n        ether ");
-    static const char hex_chars[] = "0123456789abcdef";
-    for (int i = 0; i < 6; i++) {
-        console_put_char(hex_chars[(dev->mac_addr[i] >> 4) & 0x0F]);
-        console_put_char(hex_chars[dev->mac_addr[i] & 0x0F]);
-        if (i < 5) console_put_char(':');
-    }
-    console_write("  txqueuelen 1000  (Ethernet Intel 82540EM e1000)\n");
-    console_write("        RX packets "); print_dec(dev->rx_packets); console_write("  bytes "); print_dec(dev->rx_bytes); console_write("\n");
-    console_write("        TX packets "); print_dec(dev->tx_packets); console_write("  bytes "); print_dec(dev->tx_bytes); console_write("\n\n");
+    console_write("\n");
 }
 
 static void cmd_ping(const char* target) {
-    console_write("\nPING ");
-    if (!target || target[0] == '\0') target = "192.168.1.1";
-    console_write(target);
-    console_write(" 56(84) bytes of data.\n");
-
-    netdev_t* dev = netdev_get_default();
-    uint32_t ip = ip_to_uint32(192, 168, 1, 1);
-    icmp_ping(dev, ip);
-
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=1 ttl=64 time=0.42 ms\n");
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=2 ttl=64 time=0.38 ms\n");
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=3 ttl=64 time=0.41 ms\n");
-    console_write("--- "); console_write(target); console_write(" ping statistics ---\n");
-    console_write("3 packets transmitted, 3 received, 0% packet loss, time 2002ms\n\n");
+    console_write("\n=== ICMP Diagnostics Status ===\n");
+    if (target && target[0]) { console_write("Requested target: "); console_write(target); console_write("\n"); }
+    console_write("The current prototype has no complete IPv4 receive path or ICMP reply/timeout handling.\n");
+    console_write("No successful ping or packet-loss result can be reported by this build.\n\n");
 }
 
 static void cmd_netstat(void) {
-    console_write("\n=== Active Internet Connections (BSD Sockets & TCP/UDP) ===\n");
-    console_write("PROTO  RECV-Q  SEND-Q  LOCAL ADDRESS          FOREIGN ADDRESS        STATE\n");
-    console_write("-----  ------  ------  ---------------------  ---------------------  -----------\n");
-    console_write("tcp         0       0  192.168.1.150:80       0.0.0.0:*              LISTEN\n");
-    console_write("tcp         0       0  192.168.1.150:443      0.0.0.0:*              LISTEN\n");
-    console_write("udp         0       0  0.0.0.0:68             0.0.0.0:*              UNCONN\n");
-    console_write("udp         0       0  0.0.0.0:53             0.0.0.0:*              UNCONN\n\n");
+    console_write("\n=== Socket Subsystem Status ===\n");
+    console_write("Allocated socket handles: "); print_dec(socket_get_active_count()); console_write("\n");
+    console_write("TCP handshake/state machine : NOT IMPLEMENTED\n");
+    console_write("Inbound protocol dispatch   : PARTIAL (ARP only)\n");
+    console_write("Socket receive queues       : NOT IMPLEMENTED\n");
+    console_write("No listening TCP/UDP ports are claimed.\n\n");
 }
 
 static void cmd_dhcp(void) {
-    console_write("\n=== DHCP Dynamic IP Lease Request ===\n");
+    console_write("\n=== DHCP Lease Status ===\n");
     netdev_t* dev = netdev_get_default();
-    dhcp_request_lease(dev);
-    console_write("Interface eth0 configured dynamically via DHCP.\n\n");
+    if (!dev) { console_write("No supported hardware network interface is active.\n\n"); return; }
+    int result = dhcp_request_lease(dev);
+    if (result == 0) console_write("DHCP lease obtained and applied.\n\n");
+    else console_write("DHCP is not implemented end-to-end; no address or lease was assigned.\n\n");
 }
 
 static void cmd_dns(const char* host) {
-    console_write("\n=== DNS Hostname Resolution ===\n");
-    if (!host || host[0] == '\0') host = "phoxtra.org";
-    console_write("Resolving hostname '"); console_write(host); console_write("' via DNS (8.8.8.8)...\n");
-
+    console_write("\n=== DNS Resolution Status ===\n");
+    if (!host || !host[0]) { console_write("Usage: dns <hostname>\n\n"); return; }
+    console_write("Hostname: "); console_write(host); console_write("\n");
     netdev_t* dev = netdev_get_default();
     uint32_t resolved_ip = dns_resolve_hostname(dev, host);
-
-    char ip_str[16];
-    uint32_to_ip(resolved_ip, ip_str);
-    console_write("Name    : "); console_write(host); console_write("\n");
-    console_write("Address : "); console_write(ip_str); console_write("\n\n");
-}
-
-static void cmd_elf(const char* path) {
-    console_write("\n=== ELF64 Executable Binary Loader Audit ===\n");
-    if (!path || path[0] == '\0') path = "/boot/phoxtra.elf";
-    console_write("Target Binary   : "); console_write(path); console_write("\n");
-
-    // Construct mock ELF64 header buffer for demonstration
-    uint8_t mock_elf_buf[128];
-    for (int i = 0; i < 128; i++) mock_elf_buf[i] = 0;
-    mock_elf_buf[0] = 0x7F; mock_elf_buf[1] = 'E'; mock_elf_buf[2] = 'L'; mock_elf_buf[3] = 'F';
-    mock_elf_buf[4] = 2; // ELF64
-    mock_elf_buf[5] = 1; // LSB Little Endian
-
-    elf64_header_t* hdr = (elf64_header_t*)mock_elf_buf;
-    hdr->e_machine  = 0x3E; // x86_64
-    hdr->e_entry    = 0x4001A0ULL;
-    hdr->e_phoff    = 64;
-    hdr->e_phnum    = 2;
-
-    uint64_t entry_point = 0;
-    if (elf_load_binary(mock_elf_buf, sizeof(mock_elf_buf), &entry_point) == 0) {
-        console_write("ELF Magic       : \\x7fELF (Class 2 ELF64 LSB)\n");
-        console_write("Architecture    : AMD x86-64 (0x3E)\n");
-        console_write("Program Segments: 2 PT_LOAD Segments mapped to VMM\n");
-        console_write("Entry Point     : 0x4001A0 (Ring 3 User Gate)\n");
-        console_write("Dynamic Linker  : /lib64/ld-phoxtra.so.1 (Resolved)\n");
-        console_write("Execution State : SUCCESS (User process created)\n\n");
-    } else {
-        console_write("Failed to parse ELF binary header.\n\n");
+    if (!resolved_ip) console_write("DNS query/response processing is not implemented; no address was returned.\n\n");
+    else {
+        char ip_str[16]; uint32_to_ip(resolved_ip, ip_str);
+        console_write("Address: "); console_write(ip_str); console_write("\n\n");
     }
 }
 
+static void cmd_elf(const char* path) {
+    console_write("\n=== ELF Executable Loader Status ===\n");
+    if (path && path[0]) { console_write("Requested path: "); console_write(path); console_write("\n"); }
+    console_write("ELF image validation is available to the kernel API and regression tests.\n");
+    console_write("Loading segments into an isolated process address space and executing them are NOT IMPLEMENTED.\n");
+    console_write("This command does not fabricate a binary or report a process launch.\n\n");
+}
+
 static void cmd_libc(void) {
-    console_write("\n=== Phoxtra Native C Standard Library (phoxtra-libc) POSIX Audit ===\n");
-    console_write("Library Standard: POSIX.1-2017 C Standard Library Subset\n");
-    console_write("[stdio.h]  printf, puts, putchar, getchar, fopen, fclose, fread, fwrite .. OK\n");
-    console_write("[stdlib.h] malloc, free, exit, atoi, abs ................................. OK\n");
-    console_write("[string.h] strlen, strcpy, strncpy, strcmp, strncmp, memset, memcpy ...... OK\n");
-    console_write("[unistd.h] read, write, open, close, getpid, usleep, fork, execve ........ OK\n");
-    console_write("Syscall Dispatcher: MSR 0xC0000082 Fast Ring 3 -> Ring 0 Gateway .......... OK\n\n");
+    console_write("\n=== User-Space Runtime Status ===\n");
+    console_write("Kernel memory allocation exists, but a POSIX C library is not implemented.\n");
+    console_write("stdio, file-descriptor APIs, process startup, fork/exec and user-space syscalls are unavailable.\n");
+    console_write("Dynamic linking and shared-library loading are unavailable.\n\n");
 }
 
 static void cmd_gui(void) {
@@ -567,81 +474,58 @@ static void cmd_wm(void) {
 }
 
 static void cmd_stress(void) {
-    console_write("\n=== Kernel Preemption Multitasking Stress Test ===\n");
-    console_write("Target Capacity : 64 Concurrent Task PCBs\n");
-    int count = stress_test_multitasking(64);
-    console_write("Spawned Tasks   : ");
-    char num_str[16];
-    num_str[0] = '0' + (count / 10);
-    num_str[1] = '0' + (count % 10);
-    num_str[2] = '\0';
-    console_write(num_str);
-    console_write(" active stress threads\n");
-    console_write("Preemption Gate : 100Hz PIT Timer Preemption Verified\n");
-    console_write("Stress Test Result: SUCCESS (0 kernel task panics)\n\n");
+    console_write("\n=== Scheduler Stress Test Status ===\n");
+    int result = stress_test_multitasking(64);
+    if (result >= 0) {
+        console_write("Tasks created: "); print_dec((uint32_t)result); console_write("\n");
+    } else {
+        console_write("NOT RUN: scheduler registration and task-return handling are not validated.\n");
+    }
+    console_write("No preemption or stability pass is claimed by this command.\n\n");
 }
 
 static void cmd_heap(void) {
-    console_write("\n=== Kernel Heap Memory Leak & Integrity Audit ===\n");
-    console_write("Heap Auditor    : Checking physical allocator & heap chunk headers...\n");
-    heap_audit_verify_allocations();
-    console_write("Memory Leaks    : 0 bytes lost\n");
-    console_write("Heap Overhead   : 4096 bytes metadata\n");
-    console_write("Audit Result    : PASSED (100% memory integrity)\n\n");
+    console_write("\n=== Heap Allocation Smoke Test ===\n");
+    int passed = heap_audit_verify_allocations();
+    console_write("Allocation/free smoke test: "); console_write(passed ? "PASSED\n" : "FAILED\n");
+    console_write("Global leak tracking: NOT IMPLEMENTED\n");
+    console_write("Measured heap usage: UNAVAILABLE\n\n");
 }
 
 static void cmd_panic(void) {
-    console_write("\n=== Edge-Case Panic & Fault Recovery Audit ===\n");
-    console_write("Testing Ring 0 Fault Gate & Exception Interception...\n");
-    console_write("[#GP] General Protection Fault Hook ........ VERIFIED\n");
-    console_write("[#PF] Page Fault Unmapped Guard Page Gate .. VERIFIED\n");
-    console_write("[#DF] Double Fault Stack Switch Gate ...... VERIFIED\n");
-    console_write("Recovery State  : RESILIENT (Panic recovery handler active)\n\n");
+    console_write("\n=== Fault and Recovery Test Status ===\n");
+    console_write("Automated fault injection: NOT RUN\n");
+    console_write("Guard-page fault tests  : NOT IMPLEMENTED\n");
+    console_write("Double-fault recovery   : NOT VALIDATED\n");
+    console_write("Kernel panic is currently terminal; recovery is not claimed.\n\n");
 }
 
 static void cmd_sdk(void) {
-    console_write("\n=== Phoxtra Developer SDK & Toolchain Audit ===\n");
-    console_write("SDK Version     : "); console_write(sdk_get_version()); console_write("\n");
-    console_write("Cross-Compiler  : phoxtra-gcc (x86_64-phoxtra-elf-gcc)\n");
-    console_write("Build Utility   : phoxtra-sdk (init, build, deploy)\n");
-    console_write("C Runtime       : phoxtra-libc (POSIX Standard Library Subset)\n");
-    console_write("System Calls    : 64 Vector Gateways Registered (MSR 0xC0000082)\n");
-    console_write("Developer Manual: /docs/developer/DEVELOPER_GUIDE.md\n");
-    console_write("Syscall Ref     : /docs/developer/SYSCALL_REFERENCE.md\n");
-    console_write("Arch Manual     : /docs/developer/ARCHITECTURE_MANUAL.md\n");
-    console_write("SDK Status      : ACTIVE & READY FOR APP DEVELOPMENT\n\n");
+    console_write("\n=== Developer SDK Status ===\n");
+    console_write("Kernel/ISO build tools : CMake, GCC toolchain and NASM in CI\n");
+    console_write("Phoxtra user-space SDK : NOT IMPLEMENTED\n");
+    console_write("POSIX C library        : NOT IMPLEMENTED\n");
+    console_write("Runnable user apps     : NOT IMPLEMENTED\n");
+    console_write("Registered SDK syscalls: "); print_dec(sdk_get_registered_syscall_count()); console_write("\n\n");
 }
 
 static void cmd_release(void) {
-    console_write("\n=== PHOXTRA OS v1.0.0 COMMERCIAL PRODUCTION LAUNCH ===\n");
-    console_write("Release Version : "); console_write(production_get_version()); console_write("\n");
-    console_write("Enterprise SLA  : "); console_write(production_get_lts_status()); console_write("\n");
-    console_write("Release Format  : Hybrid ISO, Live USB Installer (.img), QEMU (.qcow2), VHD (.vhd)\n");
-    console_write("Certification   : Intel Core & AMD Ryzen Bare-Metal Verified\n");
-    console_write("Security Engine : Hardware TPM 2.0 SPI, CAC/MAC Multi-Tenant Domain Protection\n");
-    console_write("Release Status  : PRODUCTION READY & COMMERCIALLY CERTIFIED\n\n");
+    console_write("\n=== Phoxtra OS Prototype Status ===\n");
+    console_write("Version : "); console_write(production_get_version()); console_write("\n");
+    console_write("Support : "); console_write(production_get_lts_status()); console_write("\n");
+    console_write("Physical laptop validation : PENDING\n");
+    console_write("Physical storage reads : EXPERIMENTAL, AHCI/SATA READ-ONLY\n");
+    console_write("Writable persistent storage/installer : NOT IMPLEMENTED\n");
+    console_write("Mobile phone build : NOT IMPLEMENTED\n");
+    console_write("Production certification : NOT PERFORMED\n\n");
 }
 
 static void cmd_userland(void) {
-    console_write("\n=== Ring 3 Userland Isolation & Transition Audit ===\n");
-    console_write("1. Ring Transition Stub (switch_to_user_mode) ... VERIFIED\n");
-    console_write("2. Per-Process Page Tables & CR3 Switch .......... VERIFIED\n");
-    
-    uint64_t user_pml4 = vmm_create_user_page_directory();
-    if (user_pml4) {
-        console_write("   - Per-Process PML4 Page Directory Allocated    : ");
-        print_dec(user_pml4);
-        console_write("\n");
-
-        int res1 = vmm_map_user_page(user_pml4, 0x0000000040000000ULL, 0x1000000ULL, VMM_FLAG_WRITABLE);
-        int res2 = vmm_map_user_page(user_pml4, 0x00007FFFF0000000ULL, 0x1001000ULL, VMM_FLAG_WRITABLE);
-        if (res1 == 0 && res2 == 0) {
-            console_write("3. User Memory Allocator (vmm_map_user_page) ..... VERIFIED\n");
-            console_write("   - Mapped User Code Page  : 0x0000000040000000 [User | Present | RW]\n");
-            console_write("   - Mapped User Stack Page : 0x00007FFFF0000000 [User | Present | RW]\n");
-        }
-    }
-    console_write("4. Ring 3 Security Isolation Test Engine ........ VERIFIED (PASSED)\n\n");
+    console_write("\n=== User-Mode Runtime Status ===\n");
+    console_write("Per-process address-space construction : INCOMPLETE\n");
+    console_write("Safe user stack and guard-page mapping : NOT IMPLEMENTED\n");
+    console_write("Executable loading and process launch  : NOT IMPLEMENTED\n");
+    console_write("Ring 3 isolation acceptance tests      : NOT PASSED\n\n");
 }
 
 static void cmd_pci(void) {
@@ -690,82 +574,74 @@ static void cmd_fm(void) {
 }
 
 static void cmd_store(const char* arg) {
-    console_write("\n=== PHOXTRA APP STORE CATALOG (cloud.phoxtra.com/store) ===\n");
-    console_write("Connecting to Phoxtra Cloud Repository ... VERIFIED\n\n");
-    console_write("APP NAME             CATEGORY      FORMAT     STATUS\n");
-    console_write("-----------------------------------------------------------\n");
-    console_write("amineva-workspace    Productivity  Native .pxa INSTALLED\n");
-    console_write("signal-desktop       Messaging     Flatpak     AVAILABLE\n");
-    console_write("telegram-desktop     Messaging     Flatpak     AVAILABLE\n");
-    console_write("whatsapp-desktop     Messaging     PWA WebKit  AVAILABLE\n");
-    console_write("vlc-media-player     Media         Flatpak     AVAILABLE\n");
-    console_write("phoxtra-downloader   Media / Video ELF64 CLI   INSTALLED\n");
-    console_write("adesua-learning      Education     Native .pxa INSTALLED\n\n");
+    console_write("\n=== Application Store Status ===\n");
+    console_write("Online store connection : NOT IMPLEMENTED\n");
+    console_write("Package manager         : NOT IMPLEMENTED\n");
+    console_write("Signature verification  : NOT AVAILABLE\n");
+    console_write("The Application Center is a local catalogue, not a connected package store.\n");
     if (arg && arg[0]) {
-        console_write("Installing package: "); console_write(arg); console_write(" ...\n");
-        console_write("[1/3] Signature Verification (PhoxtraID Root CA) ... PASSED\n");
-        console_write("[2/3] Hardware TPM 2.0 Hash Check (SHA-256) ....... PASSED\n");
+        console_write("Requested package: "); console_write(arg); console_write("\n");
+        console_write("No package was downloaded or installed.\n");
     }
+    console_write("\n");
 }
 
 static void cmd_update(void) {
-    console_write("\n=== PHOXTRA OS AUTOMATED OVER-THE-AIR (OTA) UPDATER ===\n");
-    console_write("Checking cloud.phoxtra.com/v1/updates ... CONNECTED\n");
-    console_write("[1/3] System Kernel Security Patch (v1.0.0-LTS) ... UP TO DATE\n");
-    console_write("[2/3] Hardware Driver Signatures (PCI/xHCI) ........ VERIFIED\n");
-    console_write("[3/3] Phoxtra Store App Index & Signatures ......... SYNCED\n");
-    console_write("Phoxtra OS is running the latest security build (100% Up to Date).\n\n");
+    console_write("\n=== System Update Status ===\n");
+    console_write("Online update client : NOT IMPLEMENTED\n");
+    console_write("Repository connection: NOT TESTED\n");
+    console_write("Patch signature verification: NOT IMPLEMENTED\n");
+    console_write("No update check was performed and no version is claimed to be up to date.\n\n");
 }
 
 static void cmd_mobile(void) {
-    console_write("\n=== PHOXTRA MOBILE & TABLET OS COMPOSITOR (phoxtra-touch) ===\n");
-    console_write("Architecture Target : ARM64 (aarch64) / x86_64 Multi-Touch\n");
-    console_write("Display Geometry    : 1080x2400 Portrait / Auto-Rotation\n");
-    console_write("Touch Engine        : 10-Point Multi-Touch Gestures (ACTIVE)\n");
-    console_write("Power Management    : ARM64 Big.LITTLE Core Scheduler (OPTIMIZED)\n");
-    console_write("Mobile Webview      : Amineva & Adesua Mobile Touch Containers (READY)\n\n");
+    console_write("\n=== Phoxtra Mobile Platform Status ===\n");
+    console_write("Current boot target : x86_64 prototype\n");
+    console_write("ARM64 phone build   : NOT IMPLEMENTED\n");
+    console_write("Touch drivers, power management and phone boot path are not available in this build.\n\n");
 }
 
 static void cmd_dipa(const char* query) {
-    console_write("\n=== DIPA AI OS CORE ASSISTANT (dipa-ai v2.0) ===\n");
+    console_write("\n=== Dipa Internal AI Integration Status ===\n");
     if (query && query[0]) {
         char response[256];
-        dipa_ai_process_query(query, response, 256);
-        console_write(response);
-        console_write("\n\n");
+        dipa_ai_process_query(query, response, sizeof(response));
+        console_write(response); console_write("\n\n");
     } else {
-        console_write("Status: Dipa AI Engine ACTIVE (Kernel Daemon Listening)\n");
-        console_write("Usage : dipa <prompt/query>\n");
-        console_write("Example: dipa analyze memory fragmentation\n\n");
+        console_write("Inference model/API: NOT CONNECTED\n");
+        console_write("The kernel stub does not perform model inference.\n\n");
     }
 }
 
 static void cmd_phoxair(void) {
-    console_write("\n=== PHOXAIR AIRSPACE & TELEMETRY RADAR MONITOR ===\n");
+    console_write("\n=== Phoxair Sensor/Telemetry Integration ===\n");
     phoxair_scan_airspace();
     phoxair_status_t st = phoxair_get_status();
-    console_write("Active Radar Targets : "); print_dec(st.active_targets); console_write("\n");
-    console_write("Radar Range          : "); print_dec(st.radar_range_km); console_write(" km\n");
-    console_write("Telemetry Link       : "); console_write(st.telemetry_status ? "ONLINE (3D Vector Lock)\n\n" : "OFFLINE\n\n");
+    console_write("Active targets : "); print_dec(st.active_targets); console_write("\n");
+    console_write("Radar range    : "); print_dec(st.radar_range_km); console_write(" km\n");
+    console_write("Telemetry link : "); console_write(st.telemetry_status ? "connected\n" : "NOT CONNECTED\n");
+    console_write("No radar sensor or telemetry source is configured in this prototype.\n\n");
 }
 
 static void cmd_verify(const char* arg) {
-    console_write("\n=== PHOXTRA VERIFY CRYPTOGRAPHIC AUTHENTICATOR ===\n");
-    if (arg && arg[0]) {
-        console_write("Authenticating target: "); console_write(arg); console_write(" ...\n");
-        verify_file_signature(arg, "SHA256-GENUINE");
-        console_write("Result: 100% Genuine & Authentic (PhoxtraID Verified)\n\n");
-    } else {
-        console_write("Status: Phoxtra Verify Daemon ACTIVE\n");
-        console_write("Usage : verify <file/document_id>\n\n");
+    console_write("\n=== Phoxtra Verification Status ===\n");
+    if (!arg || !arg[0]) {
+        console_write("File-signature and document-authenticity backends are not connected.\n");
+        console_write("Usage: verify <file> (will remain unavailable until a trusted verifier exists)\n\n");
+        return;
     }
+    console_write("Target: "); console_write(arg); console_write("\n");
+    if (verify_file_signature(arg, "") != 0)
+        console_write("Result: verified by the configured verifier.\n\n");
+    else
+        console_write("Result: NOT VERIFIED; cryptographic verification is unavailable.\n\n");
 }
 
 static void cmd_entitlements(void) {
-    console_write("\n=== PHOXTRA ENTERPRISE SUBSCRIPTION & ENTITLEMENTS ===\n");
-    console_write("License Tier      : Phoxtra Enterprise Commercial License (ACTIVE)\n");
-    console_write("PhoxtraID Cloud   : cloud.phoxtra.com (AUTHENTICATED)\n");
-    console_write("Core Features     : All Enterprise Components Unlocked & Verified\n\n");
+    console_write("\n=== Local Entitlement Status ===\n");
+    console_write("Mode                 : COMMUNITY / PROTOTYPE\n");
+    console_write("Cloud license service: NOT CONNECTED\n");
+    console_write("Paid feature grants  : NOT VERIFIED\n\n");
 }
 
 
@@ -843,24 +719,19 @@ static void cmd_memory(void) {
 }
 
 static void cmd_cpu(void) {
-    console_write("\nCPU State:\n");
+    console_write("\nCPU/Kernel State:\n");
     console_write("  Architecture : x86_64 (Long Mode)\n");
-    console_write("  Scheduler    : Round-Robin (preemptive, 100ms slice)\n");
-    console_write("  Interrupts   : Enabled\n");
-    console_write("  Timer Freq   : 100 Hz\n");
-    console_write("  Uptime Ticks : ");
-    print_dec(scheduler_get_uptime_ticks());
-    console_write("\n\n");
+    console_write("  Timer         : 100 Hz PIT configured\n");
+    console_write("  Interrupts    : Enabled in the main event loop\n");
+    console_write("  Scheduler     : Experimental; process queue/context switching not validated\n");
+    console_write("  Uptime ticks  : "); print_dec(scheduler_get_uptime_ticks()); console_write("\n\n");
 }
 
 static void cmd_usermode(void) {
-
-    console_write("\n=== Phoxtra OS Milestone v0.6.0 Verification ===\n");
-    console_write("[1/4] GDT Ring 3 Descriptors (0x1B Code, 0x23 Data) ... OK\n");
-    console_write("[2/4] MSR Fast Syscall (STAR/LSTAR 0xC0000082) ......... OK\n");
-    console_write("[3/4] Per-Process CR3 Page Directory Isolation ......... OK\n");
-    console_write("[4/4] User Stack Allocation (0x7FFFF0000000) ........... OK\n");
-    console_write("\nStatus: User Mode Transition & Memory Isolation VERIFIED\n\n");
+    console_write("\n=== User-Mode Validation Status ===\n");
+    console_write("The kernel has an experimental syscall entry path, but there is no complete user-mode process runtime.\n");
+    console_write("Ring transitions, per-process isolation, executable launch and return-to-kernel behavior are NOT VALIDATED.\n");
+    console_write("No user-mode isolation test is marked passed.\n\n");
 }
 
 static void cmd_vfs(void) {
@@ -933,6 +804,7 @@ void shell_start(void) {
     int input_len = 0;
 
     while (1) {
+        net_poll();
         char c = keyboard_get_char();
         if (c == '\n') {
             input[input_len] = '\0';

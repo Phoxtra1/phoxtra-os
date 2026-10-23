@@ -10,6 +10,7 @@
 #include "keyboard.h"
 #include "timer.h"
 #include "../services/platform.h"
+#include "../net/netdev.h"
 
 static window_t* term_win = 0;
 static window_t* sec_win = 0;
@@ -395,6 +396,7 @@ void wm_desktop_event_loop(void) {
     wm_render_desktop();
     uint64_t last_redraw = timer_get_ticks();
     for (;;) {
+        net_poll();
         platform_input_event_t event;
         int event_result = platform_input_poll(&event);
         if (event_result > 0 && event.type == PLATFORM_INPUT_POINTER) {

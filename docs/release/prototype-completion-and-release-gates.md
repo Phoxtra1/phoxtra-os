@@ -25,8 +25,8 @@ A milestone is complete only when the evidence below exists. Each line must be m
 - [ ] Native panels marked available open the interface actually implemented.
 - [ ] Planned external applications are labelled as planned/pending.
 - [ ] Amineva Workspace integration status is explicit: the current catalogue entry is not a working suite.
-- [ ] Volatile RAM storage, the simulated read-only disk, and loss of files on reboot are clearly disclosed.
-- [ ] Installer and formatting remain disabled until a separately reviewed persistent-storage implementation exists.
+- [ ] The volatile RAM demo, read-only AHCI/SATA restrictions, supported ext2 subset, and unsupported filesystem features are clearly disclosed.
+- [ ] Physical disk writes, installer, formatting, and write-based recovery remain disabled until separately reviewed and tested.
 - [ ] No physical internal disk is written during discovery or prototype testing.
 - [ ] Known limitations are present in README, release notes, and funding/demo descriptions.
 - [ ] Cursor artwork remains a separate task; do not fold it into unrelated release work.
@@ -44,7 +44,7 @@ When the owner is ready, use [the standard-laptop validation checklist](../roadm
 - [ ] Release-blocking defects are fixed and retested.
 - [ ] Test evidence is saved and the checklist is explicitly marked passed.
 
-Do not install to or format the laptop's internal disk. The current prototype has no working physical persistent-storage driver or installer.
+Do not install to or format the laptop's internal disk. CI verifies an experimental read-only AHCI/SATA path and limited ext2 reads in QEMU, but actual laptop controller compatibility is untested; there is no physical-disk write path or installer.
 
 ## Gate D — Amineva Workspace and web application access
 
@@ -78,7 +78,7 @@ The manual workflow has an explicit opt-in to create an unpublished draft. It do
 A completed prototype is not a production OS. Before general-purpose daily-use claims, plan and implement at least:
 
 - A robust memory/interrupt/process model and clear kernel/user-space boundaries, verified through targeted tests.
-- Persistent disk drivers and a real on-disk filesystem with safe mount/write semantics, corruption handling, and recovery.
+- Complete writable persistent storage and filesystem support, including safe write/mount semantics, flush behavior, corruption handling, and recovery; the current AHCI/ext2 path is read-only and limited.
 - A reviewed installation/update/recovery model and rollback strategy.
 - Supported device-driver matrix and tested graphics/input/network/storage behavior.
 - Browser or application runtime, networking, TLS/certificate validation, and usable external application integrations.

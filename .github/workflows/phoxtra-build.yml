@@ -20,6 +20,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   build-kernel-and-iso:
     runs-on: ubuntu-latest
@@ -42,9 +46,29 @@ jobs:
       - name: Install kernel and ISO build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
       - name: Audit storage write safety
         run: python3 scripts/check_storage_safety.py
+      - name: Test partition and storage boundaries
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
+          /tmp/test_partition_validation
+      - name: Test read-only ext2 filesystem
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_ext2_readonly.c kernel/storage/ext2.c kernel/vfs/vfs.c kernel/storage/blockdev.c -o /tmp/test_ext2_readonly
+          /tmp/test_ext2_readonly
+      - name: Audit network implementation integrity
+        run: python3 scripts/check_network_integrity.py
+      - name: Audit prototype claim integrity
+        run: python3 scripts/check_prototype_claims.py
+      - name: Test ARP packet validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_arp_validation.c kernel/net/arp.c kernel/net/ethernet.c -o /tmp/test_arp_validation
+          /tmp/test_arp_validation
+      - name: Test ELF64 image validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
+          /tmp/test_elf_validation
       - name: Configure
         run: cmake -B build -S .
       - name: Build kernel
@@ -62,8 +86,31 @@ jobs:
       - name: Boot ISO and check desktop framebuffer
         shell: bash
         run: |
-          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
-          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none \
+          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-ahci-test.img
+          truncate -s 64M /tmp/phoxtra-ahci-test.img
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          image = Path('/tmp/phoxtra-ahci-test.img')
+          sector = bytearray(512)
+          # One valid read-only MBR partition wholly within this 64 MiB test image.
+          struct.pack_into('<B3sB3sII', sector, 446, 0, b'\x00\x02\x00', 0x83,
+                           b'\xFE\xFF\xFF', 2048, 120000)
+          sector[510:512] = b'\x55\xAA'
+          with image.open('r+b') as handle:
+              handle.write(sector)
+          PY
+          # Format the partition as ext2 with directory indexing disabled for the supported read-only subset.
+          truncate -s 61440000 /tmp/phoxtra-ext2-partition.img
+          mke2fs -q -t ext2 -F -O ^dir_index /tmp/phoxtra-ext2-partition.img
+          printf 'Phoxtra on-disk ext2 read-only integration test.\n' > /tmp/phoxtra-ext2-file.txt
+          debugfs -w -R 'write /tmp/phoxtra-ext2-file.txt phoxtraci' /tmp/phoxtra-ext2-partition.img >/dev/null 2>&1
+          dd if=/tmp/phoxtra-ext2-partition.img of=/tmp/phoxtra-ahci-test.img bs=512 seek=2048 conv=notrunc status=none
+          sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
+          # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
+          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
+            -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
+            -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
@@ -87,10 +134,21 @@ jobs:
           grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
           grep -q 'PHOXTRA_HWPROBE_READY' /tmp/phoxtra-serial.log
-          grep -q 'Hardware probe: no non-simulated block-device driver is registered' /tmp/phoxtra-serial.log
+          grep -q 'e1000 hardware driver initialized' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: confirmed read-only sector I/O on SATA device' /tmp/phoxtra-serial.log
+          grep -q 'Hardware probe: non-simulated block devices are registered' /tmp/phoxtra-serial.log
+          grep -Fq 'Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
+          # Read a real file from the physical-partition path before entering the desktop.
+          { for key in c a t spc slash s a t a 0 p 1 slash p h o x t r a c i ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
@@ -171,6 +229,7 @@ jobs:
           print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
           assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
+          sha256sum -c /tmp/phoxtra-ahci-test.before.sha256
 
       - name: Upload QEMU screenshot and serial diagnostics
         if: always()

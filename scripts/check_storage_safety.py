@@ -10,6 +10,36 @@ def read(path):
     return (root / path).read_text(encoding="utf-8")
 
 errors = []
+
+# Guard boundary handling and reject malformed/overlapping partition declarations.
+partitions = read("kernel/storage/partition.c")
+blockdev = read("kernel/storage/blockdev.c")
+ramdisk = read("kernel/storage/ahci.c")
+ext2 = read("kernel/storage/ext2.c")
+fat32 = read("kernel/storage/fat32.c")
+ahci = read("kernel/storage/ahci.c")
+workflow = read(".github/workflows/phoxtra-build.yml")
+if "lba >= part->sector_count" not in partitions or "count == 0" not in partitions:
+    errors.append("partition reads must reject zero-length and out-of-range requests")
+if "ranges_overlap" not in partitions or "MBR_BOOT_ACTIVE" not in partitions:
+    errors.append("partition parser must validate overlap and MBR boot-indicator fields")
+if "is_extended_partition" not in partitions or "extended partition skipped" not in partitions:
+    errors.append("unsupported MBR extended-partition chains must not be exposed as ordinary filesystems")
+if "blockdev_register" not in blockdev or "duplicate pointer or name" not in blockdev:
+    errors.append("block-device registry must reject duplicate registrations")
+if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
+    errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
+for write_fn in ("ram_test_write_sectors", "ahci_write_sectors"):
+    start = ramdisk.find("int " + write_fn + "(")
+    end = ramdisk.find("\n}", start) if start >= 0 else -1
+    body = ramdisk[start:end] if start >= 0 and end > start else ""
+    if not body or "return -1;" not in body:
+        errors.append(f"{write_fn} must fail closed; storage writes are not implemented")
+for label, source in (("Ext2", ext2), ("FAT32", fat32)):
+    if "file->size - offset" not in source:
+        errors.append(f"{label} demo reads must avoid offset-plus-size overflow")
+    if "if (!file)" not in source:
+        errors.append(f"{label} demo mount must handle metadata allocation failure")
 partition = read("kernel/storage/partition.c")
 parse = re.search(r"int partition_parse\(block_device_t\* master\)\s*\{(.*?)\n\}", partition, re.S)
 if not parse:
@@ -23,12 +53,34 @@ else:
 
 if "BLOCKDEV_FLAG_SIMULATED" not in read("kernel/storage/blockdev.h"):
     errors.append("block device flags must identify simulated storage")
-ahci = read("kernel/storage/ahci.c")
+for required in ("probe_ahci_controller", "ATA_CMD_IDENTIFY", "ATA_CMD_READ_DMA_EXT",
+                 "ahci_read_sectors", "AHCI: read-only ATA disk registered"):
+    if required not in ahci:
+        errors.append(f"read-only AHCI/SATA implementation missing required path: {required}")
+if "lba >= dev->total_sectors" not in ahci or "dev->total_sectors - lba" not in ahci:
+    errors.append("physical disk reads must reject out-of-range sector requests")
 for required in ("RAM test disk", "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_READONLY"):
     if required not in ahci:
         errors.append(f"storage test backend missing safety marker: {required}")
-if re.search(r"AHCI controller|PCI.*AHCI|HBA", ahci, re.I):
+ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1]
+if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
     errors.append("RAM test backend must not claim to implement physical AHCI")
+
+# Physical ext2 mounts must require read-only partitions and expose no write callback.
+for required in ("ext2_mount_readonly", "EXT2_SUPER_MAGIC", "ext2_get_data_block",
+                 "BLOCKDEV_FLAG_READONLY", "BLOCKDEV_FLAG_PARTITION",
+                 "EXT2_FEATURE_COMPAT_HAS_JOURNAL", "EXT2_INDEX_FL", "EXT2_VALID_FS",
+                 "filesystem state is unclean or marked with errors"):
+    if required not in ext2:
+        errors.append(f"read-only ext2 implementation missing validation: {required}")
+if "node->write =" in ext2 or "ext2_file_write" in ext2:
+    errors.append("ext2 VFS nodes must not expose a write callback in the read-only prototype")
+for required in ("e2fsprogs", "mke2fs", "debugfs", "snapshot=on",
+                 "Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled",
+                 "Ext2: confirmed read-only file data access",
+                 "sha256sum -c /tmp/phoxtra-ahci-test.before.sha256"):
+    if required not in workflow:
+        errors.append(f"QEMU storage integration regression coverage missing: {required}")
 
 installer = read("kernel/installer/installer.c")
 if "Installer disabled" not in installer or "compositor_create_window" in installer:
@@ -56,4 +108,4 @@ if errors:
         print(f" - {error}")
     sys.exit(1)
 
-print("Storage and hardware readiness audit passed: partition discovery is read-only; test storage is volatile/read-only; installer is disabled; hardware probe is integrated.")
+print("Storage and hardware readiness audit passed: bounded read-only AHCI/SATA I/O, read-only ext2 mounting, safe partitions, volatile demo storage, and disabled write/installer paths are covered.")

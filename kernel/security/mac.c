@@ -4,7 +4,7 @@
 
 void mac_init(void) {
     klog(LOG_SECURITY, "Initializing Mandatory Access Control (MAC) Policy Framework...");
-    klog(LOG_SECURITY, "MAC Domain Security Labels Active: SYSTEM | SERVICE | USER | RESTRICTED");
+    klog(LOG_WARNING, "MAC policy helpers exist, but VFS and IPC enforcement are not wired end-to-end");
 }
 
 int mac_check_vfs_access(pcb_t* pcb, uint32_t node_mac_label, uint32_t mode) {
