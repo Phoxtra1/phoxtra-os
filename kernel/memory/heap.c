@@ -47,6 +47,11 @@ void heap_init(void) {
 void* kmalloc(size_t requested_size) {
     size_t size = align_size(requested_size);
     if (!size) return NULL;
+    /* This allocator currently stores each block in one physical page. */
+    if (size > PAGE_SIZE - HEAP_HEADER_SIZE) {
+        klog(LOG_WARNING, "kmalloc: request exceeds the current single-page block limit");
+        return NULL;
+    }
 
     for (;;) {
         heap_block_t* current = heap_start;
