@@ -51,18 +51,22 @@ The objective of this phase is to support multiple parallel tasks (threads and p
 ---
 
 ### Phase 3: Filesystem, Drivers & Device Management
-The objective is to allow Phoxtra OS to interact with storage, input devices, and provide a file interface.
+
+**Current status:** Experimental read-only physical storage and a limited on-disk ext2 reader are implemented and exercised by automated QEMU tests. This does not mean the physical laptop is validated or that writable persistent storage is available.
 
 1. **Core Device Drivers**
-   - Implement a PS/2 Keyboard driver.
-   - Implement a storage driver (e.g., AHCI for SATA, or IDE/RAMDisk) to read/write disk blocks.
+   - The PS/2 keyboard and mouse paths are present and tested in the declared prototype scope.
+   - Experimental PCI AHCI/SATA support identifies supported ATA LBA48 disks with 512-byte logical sectors and performs bounded read-only sector I/O.
+   - NVMe, non-512-byte logical sectors, full device compatibility, and physical-laptop driver acceptance remain unimplemented or unverified.
 
 2. **Virtual Filesystem (VFS) & Disk FS**
-   - Implement a unified VFS abstraction (supporting `open`, `read`, `write`, `close`).
-   - Implement a simple read/write filesystem driver (such as FAT32, or a custom secure filesystem).
+   - The VFS exposes supported files from a limited read-only ext2 subset through directory and file reads.
+   - MBR partition discovery validates bounds and overlap, skips unsupported extended-partition chains, and exposes discovered partitions read-only.
+   - The ext2 parser rejects journaled filesystems, indexed directories, malformed structures, and unsupported feature combinations.
+   - Writable filesystem support, on-disk FAT32, flush/write semantics, filesystem repair, and write-based recovery remain unimplemented. The simulated RAM demo remains volatile.
 
 3. **ELF Executable Loader**
-   - Write a loader that parses 64-bit ELF executable files from disk, loads segments into memory, sets up the user stack, and jumps to the user entry point.
+   - ELF64 structural validation is implemented, but loading segments into isolated process address spaces and executing them remain disabled.
 
 ---
 
