@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoxtra-os-${{ github.workflow }}-${{ github.ref }}
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
