@@ -96,6 +96,7 @@ jobs:
           with image.open('r+b') as handle:
               handle.write(sector)
           PY
+          sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
           qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
             -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,readonly=on \
             -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
@@ -209,6 +210,7 @@ jobs:
           print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
           assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
+          sha256sum -c /tmp/phoxtra-ahci-test.before.sha256
 
       - name: Upload QEMU screenshot and serial diagnostics
         if: always()
