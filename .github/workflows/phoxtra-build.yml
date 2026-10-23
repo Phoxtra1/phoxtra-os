@@ -97,8 +97,9 @@ jobs:
               handle.write(sector)
           PY
           sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
+          # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
           qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
-            -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,readonly=on \
+            -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
             -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
