@@ -181,6 +181,30 @@ void* pmm_alloc_page(void) {
     return NULL;
 }
 
+void* pmm_alloc_contiguous_pages(size_t page_count) {
+    if (!page_count || page_count > total_pages_count) return NULL;
+    const uint64_t first_usable = RESERVED_LOW_BYTES / PAGE_SIZE;
+    if ((uint64_t)page_count > total_pages_count - first_usable) return NULL;
+
+    for (uint64_t first = first_usable;
+         first <= total_pages_count - (uint64_t)page_count; ++first) {
+        size_t run = 0;
+        while (run < page_count && !bitmap_test(first + run)) ++run;
+        if (run != page_count) {
+            first += run; /* Skip the known-free prefix and the occupied page. */
+            continue;
+        }
+        for (size_t i = 0; i < page_count; ++i) {
+            bitmap_set(first + i);
+            allocated_set(first + i);
+        }
+        free_pages_count -= page_count;
+        return (void*)(uintptr_t)(first * PAGE_SIZE);
+    }
+    klog(LOG_ERROR, "PMM: no contiguous physical run satisfies request");
+    return NULL;
+}
+
 void pmm_free_page(void* ptr) {
     uint64_t addr = (uint64_t)(uintptr_t)ptr;
     if (!ptr || (addr & (PAGE_SIZE - 1ULL)) != 0) return;
