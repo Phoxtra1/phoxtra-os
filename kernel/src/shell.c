@@ -195,16 +195,16 @@ static void cmd_help(void) {
 static void cmd_about(void) {
     console_write("\nAKWAABA - PHOXTRA OS\n");
     console_write("Secure Identity Operating System\n");
-    console_write("Version : v1.0.0 Commercial Release (Phase 6 Production Launch)\n");
+    console_write("Version : Experimental bootable test prototype\n");
     console_write("Arch    : x86_64 64-bit Long Mode\n");
     console_write("Features: Hardware TPM 2.0, CAC/MAC Security, TCP/IP, VBE GUI, ELF64 Runtime, SDK\n");
-    console_write("License : Phoxtra Enterprise LTS (2026-2031)\n\n");
+    console_write("Install : Not implemented; storage is volatile RAM only\n\n");
 }
 
 static void cmd_disks(void) {
-    console_write("\nBlock Storage Devices & Partitions:\n");
-    console_write("NAME       SECTORS      SIZE (MB)   TYPE\n");
-    console_write("---------  -----------  ----------  ---------\n");
+    console_write("\nBlock Devices (physical hardware is not connected to this storage layer):\n");
+    console_write("NAME       SECTORS      SIZE (MB)   TYPE / ACCESS\n");
+    console_write("---------  -----------  ----------  -------------------------\n");
 
     uint32_t count = blockdev_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -213,24 +213,26 @@ static void cmd_disks(void) {
         print_str_pad(dev->name, 11);
         print_dec(dev->total_sectors);
         console_write("        ");
-        uint64_t size_mb = (dev->total_sectors * dev->sector_size) / (1024 * 1024);
+        uint64_t size_mb = (dev->total_sectors * dev->sector_size) / (1024u * 1024u);
         print_dec(size_mb);
         console_write("           ");
-        if (dev->flags & BLOCKDEV_FLAG_PARTITION) {
-            console_write("Partition\n");
-        } else {
-            console_write("Master Disk (AHCI/NVMe)\n");
-        }
+        if (dev->flags & BLOCKDEV_FLAG_PARTITION) console_write("Partition");
+        else if (dev->flags & BLOCKDEV_FLAG_SIMULATED) console_write("Volatile RAM test disk");
+        else console_write("Unclassified device");
+        if (dev->flags & BLOCKDEV_FLAG_READONLY) console_write(" [READ-ONLY]");
+        console_write("\n");
     }
     console_write("\n");
 }
 
 static void cmd_storage(void) {
-    console_write("\n=== Phoxtra OS Milestone v0.7.0 Verification ===\n");
-    console_write("[1/3] AHCI SATA / NVMe Storage Driver Probing .......... OK\n");
-    console_write("[2/3] MBR & GPT Partition Parser (sata0p1, p2, p3) ..... OK\n");
-    console_write("[3/3] Ext2 & FAT32 Volume Mounting (/boot, /usr, /home)  OK\n");
-    console_write("\nStatus: Storage Drivers & Block Filesystem Layer VERIFIED\n\n");
+    console_write("\n=== Phoxtra Storage Safety Status ===\n");
+    console_write("[1/4] Physical SATA/NVMe controller driver ........ NOT IMPLEMENTED\n");
+    console_write("[2/4] Current block device ....................... Volatile RAM test disk\n");
+    console_write("[3/4] Partition-table scan ........................ READ-ONLY\n");
+    console_write("[4/4] Ext2/FAT32 support .......................... Demo adapters only\n");
+    console_write("\nSafety: internal-disk installation and partition formatting are unavailable.\n");
+    console_write("No persistent physical storage is mounted by this build.\n\n");
 }
 
 static void cmd_tpm(void) {
@@ -627,14 +629,10 @@ static void cmd_pci(void) {
 }
 
 static void cmd_installer(void) {
-    console_write("\n=== PHOXTRA BARE-METAL INSTALLATION WIZARD ===\n");
-    console_write("Launching Phoxtra OS Installer Wizard...\n");
-    installer_start();
-    console_write("[STEP 1/4] Phoxtra Identity Brand Welcome ...... READY\n");
-    console_write("[STEP 2/4] Target NVMe/SATA Disk Selection ..... OK\n");
-    console_write("[STEP 3/4] GPT/MBR Partition Table Format ....... READY\n");
-    console_write("[STEP 4/4] System Core Copy & Bootloader ....... READY\n");
-    console_write("Installer launched in GUI Window Manager (phoxtra-wm).\n\n");
+    klog(LOG_WARNING, "Installer request rejected: disk installation and partition formatting are not implemented");
+    console_write("\nPhoxtra OS disk installation is not available in this build.\n");
+    console_write("This is a live USB test prototype, not an installer.\n");
+    console_write("No internal disk will be prepared by the installer command.\n\n");
 }
 
 static void cmd_theme(const char* arg) {
