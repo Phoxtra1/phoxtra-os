@@ -188,19 +188,19 @@ static void cmd_help(void) {
     console_write("  pid        - Current process ID\n");
     console_write("  memory     - Memory usage summary\n");
     console_write("  cpu        - CPU and scheduler state\n");
-    console_write("  usermode   - Test Ring 3 switch, MSR fast syscall & memory isolation\n");
+    console_write("  usermode   - Show user-mode runtime implementation status\n");
     console_write("  disks      - List storage block devices & partition table\n");
     console_write("  storage    - Milestone 0.7.0 Storage Driver & Filesystem Audit\n");
-    console_write("  tpm        - TPM 2.0 SPI Hardware Root of Trust Attestation Status\n");
+    console_write("  tpm        - Show TPM hardware-driver status\n");
     console_write("  identity   - Cryptographic SHA-256 Process Identity Status\n");
     console_write("  audit      - Immutable Kernel Security Event Audit Logger\n");
     console_write("  caps       - Capability Access Control (CAC) Bitmask Permissions\n");
     console_write("  mac        - Mandatory Access Control (MAC) Security Domains\n");
-    console_write("  stackguard - Stack Canary & Kernel Guard Page Protection Audit\n");
+    console_write("  stackguard - Show stack/guard-page implementation status\n");
     console_write("  ifconfig   - Display active network interfaces and IP addresses\n");
-    console_write("  ping       - Send ICMP Echo Request to remote IPv4 host\n");
+    console_write("  ping       - Show current ICMP diagnostic limitations\n");
     console_write("  netstat    - List BSD Sockets and TCP/UDP transport protocol connections\n");
-    console_write("  dhcp       - Request dynamic IPv4 address lease via DHCP\n");
+    console_write("  dhcp       - Show DHCP lease support status\n");
     console_write("  dns        - Resolve hostname domain to IPv4 address\n");
     console_write("  elf        - Parse & load ELF64 executable binary program\n");
     console_write("  libc       - Audit native C standard library (phoxtra-libc) POSIX API\n");
@@ -272,33 +272,17 @@ static void cmd_storage(void) {
 }
 
 static void cmd_tpm(void) {
-    console_write("\n=== TPM 2.0 SPI Hardware Root of Trust ===\n");
+    console_write("\n=== TPM Hardware Status ===\n");
     tpm2_dev_t* dev = tpm2_get_device();
-    if (!dev) {
-        console_write("TPM 2.0 Hardware: Not Found\n\n");
+    if (!dev || !dev->hardware_attested) {
+        console_write("TPM hardware driver : NOT CONNECTED\n");
+        console_write("Hardware attestation: UNAVAILABLE\n");
+        console_write("PCR operations       : UNAVAILABLE\n\n");
         return;
     }
-
-    console_write("Hardware Status  : ");
-    console_write(dev->hardware_attested ? "Attested & Verified (SPI MMIO 0xFED40000)\n" : "Unverified\n");
-    console_write("Vendor Device    : ");
-    console_write(dev->vendor_id);
-    console_write("\nActive PCR Slots : ");
-    print_dec(dev->active_pcrs);
-    console_write("\n\nPCR Measurements (SHA-256 Digests):\n");
-
-    static const char hex_chars[] = "0123456789abcdef";
-    for (uint32_t pcr = 0; pcr < 4; pcr++) {
-        console_write("  PCR["); print_dec(pcr); console_write("] : ");
-        uint8_t digest[32];
-        tpm2_pcr_read(pcr, digest);
-        for (int i = 0; i < 16; i++) {
-            console_put_char(hex_chars[(digest[i] >> 4) & 0x0F]);
-            console_put_char(hex_chars[digest[i] & 0x0F]);
-        }
-        console_write("...\n");
-    }
-    console_write("\n");
+    console_write("Hardware attestation: reported by connected driver\n");
+    console_write("Vendor device        : "); console_write(dev->vendor_id); console_write("\n");
+    console_write("Active PCR slots     : "); print_dec(dev->active_pcrs); console_write("\n\n");
 }
 
 static void cmd_identity(void) {
@@ -404,70 +388,46 @@ static void cmd_mac(void) {
 }
 
 static void cmd_stackguard(void) {
-    console_write("\n=== Stack Canary & Kernel Guard Page Engine ===\n");
-    console_write("Stack Guard State : ");
-    console_write(stack_guard_is_active() ? "ACTIVE (Hardware Entropy Seeded)\n" : "INACTIVE\n");
-    console_write("Canary Guard Seed : 0x");
-
-    static const char hex_chars[] = "0123456789abcdef";
-    for (int i = 56; i >= 0; i -= 8) {
-        uint8_t byte = (__stack_chk_guard >> i) & 0xFF;
-        console_put_char(hex_chars[(byte >> 4) & 0x0F]);
-        console_put_char(hex_chars[byte & 0x0F]);
-    }
-    console_write("\nGuard Page Status : 4KB Unmapped Page Boundaries below Stack Frames\n");
-    console_write("ASLR Base Entropy : Enabled (Page-aligned base randomization)\n\n");
+    console_write("\n=== Stack and Memory Protection Status ===\n");
+    console_write("Stack canary : prototype fallback only; compiler stack protection is not enabled\n");
+    console_write("Guard pages  : NOT IMPLEMENTED\n");
+    console_write("ASLR         : NOT IMPLEMENTED (trusted entropy source unavailable)\n\n");
 }
 
 static void cmd_ifconfig(void) {
-    console_write("\n=== Phoxtra Network Interfaces ===\n");
-    netdev_t* dev = netdev_get_default();
-    if (!dev) {
-        console_write("No network interface active.\n\n");
-        return;
+    console_write("\n=== Hardware Network Interfaces ===\n");
+    uint32_t count = netdev_count();
+    if (!count) { console_write("No supported hardware network interface is registered.\n\n"); return; }
+    for (uint32_t n = 0; n < count; ++n) {
+        netdev_t* dev = netdev_get_by_index(n);
+        if (!dev) continue;
+        console_write(dev->name); console_write(": link ");
+        console_write((dev->flags & 0x01u) ? "UP\n" : "DOWN\n");
+        if (dev->ip_addr) {
+            char ip[16], mask[16], gateway[16];
+            uint32_to_ip(dev->ip_addr, ip); uint32_to_ip(dev->netmask, mask); uint32_to_ip(dev->gateway, gateway);
+            console_write("  inet "); console_write(ip); console_write(" netmask "); console_write(mask);
+            console_write(" gateway "); console_write(gateway); console_write("\n");
+        } else console_write("  IPv4: not configured (DHCP is not implemented)\n");
+        console_write("  ether ");
+        static const char hex[] = "0123456789abcdef";
+        for (int i = 0; i < ETH_ALEN; ++i) {
+            console_put_char(hex[(dev->mac_addr[i] >> 4) & 0x0f]);
+            console_put_char(hex[dev->mac_addr[i] & 0x0f]);
+            if (i + 1 < ETH_ALEN) console_put_char(':');
+        }
+        console_write("\n  RX packets "); print_dec(dev->rx_packets); console_write(" bytes "); print_dec(dev->rx_bytes);
+        console_write("\n  TX packets "); print_dec(dev->tx_packets); console_write(" bytes "); print_dec(dev->tx_bytes);
+        console_write("\n");
     }
-
-    console_write("eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500\n");
-    console_write("        inet ");
-    char ip_buf[16];
-    uint32_to_ip(dev->ip_addr, ip_buf);
-    console_write(ip_buf);
-
-    console_write("  netmask ");
-    uint32_to_ip(dev->netmask, ip_buf);
-    console_write(ip_buf);
-
-    console_write("  gateway ");
-    uint32_to_ip(dev->gateway, ip_buf);
-    console_write(ip_buf);
-
-    console_write("\n        ether ");
-    static const char hex_chars[] = "0123456789abcdef";
-    for (int i = 0; i < 6; i++) {
-        console_put_char(hex_chars[(dev->mac_addr[i] >> 4) & 0x0F]);
-        console_put_char(hex_chars[dev->mac_addr[i] & 0x0F]);
-        if (i < 5) console_put_char(':');
-    }
-    console_write("  txqueuelen 1000  (Ethernet Intel 82540EM e1000)\n");
-    console_write("        RX packets "); print_dec(dev->rx_packets); console_write("  bytes "); print_dec(dev->rx_bytes); console_write("\n");
-    console_write("        TX packets "); print_dec(dev->tx_packets); console_write("  bytes "); print_dec(dev->tx_bytes); console_write("\n\n");
+    console_write("\n");
 }
 
 static void cmd_ping(const char* target) {
-    console_write("\nPING ");
-    if (!target || target[0] == '\0') target = "192.168.1.1";
-    console_write(target);
-    console_write(" 56(84) bytes of data.\n");
-
-    netdev_t* dev = netdev_get_default();
-    uint32_t ip = ip_to_uint32(192, 168, 1, 1);
-    icmp_ping(dev, ip);
-
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=1 ttl=64 time=0.42 ms\n");
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=2 ttl=64 time=0.38 ms\n");
-    console_write("64 bytes from "); console_write(target); console_write(": icmp_seq=3 ttl=64 time=0.41 ms\n");
-    console_write("--- "); console_write(target); console_write(" ping statistics ---\n");
-    console_write("3 packets transmitted, 3 received, 0% packet loss, time 2002ms\n\n");
+    console_write("\n=== ICMP Diagnostics Status ===\n");
+    if (target && target[0]) { console_write("Requested target: "); console_write(target); console_write("\n"); }
+    console_write("The current prototype has no complete IPv4 receive path or ICMP reply/timeout handling.\n");
+    console_write("No successful ping or packet-loss result can be reported by this build.\n\n");
 }
 
 static void cmd_netstat(void) {
@@ -481,65 +441,40 @@ static void cmd_netstat(void) {
 }
 
 static void cmd_dhcp(void) {
-    console_write("\n=== DHCP Dynamic IP Lease Request ===\n");
+    console_write("\n=== DHCP Lease Status ===\n");
     netdev_t* dev = netdev_get_default();
-    dhcp_request_lease(dev);
-    console_write("Interface eth0 configured dynamically via DHCP.\n\n");
+    if (!dev) { console_write("No supported hardware network interface is active.\n\n"); return; }
+    int result = dhcp_request_lease(dev);
+    if (result == 0) console_write("DHCP lease obtained and applied.\n\n");
+    else console_write("DHCP is not implemented end-to-end; no address or lease was assigned.\n\n");
 }
 
 static void cmd_dns(const char* host) {
-    console_write("\n=== DNS Hostname Resolution ===\n");
-    if (!host || host[0] == '\0') host = "phoxtra.org";
-    console_write("Resolving hostname '"); console_write(host); console_write("' via DNS (8.8.8.8)...\n");
-
+    console_write("\n=== DNS Resolution Status ===\n");
+    if (!host || !host[0]) { console_write("Usage: dns <hostname>\n\n"); return; }
+    console_write("Hostname: "); console_write(host); console_write("\n");
     netdev_t* dev = netdev_get_default();
     uint32_t resolved_ip = dns_resolve_hostname(dev, host);
-
-    char ip_str[16];
-    uint32_to_ip(resolved_ip, ip_str);
-    console_write("Name    : "); console_write(host); console_write("\n");
-    console_write("Address : "); console_write(ip_str); console_write("\n\n");
-}
-
-static void cmd_elf(const char* path) {
-    console_write("\n=== ELF64 Executable Binary Loader Audit ===\n");
-    if (!path || path[0] == '\0') path = "/boot/phoxtra.elf";
-    console_write("Target Binary   : "); console_write(path); console_write("\n");
-
-    // Construct mock ELF64 header buffer for demonstration
-    uint8_t mock_elf_buf[128];
-    for (int i = 0; i < 128; i++) mock_elf_buf[i] = 0;
-    mock_elf_buf[0] = 0x7F; mock_elf_buf[1] = 'E'; mock_elf_buf[2] = 'L'; mock_elf_buf[3] = 'F';
-    mock_elf_buf[4] = 2; // ELF64
-    mock_elf_buf[5] = 1; // LSB Little Endian
-
-    elf64_header_t* hdr = (elf64_header_t*)mock_elf_buf;
-    hdr->e_machine  = 0x3E; // x86_64
-    hdr->e_entry    = 0x4001A0ULL;
-    hdr->e_phoff    = 64;
-    hdr->e_phnum    = 2;
-
-    uint64_t entry_point = 0;
-    if (elf_load_binary(mock_elf_buf, sizeof(mock_elf_buf), &entry_point) == 0) {
-        console_write("ELF Magic       : \\x7fELF (Class 2 ELF64 LSB)\n");
-        console_write("Architecture    : AMD x86-64 (0x3E)\n");
-        console_write("Program Segments: 2 PT_LOAD Segments mapped to VMM\n");
-        console_write("Entry Point     : 0x4001A0 (Ring 3 User Gate)\n");
-        console_write("Dynamic Linker  : /lib64/ld-phoxtra.so.1 (Resolved)\n");
-        console_write("Execution State : SUCCESS (User process created)\n\n");
-    } else {
-        console_write("Failed to parse ELF binary header.\n\n");
+    if (!resolved_ip) console_write("DNS query/response processing is not implemented; no address was returned.\n\n");
+    else {
+        char ip_str[16]; uint32_to_ip(resolved_ip, ip_str);
+        console_write("Address: "); console_write(ip_str); console_write("\n\n");
     }
 }
 
+static void cmd_elf(const char* path) {
+    console_write("\n=== ELF Executable Loader Status ===\n");
+    if (path && path[0]) { console_write("Requested path: "); console_write(path); console_write("\n"); }
+    console_write("ELF image validation is available to the kernel API and regression tests.\n");
+    console_write("Loading segments into an isolated process address space and executing them are NOT IMPLEMENTED.\n");
+    console_write("This command does not fabricate a binary or report a process launch.\n\n");
+}
+
 static void cmd_libc(void) {
-    console_write("\n=== Phoxtra Native C Standard Library (phoxtra-libc) POSIX Audit ===\n");
-    console_write("Library Standard: POSIX.1-2017 C Standard Library Subset\n");
-    console_write("[stdio.h]  printf, puts, putchar, getchar, fopen, fclose, fread, fwrite .. OK\n");
-    console_write("[stdlib.h] malloc, free, exit, atoi, abs ................................. OK\n");
-    console_write("[string.h] strlen, strcpy, strncpy, strcmp, strncmp, memset, memcpy ...... OK\n");
-    console_write("[unistd.h] read, write, open, close, getpid, usleep, fork, execve ........ OK\n");
-    console_write("Syscall Dispatcher: MSR 0xC0000082 Fast Ring 3 -> Ring 0 Gateway .......... OK\n\n");
+    console_write("\n=== User-Space Runtime Status ===\n");
+    console_write("Kernel memory allocation exists, but a POSIX C library is not implemented.\n");
+    console_write("stdio, file-descriptor APIs, process startup, fork/exec and user-space syscalls are unavailable.\n");
+    console_write("Dynamic linking and shared-library loading are unavailable.\n\n");
 }
 
 static void cmd_gui(void) {
@@ -613,35 +548,21 @@ static void cmd_sdk(void) {
 }
 
 static void cmd_release(void) {
-    console_write("\n=== PHOXTRA OS v1.0.0 COMMERCIAL PRODUCTION LAUNCH ===\n");
-    console_write("Release Version : "); console_write(production_get_version()); console_write("\n");
-    console_write("Enterprise SLA  : "); console_write(production_get_lts_status()); console_write("\n");
-    console_write("Release Format  : Hybrid ISO, Live USB Installer (.img), QEMU (.qcow2), VHD (.vhd)\n");
-    console_write("Certification   : Intel Core & AMD Ryzen Bare-Metal Verified\n");
-    console_write("Security Engine : Hardware TPM 2.0 SPI, CAC/MAC Multi-Tenant Domain Protection\n");
-    console_write("Release Status  : PRODUCTION READY & COMMERCIALLY CERTIFIED\n\n");
+    console_write("\n=== Phoxtra OS Prototype Status ===\n");
+    console_write("Version : "); console_write(production_get_version()); console_write("\n");
+    console_write("Support : "); console_write(production_get_lts_status()); console_write("\n");
+    console_write("Physical laptop validation : PENDING\n");
+    console_write("Persistent storage/installer : NOT IMPLEMENTED\n");
+    console_write("Mobile phone build : NOT IMPLEMENTED\n");
+    console_write("Production certification : NOT PERFORMED\n\n");
 }
 
 static void cmd_userland(void) {
-    console_write("\n=== Ring 3 Userland Isolation & Transition Audit ===\n");
-    console_write("1. Ring Transition Stub (switch_to_user_mode) ... VERIFIED\n");
-    console_write("2. Per-Process Page Tables & CR3 Switch .......... VERIFIED\n");
-    
-    uint64_t user_pml4 = vmm_create_user_page_directory();
-    if (user_pml4) {
-        console_write("   - Per-Process PML4 Page Directory Allocated    : ");
-        print_dec(user_pml4);
-        console_write("\n");
-
-        int res1 = vmm_map_user_page(user_pml4, 0x0000000040000000ULL, 0x1000000ULL, VMM_FLAG_WRITABLE);
-        int res2 = vmm_map_user_page(user_pml4, 0x00007FFFF0000000ULL, 0x1001000ULL, VMM_FLAG_WRITABLE);
-        if (res1 == 0 && res2 == 0) {
-            console_write("3. User Memory Allocator (vmm_map_user_page) ..... VERIFIED\n");
-            console_write("   - Mapped User Code Page  : 0x0000000040000000 [User | Present | RW]\n");
-            console_write("   - Mapped User Stack Page : 0x00007FFFF0000000 [User | Present | RW]\n");
-        }
-    }
-    console_write("4. Ring 3 Security Isolation Test Engine ........ VERIFIED (PASSED)\n\n");
+    console_write("\n=== User-Mode Runtime Status ===\n");
+    console_write("Per-process address-space construction : INCOMPLETE\n");
+    console_write("Safe user stack and guard-page mapping : NOT IMPLEMENTED\n");
+    console_write("Executable loading and process launch  : NOT IMPLEMENTED\n");
+    console_write("Ring 3 isolation acceptance tests      : NOT PASSED\n\n");
 }
 
 static void cmd_pci(void) {
@@ -718,12 +639,10 @@ static void cmd_update(void) {
 }
 
 static void cmd_mobile(void) {
-    console_write("\n=== PHOXTRA MOBILE & TABLET OS COMPOSITOR (phoxtra-touch) ===\n");
-    console_write("Architecture Target : ARM64 (aarch64) / x86_64 Multi-Touch\n");
-    console_write("Display Geometry    : 1080x2400 Portrait / Auto-Rotation\n");
-    console_write("Touch Engine        : 10-Point Multi-Touch Gestures (ACTIVE)\n");
-    console_write("Power Management    : ARM64 Big.LITTLE Core Scheduler (OPTIMIZED)\n");
-    console_write("Mobile Webview      : Amineva & Adesua Mobile Touch Containers (READY)\n\n");
+    console_write("\n=== Phoxtra Mobile Platform Status ===\n");
+    console_write("Current boot target : x86_64 prototype\n");
+    console_write("ARM64 phone build   : NOT IMPLEMENTED\n");
+    console_write("Touch drivers, power management and phone boot path are not available in this build.\n\n");
 }
 
 static void cmd_dipa(const char* query) {
@@ -750,15 +669,17 @@ static void cmd_phoxair(void) {
 }
 
 static void cmd_verify(const char* arg) {
-    console_write("\n=== PHOXTRA VERIFY CRYPTOGRAPHIC AUTHENTICATOR ===\n");
-    if (arg && arg[0]) {
-        console_write("Authenticating target: "); console_write(arg); console_write(" ...\n");
-        verify_file_signature(arg, "SHA256-GENUINE");
-        console_write("Result: 100% Genuine & Authentic (PhoxtraID Verified)\n\n");
-    } else {
-        console_write("Status: Phoxtra Verify Daemon ACTIVE\n");
-        console_write("Usage : verify <file/document_id>\n\n");
+    console_write("\n=== Phoxtra Verification Status ===\n");
+    if (!arg || !arg[0]) {
+        console_write("File-signature and document-authenticity backends are not connected.\n");
+        console_write("Usage: verify <file> (will remain unavailable until a trusted verifier exists)\n\n");
+        return;
     }
+    console_write("Target: "); console_write(arg); console_write("\n");
+    if (verify_file_signature(arg, "") != 0)
+        console_write("Result: verified by the configured verifier.\n\n");
+    else
+        console_write("Result: NOT VERIFIED; cryptographic verification is unavailable.\n\n");
 }
 
 static void cmd_entitlements(void) {
@@ -854,13 +775,10 @@ static void cmd_cpu(void) {
 }
 
 static void cmd_usermode(void) {
-
-    console_write("\n=== Phoxtra OS Milestone v0.6.0 Verification ===\n");
-    console_write("[1/4] GDT Ring 3 Descriptors (0x1B Code, 0x23 Data) ... OK\n");
-    console_write("[2/4] MSR Fast Syscall (STAR/LSTAR 0xC0000082) ......... OK\n");
-    console_write("[3/4] Per-Process CR3 Page Directory Isolation ......... OK\n");
-    console_write("[4/4] User Stack Allocation (0x7FFFF0000000) ........... OK\n");
-    console_write("\nStatus: User Mode Transition & Memory Isolation VERIFIED\n\n");
+    console_write("\n=== User-Mode Validation Status ===\n");
+    console_write("The kernel has an experimental syscall entry path, but there is no complete user-mode process runtime.\n");
+    console_write("Ring transitions, per-process isolation, executable launch and return-to-kernel behavior are NOT VALIDATED.\n");
+    console_write("No user-mode isolation test is marked passed.\n\n");
 }
 
 static void cmd_vfs(void) {
