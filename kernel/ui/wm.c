@@ -74,6 +74,8 @@ static void wm_open_application_center(uint32_t selected_index, uint8_t detail) 
     if (!app_win) return;
     app_view_detail = detail;
     app_selected_index = selected_index;
+    klog(LOG_INFO, detail ? "Application Center opened application details" : "Application Center opened");
+    if (detail && selected_index == 5u) klog(LOG_INFO, "Amineva Workspace entry opened");
     app_win->active = 1;
     app_win->minimized = 0;
     compositor_raise_window(app_win);
@@ -308,7 +310,7 @@ static void wm_handle_key(char key) {
         return;
     }
     if (key == 'a' || key == 'A') { wm_open_application_center(0u, 0u); return; }
-    if (key == 'w' || key == 'W') { wm_open_application_center(6u, 1u); return; }
+    if (key == 'w' || key == 'W') { wm_open_application_center(5u, 1u); return; }
     if ((key == 'b' || key == 'B') && app_win && app_win->active && app_view_detail) { app_view_detail = 0; return; }
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
     if (key == 's' || key == 'S') { wm_restore_window(sec_win); return; }
