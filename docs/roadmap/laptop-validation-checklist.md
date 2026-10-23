@@ -57,33 +57,20 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 - [ ] Taskbar/dock actions restore the expected window.
 - [ ] No overlapping, clipped, or stale UI remains after interactions.
 
-**Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Do not treat this as persistent-storage validation.
-
 ## 5. Application environment and integrated workspace
 
-- [ ] Press `A` to open Application Center and verify it renders without permanently covering or corrupting the desktop.
-- [ ] Confirm Shell Console, Files, and System Status open their existing native panels.
-- [ ] Inspect Phoxtra and external product entries; catalogue visibility must not be mistaken for successful application launch.
-- [ ] Press `W` to inspect Amineva Workspace and verify Docs, Sheets, Slides, Forms, and Drive are described as one integrated suite.
-- [ ] Press `B` to return to the catalogue and `Q` to close it; verify desktop input continues to work.
-- [ ] Record external launch hand-off, account sign-in, shared files, marketplace installation, and offline support as not implemented unless each is separately connected and tested.
+- [ ] Press `A` to open the Application Center and verify it renders without covering or corrupting the desktop permanently.
+- [ ] Confirm native entries for Shell Console, Files, and System Status open the expected existing panels.
+- [ ] Inspect Phoxtra application entries and verify each row shows an accurate availability state.
+- [ ] Open the Amineva Workspace entry with `W`; verify the Docs, Sheets, Slides, Forms, Drive, and collaboration scope is described correctly.
+- [ ] Use `B` to return to the catalogue and `Q` to close it; verify the previous desktop window and input still work.
+- [ ] Confirm Amnewsworld, AgroClimate, Adesua, and DataLens are clearly marked as integrations pending until actual launch hand-off is implemented.
+- [ ] Do not mark external Amineva apps as launched merely because their catalogue entries are visible.
+- [ ] Do not claim account sign-in, shared files, online service hand-off, or offline support unless each capability is connected and separately tested.
 
-**Integration limitation:** Application Center currently provides native panel entry points and planned integration metadata. It does not yet launch external Amineva products, provide the full Amineva Workspace runtime, or install third-party apps.
+**Integration limitation:** The Application Center currently provides native panel entry points and a catalogue of planned integrations. It does not yet launch the external Amineva applications or provide the full Amineva Workspace runtime. Record those as **Not implemented / Blocked**, not as a laptop hardware defect.
 
-**Storage warning:** The current VFS is RAM-backed; created files are temporary and lost at reboot. Record storage-device detection only. Do not write to or format the laptop's internal drive.
-
-## 5. Application Center and publisher boundaries
-
-- [ ] Confirm Phoxtra native panels/system applications are identified as published by Phoxtra.
-- [ ] Confirm Amineva Global entries are limited to AgroClimate, Adesua, DataLens, Inventra, Sikasem, and Amineva Workspace.
-- [ ] Confirm Amineva Workspace is presented as one integrated productivity suite covering Docs, Sheets, Slides, and Drive (plus Forms).
-- [ ] Confirm Amnewsworld News and Amnewsworld Radio and Media are published by independent Amnewsworld, not Amineva Global.
-- [ ] Confirm the planned App Marketplace is separate from native apps and does not claim an install flow exists.
-- [ ] Inspect each detail page for distinct publisher, category, application type, launch destination, and state.
-- [ ] Confirm external products with no configured destination are marked planned and cannot falsely appear launched.
-- [ ] Use `W` to open Amineva Workspace, `B` to return to the catalogue, `[` and `]` to paginate, and `Q` to close the catalogue.
-
-**Integration limitation:** Catalogue metadata does not implement external launch hand-off, app installation, shared accounts, persistent storage, or offline support. These capabilities remain unverified until implemented and tested.
+**Storage warning:** The current VFS is RAM-backed. Files and folders created during this test are temporary and are expected to be lost on reboot. Check and record whether storage controllers/devices are detected, but do not write to or format the laptop's internal drive. This checklist does not treat RAM-backed files as persistent-storage validation.
 
 ## 6. Reliability and evidence
 
