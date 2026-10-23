@@ -22,6 +22,9 @@ uint64_t vmm_virt_to_phys(uint64_t virt);
 uint64_t vmm_create_user_page_directory(void);
 void vmm_switch_page_directory(uint64_t cr3_phys);
 uint64_t vmm_get_kernel_page_directory(void);
+/* User mappings are rejected inside shared supervisor page-table slots.
+   The current bootstrap identity map occupies the low 4 GiB; mapping user
+   images there requires private page-table splitting before Ring 3 is enabled. */
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags);
 
 #ifdef __cplusplus
