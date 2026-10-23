@@ -1,24 +1,22 @@
 #include "heap_audit.h"
 #include "heap.h"
 #include "../log/logger.h"
-
 void heap_audit_init(void) {
-    klog(LOG_INFO, "Initializing Kernel Memory Leak Auditor & Heap Integrity Tracker...");
+    klog(LOG_WARNING, "Only allocation smoke tests are available; global leak tracking is not implemented");
 }
-
 int heap_audit_verify_allocations(void) {
-    klog(LOG_INFO, "Running Kernel Heap Memory Audit...");
-    // Perform test allocation and deallocation cycle
-    void* ptr1 = kmalloc(1024);
-    void* ptr2 = kmalloc(2048);
-
-    if (ptr1) kfree(ptr1);
-    if (ptr2) kfree(ptr2);
-
-    klog(LOG_INFO, "Heap Memory Leak Audit PASSED: 0 orphaned pointers, 0 memory leaks detected.");
+    void* a = kmalloc(1024);
+    void* b = kmalloc(2048);
+    if (!a || !b) {
+        if (a) kfree(a);
+        if (b) kfree(b);
+        klog(LOG_ERROR, "Heap allocation smoke test failed");
+        return 0;
+    }
+    kfree(a); kfree(b);
+    klog(LOG_INFO, "Heap allocation/free smoke test passed; global leak count was not measured");
     return 1;
 }
-
 uint32_t heap_audit_get_used_bytes(void) {
-    return 4096; // 4KB heap metadata
+    return 0xFFFFFFFFu; /* Explicitly unavailable; no heap accounting exists. */
 }
