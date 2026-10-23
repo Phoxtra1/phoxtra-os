@@ -53,6 +53,10 @@ jobs:
         run: |
           cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
           /tmp/test_partition_validation
+      - name: Test read-only ext2 filesystem
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_ext2_readonly.c kernel/storage/ext2.c kernel/vfs/vfs.c kernel/storage/blockdev.c -o /tmp/test_ext2_readonly
+          /tmp/test_ext2_readonly
       - name: Audit network implementation integrity
         run: python3 scripts/check_network_integrity.py
       - name: Audit prototype claim integrity
