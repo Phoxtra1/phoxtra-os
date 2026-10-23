@@ -100,6 +100,12 @@ jobs:
           with image.open('r+b') as handle:
               handle.write(sector)
           PY
+          # Format the partition as ext2 with directory indexing disabled for the supported read-only subset.
+          truncate -s 61440000 /tmp/phoxtra-ext2-partition.img
+          mke2fs -q -t ext2 -F -O ^dir_index /tmp/phoxtra-ext2-partition.img
+          printf 'Phoxtra on-disk ext2 read-only integration test.\n' > /tmp/phoxtra-ext2-file.txt
+          debugfs -w -R 'write /tmp/phoxtra-ext2-file.txt phoxtraci' /tmp/phoxtra-ext2-partition.img >/dev/null 2>&1
+          dd if=/tmp/phoxtra-ext2-partition.img of=/tmp/phoxtra-ahci-test.img bs=512 seek=2048 conv=notrunc status=none
           sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
           # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
           qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
@@ -132,9 +138,17 @@ jobs:
           grep -q 'AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled' /tmp/phoxtra-serial.log
           grep -q 'AHCI: confirmed read-only sector I/O on SATA device' /tmp/phoxtra-serial.log
           grep -q 'Hardware probe: non-simulated block devices are registered' /tmp/phoxtra-serial.log
+          grep -Fq 'Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
+          # Read a real file from the physical-partition path before entering the desktop.
+          { for key in c a t spc slash s a t a 0 p 1 slash p h o x t r a c i ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
