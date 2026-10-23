@@ -18,7 +18,7 @@ typedef struct phoxtra_hardware_report {
     uint32_t pci_usb_controllers;
     uint32_t block_devices;
     uint32_t simulated_block_devices;
-    uint32_t registered_physical_block_devices;
+    uint32_t registered_non_simulated_block_devices;
     uint32_t display_width;
     uint32_t display_height;
     uint32_t display_bits_per_pixel;
