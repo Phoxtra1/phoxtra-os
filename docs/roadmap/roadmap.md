@@ -98,3 +98,67 @@ The objective of this phase is to build the visual and interactive layers for en
 
 4. **Developer SDK**
    - Publish developer header files, C standard library port (e.g., `newlib` or `musl`), and standard compiler targets.
+
+---
+
+### Phase 6: Application Environment & Integrated Workspace
+The objective is to make Phoxtra a usable operating system, not just a bootable kernel or desktop demo. Users must be able to discover, launch, use, and manage supported applications through a coherent application environment.
+
+1. **Phoxtra Application Access**
+   - Build the application launcher/catalogue and a consistent way for users to find, open, close, and manage installed applications.
+   - Define application packaging, installation/update flow, launch permissions, and clear handling for unsupported or failed applications.
+   - Make the environment ready for applications developed specifically for Phoxtra as the user-space runtime and executable-loading capabilities mature.
+
+2. **Integrated Amineva Global Applications**
+   - Establish the integration model for supported Amineva Global applications and services.
+   - Provide clear entry points for integrated applications without presenting web links as if they were native apps; use the appropriate native, web, or service integration for each product.
+   - Keep application integration modular so individual products can be added, updated, or removed without destabilizing the OS.
+
+3. **Amineva Workspace**
+   - Include Amineva Workspace as a first-class workspace experience in the Phoxtra environment.
+   - Define how users access its supported productivity tools and shared services, including how sign-in, files, and application hand-off work where those capabilities are implemented.
+   - Do not claim offline support, cross-app file access, or account integration is complete until each capability is implemented and tested.
+
+4. **Application Security & Compatibility**
+   - Connect application launch to Phoxtra Shield's permission and integrity controls as those controls become available.
+   - Define supported application interfaces and compatibility expectations; provide useful error messages and logs for application failures.
+   - Test the application launcher and integrated apps under normal use, restart, and failure conditions.
+
+---
+
+### Phase 7: Complete OS Validation on a Standard Laptop
+**This is a mandatory release gate before Phoxtra is placed on dedicated Phoxtra-designed hardware. It must not be skipped or replaced by a successful ISO build alone.** Use a standard laptop as the real-machine validation target after the OS foundation, desktop, storage, and planned application environment are ready enough for end-to-end testing.
+
+1. **Boot & Hardware Compatibility**
+   - Boot from the prepared installation/live media on a standard laptop, not only in QEMU.
+   - Verify boot reliability, display modes, keyboard, pointer/touchpad where supported, storage detection, reboot and shutdown behaviour.
+   - Record hardware-specific limitations and distinguish unsupported devices from OS defects.
+
+2. **Desktop & Everyday Interaction**
+   - Verify login/session entry where implemented, desktop rendering, pointer movement without trails or artifacts, keyboard input, icons, folders, file manager, window movement and controls, taskbar, themes, and settings.
+   - Exercise file operations and persistence across restart when disk-backed storage is implemented.
+   - Check stability over repeated boots and extended interactive use.
+
+3. **System & Application End-to-End Tests**
+   - Exercise kernel diagnostics, memory management, interrupt/input handling, scheduling and user-space execution as each becomes implemented.
+   - Launch and use supported Phoxtra applications, integrated Amineva Global applications, and Amineva Workspace features that are included in the build.
+   - Check failure recovery, logs, permissions, storage behaviour, and regressions after updates.
+
+4. **Acceptance Record**
+   - Keep a test checklist with laptop model/specification, boot method, working features, defects, workarounds, and retest results.
+   - Fix release-blocking defects and repeat failed tests before declaring the laptop milestone passed.
+   - Do not begin the first dedicated Phoxtra hardware integration until this gate passes; laptop testing is required evidence, not an optional later task.
+
+---
+
+### Phase 8: First Dedicated Phoxtra Hardware Integration
+Only after the standard-laptop validation gate passes, adapt and validate Phoxtra OS on the first dedicated Phoxtra device. Start with a documented target specification and bring-up plan, then verify boot firmware, CPU/board support, display, input, storage, power, thermals, and device-specific drivers. Keep a fallback/recovery method and rerun the relevant OS and application acceptance tests on the target hardware.
+
+---
+
+## Roadmap Integrity Rules
+- The phases above are cumulative: later phases do not erase earlier work or bypass unfinished prerequisites.
+- Keep desktop polish and ISO/QEMU checks as early verification steps, but do not treat them as a substitute for a complete laptop test.
+- Track each milestone as **not started**, **in progress**, **blocked**, or **passed** based on evidence. Never mark a build, boot, application, or hardware test as passed unless it was actually run and its result recorded.
+- Dedicated Phoxtra hardware comes after the full standard-laptop validation gate. The intended end state includes a usable application environment, Phoxtra applications, integrated Amineva Global applications, and Amineva Workspace.
+
