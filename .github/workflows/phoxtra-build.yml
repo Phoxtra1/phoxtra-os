@@ -73,6 +73,35 @@ jobs:
             sleep 0.25
           done
           [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
+          # Move away and back, then compare screenshots to catch stale cursor pixels.
+          { printf 'mouse_set 0\n'; sleep 0.2; printf 'screendump /tmp/phoxtra-cursor-before.ppm\n'; sleep 0.5; printf 'mouse_move 40 40\n'; sleep 0.5; printf 'mouse_move -40 -40\n'; sleep 0.5; printf 'screendump /tmp/phoxtra-cursor-after.ppm\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 0.5
+          python3 - <<'PY'
+          from pathlib import Path
+          def ppm_pixels(path):
+              data = Path(path).read_bytes()
+              i, tokens = 0, []
+              while len(tokens) < 4:
+                  while i < len(data) and data[i] in b' \\t\\r\\n':
+                      i += 1
+                  if i < len(data) and data[i] == ord('#'):
+                      while i < len(data) and data[i] not in b'\\r\\n':
+                          i += 1
+                      continue
+                  start = i
+                  while i < len(data) and data[i] not in b' \\t\\r\\n':
+                      i += 1
+                  tokens.append(data[start:i])
+              magic, width, height, maxval = tokens
+              while i < len(data) and data[i] in b' \\t\\r\\n':
+                  i += 1
+              assert magic == b'P6' and int(maxval) == 255
+              return (width, height, maxval), data[i:]
+          header_a, pixels_a = ppm_pixels('/tmp/phoxtra-cursor-before.ppm')
+          header_b, pixels_b = ppm_pixels('/tmp/phoxtra-cursor-after.ppm')
+          assert header_a == header_b and pixels_a == pixels_b, 'cursor movement left stale framebuffer pixels'
+          print('Cursor round-trip screenshot comparison passed')
+          PY
           # Select the PS/2 mouse and move from its initial center to the first folder cell (~635,150).
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 0\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
