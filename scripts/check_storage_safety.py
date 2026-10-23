@@ -28,8 +28,10 @@ if "blockdev_register" not in blockdev or "duplicate pointer or name" not in blo
 if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
     errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
 for write_fn in ("ram_test_write_sectors", "ahci_write_sectors"):
-    write_match = re.search(r"\\bint\\s+" + write_fn + r"\\s*\\([^)]*\\)\\s*\\{([^}]*)\\}", ramdisk, re.S)
-    if not write_match or not re.search(r"\\breturn\\s+-1\\s*;", write_match.group(1)):
+    start = ramdisk.find("int " + write_fn + "(")
+    end = ramdisk.find("\n}", start) if start >= 0 else -1
+    body = ramdisk[start:end] if start >= 0 and end > start else ""
+    if not body or "return -1;" not in body:
         errors.append(f"{write_fn} must fail closed; storage writes are not implemented")
 for label, source in (("Ext2", ext2), ("FAT32", fat32)):
     if "file->size - offset" not in source:
