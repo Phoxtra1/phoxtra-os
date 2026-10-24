@@ -1,6 +1,7 @@
 #include "netdev.h"
 #include "ethernet.h"
 #include "tcp.h"
+#include "dhcp.h"
 #include "../log/logger.h"
 static netdev_t netdev_list[MAX_NETDEV_COUNT];
 static uint32_t registered_netdev_count;
@@ -31,8 +32,9 @@ void net_poll(void) {
                 (void)ethernet_receive_frame(dev, rx_frame, (uint32_t)length);
         }
     }
-    /* Retry half-open passive TCP handshakes even when no frame was queued this poll. */
+    /* Advance pending TCP handshakes and DHCP lease lifecycle after frame dispatch. */
     tcp_poll();
+    dhcp_poll();
 }
 uint16_t htons(uint16_t val) { return (uint16_t)((val << 8) | (val >> 8)); }
 uint16_t ntohs(uint16_t val) { return htons(val); }

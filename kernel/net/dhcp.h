@@ -11,11 +11,15 @@ typedef enum dhcp_state {
     DHCP_STATE_OFFER,
     DHCP_STATE_REQUEST,
     DHCP_STATE_BOUND,
+    DHCP_STATE_RENEWING,
+    DHCP_STATE_REBINDING,
     DHCP_STATE_FAILED
 } dhcp_state_t;
 void dhcp_init(void);
 int dhcp_request_lease(netdev_t* dev);
 dhcp_state_t dhcp_get_state(void);
+void dhcp_poll(void);
+uint32_t dhcp_get_lease_seconds(void);
 #ifdef __cplusplus
 }
 #endif

@@ -49,8 +49,20 @@ if "int ipv4_receive_packet(" not in ipv4 or "checksum_valid(packet, header_leng
     errors.append("IPv4 receive path must validate packet/header checksums before dispatch")
 if "ipv4_receive_packet(dev, payload, payload_len)" not in ethernet:
     errors.append("Ethernet must dispatch inbound IPv4 frames to the IPv4 validator")
-if "payload_len > 1472u" not in read("kernel/net/udp.c"):
-    errors.append("UDP transmit path must validate payload bounds")
+if "UDP_MAX_PAYLOAD 1472u" not in udp or "payload_len > UDP_MAX_PAYLOAD" not in udp:
+    errors.append("UDP transmit path must enforce the bounded maximum payload")
+if "declared_length != length" not in udp or "udp_checksum_valid" not in udp:
+    errors.append("UDP receive path must reject overlong datagrams and verify checksums")
+if "int udp_receive_packet(" not in udp or "udp_checksum_valid" not in udp or "udp_register_handler" not in udp:
+    errors.append("UDP receive must validate lengths/checksums and dispatch through registered handlers")
+if "udp_receive_packet(dev, ip->src_ip, ip->dest_ip" not in ipv4:
+    errors.append("IPv4 UDP packets must reach the UDP receive validator")
+if "DHCP lease request unavailable" in dhcp or "parse_options" not in dhcp or "DHCP_ACK" not in dhcp:
+    errors.append("DHCP must parse and validate real OFFER/ACK messages before applying a lease")
+if "void dhcp_poll(void)" not in dhcp or "lease_renew_at" not in dhcp or "lease_rebind_at" not in dhcp or "lease_expiry_at" not in dhcp:
+    errors.append("DHCP must manage renewal, rebinding, and lease expiration deadlines")
+if "dhcp_poll();" not in read("kernel/net/netdev.c") or "clear_lease_configuration();" not in dhcp:
+    errors.append("DHCP lease timers must be polled and stale settings cleared when a lease expires or is rejected")
 if "pci_get_device_count()" not in e1000 or "REG_TDBAL" not in e1000 or "REG_RDBAL" not in e1000:
     errors.append("e1000 driver must discover PCI hardware and configure DMA rings")
 if "192, 168, 1, 150" in e1000 or "MAC: 52:54:00:12:34:56" in e1000:
