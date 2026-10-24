@@ -26,6 +26,9 @@ uint32_t netdev_count(void) { return 1; }
 netdev_t* netdev_get_by_index(uint32_t i) { return i == 0 ? &test_dev : 0; }
 int netdev_register(netdev_t* dev) { return dev ? 0 : -1; }
 void netdev_init(void) {}
+static int fake_send(netdev_t* dev, const uint8_t* data, uint32_t length) {
+    (void)dev; (void)data; return (int)length;
+}
 void net_poll(void);
 
 uint32_t ip_to_uint32(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
@@ -144,7 +147,7 @@ int main(void) {
     test_dev.ip_addr = ip4(10, 20, 30, 2);
     test_dev.netmask = ip4(255, 255, 255, 0);
     test_dev.gateway = ip4(10, 20, 30, 1);
-    test_dev.send_packet = (int (*)(netdev_t*, const uint8_t*, uint32_t))0;
+    test_dev.send_packet = fake_send;
     const uint32_t server_ip = ip4(10, 20, 30, 10);
     const uint16_t server_port = 8080u;
 
