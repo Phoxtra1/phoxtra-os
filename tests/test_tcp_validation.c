@@ -44,15 +44,35 @@ uint16_t net_checksum(const void* data, uint32_t length) {
     while (sum >> 16) sum = (sum & 0xFFFFu) + (sum >> 16);
     return htons((uint16_t)~sum);
 }
+static udp_receive_handler_t registered_udp_handler;
+static void* registered_udp_context;
+static uint16_t registered_udp_port;
+static unsigned udp_send_count;
+static uint32_t udp_send_destination;
+static uint16_t udp_send_source_port, udp_send_destination_port;
 int udp_register_handler(uint16_t port, udp_receive_handler_t handler, void* context) {
-    (void)port; (void)handler; (void)context; return 0;
+    if (!port || !handler || registered_udp_handler) return -1;
+    registered_udp_port = port;
+    registered_udp_handler = handler;
+    registered_udp_context = context;
+    return 0;
 }
 int udp_unregister_handler(uint16_t port, udp_receive_handler_t handler, void* context) {
-    (void)port; (void)handler; (void)context; return 0;
+    if (registered_udp_port != port || registered_udp_handler != handler ||
+        registered_udp_context != context) return -1;
+    registered_udp_port = 0;
+    registered_udp_handler = 0;
+    registered_udp_context = 0;
+    return 0;
 }
 int udp_send_packet(netdev_t* dev, uint32_t dest, uint16_t src_port, uint16_t dst_port,
                     const uint8_t* data, uint32_t length) {
-    (void)dev; (void)dest; (void)src_port; (void)dst_port; (void)data; return (int)length;
+    if (!dev || (!data && length)) return -1;
+    ++udp_send_count;
+    udp_send_destination = dest;
+    udp_send_source_port = src_port;
+    udp_send_destination_port = dst_port;
+    return (int)length;
 }
 int ipv4_send_packet(netdev_t* dev, uint32_t destination_ip, uint8_t protocol,
                      const uint8_t* payload, uint32_t payload_length) {
@@ -257,6 +277,46 @@ int main(void) {
     if (!test_ok("listener closes without leaked child handles", sys_close(listener) == 0 &&
                  socket_get_by_id(listener) == 0)) return 1;
 
-    printf("TCP validation tests passed.\n");
+    int udp_fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    sockaddr_in_t udp_local;
+    memset(&udp_local, 0, sizeof(udp_local));
+    udp_local.sin_family = AF_INET;
+    udp_local.sin_port = htons(53535u);
+    if (!test_ok("UDP socket allocates", udp_fd >= 0)) return 1;
+    if (!test_ok("UDP socket binds and registers its receive handler",
+                 sys_bind(udp_fd, &udp_local) == 0 &&
+                 registered_udp_port == 53535u && registered_udp_handler != 0)) return 1;
+    int duplicate_fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (!test_ok("duplicate UDP local port is rejected",
+                 duplicate_fd >= 0 && sys_bind(duplicate_fd, &udp_local) == -1)) return 1;
+    const uint8_t first_datagram[] = {'o','n','e'};
+    const uint8_t second_datagram[] = {'t','w','o'};
+    if (!test_ok("UDP callback queues first datagram",
+                 registered_udp_handler(&test_dev, server_ip, 55001u, 53535u,
+                                        first_datagram, sizeof(first_datagram),
+                                        registered_udp_context) == (int)sizeof(first_datagram))) return 1;
+    if (!test_ok("UDP callback drops a second datagram while the one-slot buffer is full",
+                 registered_udp_handler(&test_dev, server_ip, 55002u, 53535u,
+                                        second_datagram, sizeof(second_datagram),
+                                        registered_udp_context) == 0)) return 1;
+    uint8_t udp_received[8] = {0};
+    if (!test_ok("UDP recv returns the first queued datagram",
+                 sys_recv(udp_fd, udp_received, sizeof(udp_received), 0) == (int)sizeof(first_datagram) &&
+                 memcmp(udp_received, first_datagram, sizeof(first_datagram)) == 0)) return 1;
+    remote.sin_port = htons(5353u);
+    if (!test_ok("UDP connect records a remote endpoint", sys_connect(udp_fd, &remote) == 0)) return 1;
+    udp_send_count = 0;
+    const uint8_t outbound_datagram[] = {'q','u','e','r','y'};
+    if (!test_ok("UDP send returns payload bytes and uses bound ports",
+                 sys_send(udp_fd, outbound_datagram, sizeof(outbound_datagram), 0) ==
+                    (int)sizeof(outbound_datagram) &&
+                 udp_send_count == 1 && udp_send_destination == server_ip &&
+                 udp_send_source_port == 53535u && udp_send_destination_port == 5353u)) return 1;
+    if (!test_ok("UDP close unregisters its receive handler",
+                 sys_close(udp_fd) == 0 && registered_udp_handler == 0 &&
+                 registered_udp_port == 0)) return 1;
+    if (!test_ok("unused socket handle can be closed", sys_close(duplicate_fd) == 0)) return 1;
+
+    printf("TCP and socket validation tests passed.\n");
     return 0;
 }
