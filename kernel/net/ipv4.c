@@ -8,7 +8,7 @@
 static uint16_t packet_id = 1;
 
 void ipv4_init(void) {
-    klog(LOG_INFO, "IPv4 receive validation and ICMP echo handling initialized; TCP/UDP receive services remain limited");
+    klog(LOG_INFO, "IPv4 initialized with validated ICMP, TCP, UDP dispatch and DHCP bootstrap broadcast support");
 }
 
 uint16_t net_checksum(const void* data, uint32_t len) {
@@ -47,12 +47,29 @@ int ipv4_receive_packet(netdev_t* dev, const uint8_t* packet, uint32_t length) {
     uint16_t fragment = ntohs(ip->fragment_offset);
     if ((fragment & 0x3FFFu) != 0) return -2;
 
-    if (!dev->ip_addr || ip->dest_ip != dev->ip_addr) return -2;
+    uint32_t payload_length = (uint32_t)total_length - header_length;
+    const uint8_t* transport = packet + header_length;
+
+    /* During DHCP bootstrap, accept only server-to-client UDP broadcasts while
+       the interface has no address. All other traffic must target this host. */
+    int dhcp_bootstrap = 0;
+    if (ip->protocol == IPPROTO_UDP && !dev->ip_addr &&
+        ip->dest_ip == UINT32_MAX && payload_length >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)transport;
+        dhcp_bootstrap = ntohs(udp->src_port) == 67u &&
+                         ntohs(udp->dest_port) == 68u;
+    }
+    if ((!dev->ip_addr || ip->dest_ip != dev->ip_addr) && !dhcp_bootstrap)
+        return -2;
+
+    if (ip->protocol == IPPROTO_TCP)
+        return tcp_receive_packet(dev, ip->src_ip, ip->dest_ip, transport, payload_length);
+    if (ip->protocol == IPPROTO_UDP)
+        return udp_receive_packet(dev, ip->src_ip, ip->dest_ip, transport, payload_length);
     if (ip->protocol != IPPROTO_ICMP) return -3;
 
-    uint32_t payload_length = (uint32_t)total_length - header_length;
     if (payload_length < sizeof(icmp_header_t)) return -1;
-    const uint8_t* icmp_bytes = packet + header_length;
+    const uint8_t* icmp_bytes = transport;
     if (!checksum_valid(icmp_bytes, payload_length)) return -1;
 
     const icmp_header_t* request = (const icmp_header_t*)icmp_bytes;
@@ -102,10 +119,26 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
         packet[sizeof(ipv4_header_t) + i] = payload[i];
 
     uint8_t target_mac[ETH_ALEN];
-    if (arp_lookup(next_hop, target_mac) != 0) {
-        (void)arp_send_request(dev, next_hop);
-        klog(LOG_WARNING, "IPv4 transmit deferred: no verified ARP entry");
-        return -2;
+    if (bootstrap_broadcast || dest_ip == UINT32_MAX) {
+        for (uint32_t i = 0; i < ETH_ALEN; ++i) target_mac[i] = 0xFFu;
+    } else {
+        uint32_t next_hop;
+        if ((dest_ip & dev->netmask) == (dev->ip_addr & dev->netmask)) {
+            next_hop = dest_ip;
+        } else {
+            next_hop = dev->gateway;
+            if (!next_hop) {
+                klog(LOG_WARNING, "IPv4 transmit blocked: off-link destination has no gateway");
+                return -2;
+            }
+        }
+        if (arp_lookup(next_hop, target_mac) != 0) {
+            /* ARP requests are valid only for an on-link next hop. */
+            if ((next_hop & dev->netmask) != (dev->ip_addr & dev->netmask)) return -2;
+            (void)arp_send_request(dev, next_hop);
+            klog(LOG_WARNING, "IPv4 transmit deferred: no verified ARP entry");
+            return -2;
+        }
     }
     return ethernet_send_frame(dev, target_mac, ETHERTYPE_IPV4,
                                packet, (uint32_t)sizeof(ipv4_header_t) + payload_len);
