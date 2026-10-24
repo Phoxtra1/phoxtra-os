@@ -5,16 +5,16 @@
 ## 1. Current platform reality
 
 - Boot target currently validated by CI is x86_64 under QEMU using a GRUB/Multiboot2 ISO.
-- The current block-device backend is a 32 MiB volatile RAM test device, not a physical AHCI or NVMe implementation.
-- Current Ext2/FAT32 adapters expose demo in-memory content; they do not provide real on-disk filesystem support.
+- The prototype has a 32 MiB volatile RAM test device plus experimental read-only PCI AHCI/SATA access for supported ATA LBA48 disks with 512-byte logical sectors. AHCI/SATA has passed automated QEMU read tests; no physical laptop controller has been validated. NVMe remains unsupported.
+- MBR partition discovery and a limited read-only on-disk ext2 subset are implemented and exercised by CI. Journaled/indexed/unsupported ext2 features are rejected. On-disk FAT32, persistent writes, flush semantics, filesystem repair, and write-based recovery are not implemented.
 - The installer and partition formatting path are disabled. Partition discovery must never initialize, rewrite, or format a disk.
 - No dedicated Phoxtra board, CPU, firmware, display, power, thermal, or peripheral specification is approved in this plan yet.
 
 ## 2. Phase 8 software readiness work
 
-The current Phase 8 software-preparation slice adds a read-only hardware readiness report, available in the shell as `hardware`, and emits a startup inventory marker for CI. It reports the x86_64/Multiboot2 target, product profile, display and input availability, PCI device classes, simulated block-device count, and whether a non-simulated block-device driver or persistent filesystem is registered.
+The Phase 8 software-preparation slice adds a read-only hardware readiness report, available in the shell as `hardware`, and emits a startup inventory marker for CI. It reports the x86_64/Multiboot2 target, product profile, display and input availability, PCI device classes, simulated block-device count, and whether a non-simulated block-device driver or persistent filesystem is registered.
 
-The report is observational only. PCI class detection is not proof that the matching device driver works. A simulated RAM disk is not physical storage, and this report does not access, format, or write a physical disk. The current kernel does not yet implement real AHCI/NVMe or on-disk Ext2/FAT32 support.
+The report is observational only. PCI class detection is not proof that a matching driver works. Read-only AHCI/SATA and the supported ext2 reader have QEMU/CI evidence but not physical-laptop acceptance; the RAM disk remains simulated and volatile. No path in this prototype should format, partition, or write to an internal physical disk.
 
 ## 3. Phase 7 prerequisite gate
 

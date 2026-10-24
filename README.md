@@ -1,6 +1,6 @@
 # Phoxtra OS
 
-**Phoxtra OS is an experimental x86_64 operating-system prototype under active development.** Its current bootable ISO brings up a kernel, a graphical desktop environment, keyboard and pointer interaction in the tested virtual machine, a small set of built-in system panels, and an application catalogue. Automated CI builds the ISO and exercises core desktop interactions in QEMU, including read-only AHCI/SATA sector I/O and reading a file from a test ext2 partition.
+**Phoxtra OS is an experimental x86_64 operating-system prototype under active development.** Its current bootable ISO brings up a kernel, a graphical desktop environment, keyboard and pointer interaction in the tested virtual machine, a small set of built-in system panels, and an application catalogue. The prototype also has experimental Ethernet/ARP/IPv4/UDP paths, DHCP lease acquisition, and DNS A-record lookups, covered by bounded packet-validation tests. Automated CI builds the ISO and exercises core desktop interactions in QEMU, including read-only AHCI/SATA sector I/O and reading a file from a test ext2 partition.
 
 The long-term Phoxtra direction includes software integrated with Phoxtra devices. This repository currently validates an x86_64 prototype; it is **not** a production-ready general-purpose operating system, and this ISO is **not** a mobile-phone build.
 
@@ -25,6 +25,8 @@ A successful CI run proves that those automated checks passed for the tested bui
 - Built-in Shell Console, Files, and System Status catalogue panels.
 - Theme switching, Application Center, and a read-only `hardware` diagnostic report.
 - A shared platform service interface and a catalogue that distinguishes available native panels from planned integrations.
+- Experimental Intel 82540EM/E1000 packet transmission/reception, ARP validation, inbound IPv4 header validation, and ICMP echo replies. The host-side unit tests cover protocol validation; real NIC/laptop networking is not yet physically validated.
+- Bounded UDP receive demultiplexing with length/checksum validation, DHCP Discover/Offer/Request/ACK lease acquisition, and DNS A-query/response parsing with bounded compression/CNAME handling.
 - Experimental PCI AHCI/SATA read support for ATA LBA48 disks with 512-byte logical sectors; physical disks and discovered MBR partitions are exposed read-only.
 - A limited read-only ext2 path exposes supported on-disk files through the VFS; CI tests it against a temporary QEMU SATA disk.
 - Storage-safety controls identify the RAM disk as simulated and keep physical writes, installation, and formatting disabled.
@@ -40,7 +42,8 @@ These are known scope limitations, not features to assume are present:
 - **The installer is disabled.** Do not install or format a laptop's internal drive with this prototype.
 - Amineva Global products and Amnewsworld entries in the Application Center are catalogue entries. Only the listed native panels are currently marked available; external apps are not yet launchable from Phoxtra.
 - **Amineva Workspace is not yet integrated as a functioning suite.** Docs, Sheets, Slides, Forms, Drive, account sign-in, cross-application file access, and offline operation must not be considered available from the OS until their real service/runtime connections are implemented and tested.
-- A general-purpose browser and fully validated end-user network/TLS/web-app path are not delivered as a complete user feature.
+- The current network layer is still incomplete: TCP connections/stream sockets and receive queues are not implemented; DHCP lease renewal/expiry management is not implemented; DNS truncated-response TCP fallback is unavailable; IPv4 fragmentation/reassembly is rejected. HTTPS/TLS, certificate validation, a general-purpose browser, and a fully validated end-user web-app path are not delivered.
+- For a connected test NIC, the shell exposes `dhcp` to request a lease and `dns example.com` to test a DNS A lookup. These are experimental, synchronous prototype commands; they do not imply TCP, HTTPS, or Workspace integration.
 - A physical standard-laptop test has not yet passed the Phase 7 acceptance checklist.
 - No dedicated Phoxtra hardware target has been selected and brought up.
 - There is no validated ARM64 mobile-phone build. Mobile support remains a future project, not a capability of this ISO.

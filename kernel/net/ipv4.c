@@ -1,12 +1,13 @@
 #include "ipv4.h"
 #include "ethernet.h"
 #include "arp.h"
+#include "udp.h"
 #include "../log/logger.h"
 
 static uint16_t packet_id = 1;
 
 void ipv4_init(void) {
-    klog(LOG_INFO, "IPv4 receive validation and ICMP echo handling initialized; TCP/UDP receive services remain limited");
+    klog(LOG_INFO, "IPv4 receive validation, ICMP echo handling, and UDP packet dispatch initialized; TCP receive remains unavailable");
 }
 
 uint16_t net_checksum(const void* data, uint32_t len) {
@@ -45,10 +46,20 @@ int ipv4_receive_packet(netdev_t* dev, const uint8_t* packet, uint32_t length) {
     uint16_t fragment = ntohs(ip->fragment_offset);
     if ((fragment & 0x3FFFu) != 0) return -2;
 
-    if (!dev->ip_addr || ip->dest_ip != dev->ip_addr) return -2;
-    if (ip->protocol != IPPROTO_ICMP) return -3;
-
     uint32_t payload_length = (uint32_t)total_length - header_length;
+    int limited_broadcast_udp = 0;
+    if (ip->protocol == IPPROTO_UDP && ip->dest_ip == UINT32_MAX &&
+        payload_length >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)(packet + header_length);
+        /* Before address assignment, accept only DHCP client replies addressed to port 68. */
+        limited_broadcast_udp = (!dev->ip_addr && ntohs(udp->dest_port) == 68u);
+    }
+    if ((!dev->ip_addr || ip->dest_ip != dev->ip_addr) && !limited_broadcast_udp) return -2;
+
+    if (ip->protocol == IPPROTO_UDP)
+        return udp_receive_packet(dev, ip->src_ip, ip->dest_ip,
+                                  packet + header_length, payload_length);
+    if (ip->protocol != IPPROTO_ICMP) return -3;
     if (payload_length < sizeof(icmp_header_t)) return -1;
     const uint8_t* icmp_bytes = packet + header_length;
     if (!checksum_valid(icmp_bytes, payload_length)) return -1;
@@ -72,7 +83,14 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
                      const uint8_t* payload, uint32_t payload_len) {
     if (!dev || !payload || !dev->send_packet || !dest_ip ||
         payload_len > 1480u) return -1;
-    if (!dev->ip_addr || !dev->netmask) {
+    int bootstrap_broadcast = 0;
+    if (!dev->ip_addr && dest_ip == UINT32_MAX && protocol == IPPROTO_UDP &&
+        payload_len >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)payload;
+        bootstrap_broadcast = (ntohs(udp->src_port) == 68u &&
+                               ntohs(udp->dest_port) == 67u);
+    }
+    if ((!dev->ip_addr || !dev->netmask) && !bootstrap_broadcast) {
         klog(LOG_WARNING, "IPv4 transmit blocked: interface has no verified address configuration");
         return -2;
     }
@@ -92,14 +110,18 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
     for (uint32_t i = 0; i < payload_len; ++i)
         packet[sizeof(ipv4_header_t) + i] = payload[i];
 
-    uint32_t next_hop = ((dest_ip & dev->netmask) == (dev->ip_addr & dev->netmask))
-        ? dest_ip : dev->gateway;
-    if (!next_hop) return -2;
     uint8_t target_mac[ETH_ALEN];
-    if (arp_lookup(next_hop, target_mac) != 0) {
-        (void)arp_send_request(dev, next_hop);
-        klog(LOG_WARNING, "IPv4 transmit deferred: no verified ARP entry");
-        return -2;
+    if (dest_ip == UINT32_MAX) {
+        for (uint32_t i = 0; i < ETH_ALEN; ++i) target_mac[i] = 0xFFu;
+    } else {
+        uint32_t next_hop = ((dest_ip & dev->netmask) == (dev->ip_addr & dev->netmask))
+            ? dest_ip : dev->gateway;
+        if (!next_hop) return -2;
+        if (arp_lookup(next_hop, target_mac) != 0) {
+            (void)arp_send_request(dev, next_hop);
+            klog(LOG_WARNING, "IPv4 transmit deferred: no verified ARP entry");
+            return -2;
+        }
     }
     return ethernet_send_frame(dev, target_mac, ETHERTYPE_IPV4,
                                packet, (uint32_t)sizeof(ipv4_header_t) + payload_len);
