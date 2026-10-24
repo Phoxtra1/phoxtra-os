@@ -27,6 +27,10 @@ if "payload_len > 1500u" not in ethernet or "!dev->send_packet" not in ethernet:
     errors.append("Ethernet transmit path must validate frame bounds and callback")
 if "payload_len > 1480u" not in ipv4:
     errors.append("IPv4 transmit path must validate payload bounds")
+if "int ipv4_receive_packet(" not in ipv4 or "checksum_valid(packet, header_length)" not in ipv4:
+    errors.append("IPv4 receive path must validate packet/header checksums before dispatch")
+if "ipv4_receive_packet(dev, payload, payload_len)" not in ethernet:
+    errors.append("Ethernet must dispatch inbound IPv4 frames to the IPv4 validator")
 if "payload_len > 1472u" not in read("kernel/net/udp.c"):
     errors.append("UDP transmit path must validate payload bounds")
 if "pci_get_device_count()" not in e1000 or "REG_TDBAL" not in e1000 or "REG_RDBAL" not in e1000:

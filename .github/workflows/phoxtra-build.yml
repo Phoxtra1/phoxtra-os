@@ -63,8 +63,12 @@ jobs:
         run: python3 scripts/check_prototype_claims.py
       - name: Test ARP packet validation
         run: |
-          cc -std=c11 -Wall -Wextra -Werror tests/test_arp_validation.c kernel/net/arp.c kernel/net/ethernet.c -o /tmp/test_arp_validation
+          cc -std=c11 -Wall -Wextra -Werror tests/test_arp_validation.c kernel/net/arp.c kernel/net/ethernet.c kernel/net/ipv4.c -o /tmp/test_arp_validation
           /tmp/test_arp_validation
+      - name: Test IPv4 receive validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_ipv4_validation.c kernel/net/ipv4.c -o /tmp/test_ipv4_validation
+          /tmp/test_ipv4_validation
       - name: Test ELF64 image validation
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
