@@ -38,7 +38,7 @@ if "ipv4_receive_packet(dev, payload, payload_len)" not in ethernet:
     errors.append("Ethernet must dispatch inbound IPv4 frames to the IPv4 validator")
 if "UDP_MAX_PAYLOAD 1472u" not in udp or "payload_len > UDP_MAX_PAYLOAD" not in udp:
     errors.append("UDP transmit path must enforce the bounded maximum payload")
-if "declared_length > length" not in udp or "udp_checksum_valid" not in udp:
+if "declared_length != length" not in udp or "udp_checksum_valid" not in udp:
     errors.append("UDP receive path must reject overlong datagrams and verify checksums")
 if "int udp_receive_packet(" not in udp or "udp_checksum_valid" not in udp or "udp_register_handler" not in udp:
     errors.append("UDP receive must validate lengths/checksums and dispatch through registered handlers")
