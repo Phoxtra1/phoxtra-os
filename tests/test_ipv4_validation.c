@@ -1,6 +1,7 @@
 #include "../kernel/net/ipv4.h"
 #include "../kernel/net/ethernet.h"
 #include "../kernel/net/arp.h"
+#include "../kernel/net/udp.h"
 #include "../kernel/log/logger.h"
 #include <stdio.h>
 #include <string.h>
@@ -60,7 +61,20 @@ static void make_packet(uint8_t* packet, uint32_t* length, uint32_t src, uint32_
     icmp->checksum = net_checksum(body, 16u);
     *length = sizeof(*ip) + 16u;
 }
-#define CHECK(label, expr) do { if (!(expr)) { fprintf(stderr, "FAIL: %s\n", label); return 1; } printf("PASS: %s\n", label); } while (0)
+static unsigned udp_delivery_count;
+static uint32_t udp_delivered_length;
+static int test_udp_delivery(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
+                             uint16_t destination_port, const uint8_t* payload,
+                             uint32_t payload_length, void* context) {
+    (void)dev; (void)source_ip; (void)context;
+    if (source_port != 53001 || destination_port != 61000 ||
+        payload_length != 3 || memcmp(payload, "dns", 3) != 0) return -1;
+    ++udp_delivery_count;
+    udp_delivered_length = payload_length;
+    return (int)payload_length;
+}
+
+#define CHECK(label, expr) do { if (!(expr)) { fprintf(stderr, "FAIL: %s\\n", label); return 1; } printf("PASS: %s\\n", label); } while (0)
 
 int main(void) {
     netdev_t dev;
@@ -99,6 +113,31 @@ int main(void) {
     make_packet(packet, &length, ip4(192, 168, 1, 20), ip4(192, 168, 1, 99));
     CHECK("packet addressed to another host is not answered",
           ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 0);
+    udp_init();
+    CHECK("IPv4 test registers UDP receive port", udp_register_handler(61000, test_udp_delivery, 0) == 0);
+    uint8_t udp_ip_packet[64] = {0};
+    ipv4_header_t* udp_ip = (ipv4_header_t*)udp_ip_packet;
+    udp_header_t* udp = (udp_header_t*)(udp_ip_packet + sizeof(ipv4_header_t));
+    udp_ip->ihl_version = 0x45;
+    udp_ip->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + sizeof(udp_header_t) + 3u));
+    udp_ip->id = htons(12);
+    udp_ip->ttl = 64;
+    udp_ip->protocol = IPPROTO_UDP;
+    udp_ip->src_ip = ip4(192, 168, 1, 20);
+    udp_ip->dest_ip = dev.ip_addr;
+    udp_ip->checksum = 0;
+    udp_ip->checksum = net_checksum(udp_ip, sizeof(*udp_ip));
+    udp->src_port = htons(53001);
+    udp->dest_port = htons(61000);
+    udp->length = htons((uint16_t)(sizeof(udp_header_t) + 3u));
+    udp->checksum = 0;
+    memcpy(udp_ip_packet + sizeof(*udp_ip) + sizeof(*udp), "dns", 3);
+    CHECK("validated IPv4 dispatches UDP payload to the registered handler",
+          ipv4_receive_packet(&dev, udp_ip_packet,
+            sizeof(ipv4_header_t) + sizeof(udp_header_t) + 3u) == 3);
+    CHECK("UDP handler receives one payload of the expected size",
+          udp_delivery_count == 1 && udp_delivered_length == 3);
+
     printf("IPv4 receive validation tests passed.\n");
     return 0;
 }
