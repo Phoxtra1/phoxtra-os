@@ -59,6 +59,10 @@ if "udp_receive_packet(dev, ip->src_ip, ip->dest_ip" not in ipv4:
     errors.append("IPv4 UDP packets must reach the UDP receive validator")
 if "DHCP lease request unavailable" in dhcp or "parse_options" not in dhcp or "DHCP_ACK" not in dhcp:
     errors.append("DHCP must parse and validate real OFFER/ACK messages before applying a lease")
+if "void dhcp_poll(void)" not in dhcp or "lease_renew_at" not in dhcp or "lease_rebind_at" not in dhcp or "lease_expiry_at" not in dhcp:
+    errors.append("DHCP must manage renewal, rebinding, and lease expiration deadlines")
+if "dhcp_poll();" not in read("kernel/net/netdev.c") or "clear_lease_configuration();" not in dhcp:
+    errors.append("DHCP lease timers must be polled and stale settings cleared when a lease expires or is rejected")
 if "pci_get_device_count()" not in e1000 or "REG_TDBAL" not in e1000 or "REG_RDBAL" not in e1000:
     errors.append("e1000 driver must discover PCI hardware and configure DMA rings")
 if "192, 168, 1, 150" in e1000 or "MAC: 52:54:00:12:34:56" in e1000:
