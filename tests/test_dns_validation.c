@@ -29,6 +29,7 @@ static unsigned tcp_recv_calls;
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 uint16_t ntohs(uint16_t value) { return htons(value); }
+static void write16(uint8_t* p, uint16_t v);
 netdev_t* netdev_get_default(void) { return active_dev; }
 uint64_t timer_get_ticks(void) { return fake_ticks++; }
 uint32_t ip_to_uint32(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
