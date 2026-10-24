@@ -30,6 +30,9 @@ typedef struct dns_query_context {
 
 static uint16_t next_query_id = 0x5A00u;
 static uint16_t next_local_port = 53000u;
+/* Shared bounded scratch avoids an >8 KiB DNS answer array on the kernel stack.
+   The current kernel executes these synchronous queries serially. */
+static dns_record_t dns_answer_scratch[DNS_MAX_ANSWERS];
 
 static uint16_t read_be16(const uint8_t* p) {
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
@@ -174,20 +177,8 @@ static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
     if (read_be16(packet) != query->id) return -1;
     uint16_t flags = read_be16(packet + 2u);
     if (!(flags & 0x8000u) || (flags & 0x7800u) != 0) return -1;
-    if (flags & 0x0200u) { /* Truncated: TCP fallback is not implemented. */
-        query->complete = 1;
-        query->result_ip = 0;
-        return 0;
-    }
     if (read_be16(packet + 4u) != 1u) return -1;
-    if ((flags & 0x000Fu) != 0) {
-        query->complete = 1;
-        query->result_ip = 0;
-        return 0;
-    }
 
-    uint16_t answer_count = read_be16(packet + 6u);
-    if (answer_count > DNS_MAX_ANSWERS) return -1;
     uint32_t offset = 12u;
     char question_name[DNS_MAX_NAME];
     if (!read_dns_name(packet, length, &offset, question_name, sizeof(question_name)) ||
@@ -196,7 +187,16 @@ static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
         return -1;
     offset += 4u;
 
-    dns_record_t answers[DNS_MAX_ANSWERS];
+    /* Even failures must echo the right question before ending this query. */
+    if ((flags & 0x0200u) || (flags & 0x000Fu) != 0) {
+        query->complete = 1;
+        query->result_ip = 0;
+        return 0;
+    }
+
+    uint16_t answer_count = read_be16(packet + 6u);
+    if (answer_count > DNS_MAX_ANSWERS) return -1;
+    dns_record_t* answers = dns_answer_scratch;
     for (uint32_t i = 0; i < answer_count; ++i) {
         if (!read_dns_name(packet, length, &offset, answers[i].owner, sizeof(answers[i].owner)) ||
             offset + 10u > length) return -1;
