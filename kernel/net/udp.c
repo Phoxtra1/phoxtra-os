@@ -82,7 +82,7 @@ int udp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_i
     uint16_t destination_port = ntohs(header->dest_port);
     uint16_t declared_length = ntohs(header->length);
     if (!source_port || !destination_port ||
-        declared_length < sizeof(udp_header_t) || declared_length > length ||
+        declared_length < sizeof(udp_header_t) || declared_length != length ||
         declared_length > UDP_MAX_PAYLOAD + sizeof(udp_header_t)) return -1;
     if (!udp_checksum_valid(source_ip, destination_ip, packet, declared_length)) return -1;
 
