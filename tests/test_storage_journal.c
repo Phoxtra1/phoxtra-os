@@ -70,8 +70,9 @@ static void setup(unsigned readonly) {
     memcpy(device.name, "journal-test", sizeof("journal-test"));
     device.total_sectors = TEST_SECTORS;
     device.sector_size = STORAGE_JOURNAL_SECTOR_SIZE;
-    device.flags = BLOCKDEV_FLAG_SIMULATED | BLOCKDEV_FLAG_WRITE_ENABLED;
-    if (readonly) device.flags |= BLOCKDEV_FLAG_READONLY;
+    device.flags = readonly
+        ? (BLOCKDEV_FLAG_SIMULATED | BLOCKDEV_FLAG_READONLY)
+        : (BLOCKDEV_FLAG_SIMULATED | BLOCKDEV_FLAG_WRITE_ENABLED);
     device.read_sectors = test_read;
     device.write_sectors = test_write;
     device.flush_sectors = test_flush;
@@ -95,10 +96,6 @@ static int sector_has(uint64_t lba, uint8_t value) {
     return 1;
 }
 
-static uint32_t get_le32_test(const uint8_t* p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
 static void put_le32_test(uint8_t* p, uint32_t x) {
     p[0]=(uint8_t)x; p[1]=(uint8_t)(x>>8); p[2]=(uint8_t)(x>>16); p[3]=(uint8_t)(x>>24);
 }
