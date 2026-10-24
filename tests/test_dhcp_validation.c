@@ -59,6 +59,20 @@ void net_poll(void);
 static uint32_t ip4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
     return ip_to_uint32(a, b, c, d);
 }
+static int outgoing_has_option(uint8_t wanted) {
+    uint32_t offset = 240u;
+    while (offset < last_outgoing_length) {
+        uint8_t code = last_outgoing[offset++];
+        if (code == 255u) return 0;
+        if (code == 0u) continue;
+        if (offset >= last_outgoing_length) return 0;
+        uint8_t length = last_outgoing[offset++];
+        if ((uint32_t)length > last_outgoing_length - offset) return 0;
+        if (code == wanted) return 1;
+        offset += length;
+    }
+    return 0;
+}
 static void put_option(uint8_t* p, uint32_t* offset, uint8_t code,
                        const uint8_t* value, uint8_t length) {
     p[(*offset)++] = code; p[(*offset)++] = length;
@@ -164,9 +178,10 @@ int main(void) {
     CHECK("DHCP sends unicast renewal at T1", dhcp_get_state() == DHCP_STATE_RENEWING &&
           last_destination_ip == ip4(192,168,1,1) && last_message_type == 3 &&
           last_outgoing[12] != 0 && last_outgoing[13] == 168);
-    CHECK("renewal request uses ciaddr and omits selecting-only options", 
+    CHECK("renewal request uses ciaddr and omits selecting-only options",
           last_outgoing[12] == 192 && last_outgoing[13] == 168 &&
-          last_outgoing[14] == 1 && last_outgoing[15] == 105);
+          last_outgoing[14] == 1 && last_outgoing[15] == 105 &&
+          !outgoing_has_option(50u) && !outgoing_has_option(54u));
     uint8_t renewal_ack[300];
     uint32_t renewal_ack_length = make_reply(renewal_ack, 5, 0);
     CHECK("validated renewal ACK is accepted",
