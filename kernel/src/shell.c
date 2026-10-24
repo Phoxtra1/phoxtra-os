@@ -201,7 +201,7 @@ static void cmd_help(void) {
     console_write("  ping       - Show current ICMP diagnostic limitations\n");
     console_write("  netstat    - Show socket-subsystem implementation status\n");
     console_write("  dhcp       - Request a DHCP lease (experimental)\n");
-    console_write("  dns        - Show DNS resolver implementation status\n");
+    console_write("  dns        - Resolve a hostname with a DNS A query (experimental)\n");
     console_write("  elf        - Show ELF validation and execution support status\n");
     console_write("  libc       - Show user-space C runtime support status\n");
     console_write("  gui        - Launch High-Resolution 1024x768 Desktop GUI Window Manager\n");
@@ -233,7 +233,7 @@ static void cmd_about(void) {
     console_write("Stage   : Experimental bootable x86_64 prototype\n");
     console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
     console_write("Storage : Experimental read-only AHCI/SATA and limited ext2 reads; writes disabled\n");
-    console_write("Network : e1000 hardware path under development; full TCP/IP/TLS unavailable\n");
+    console_write("Network : Experimental E1000/ARP/IPv4/UDP; DHCP/DNS acquisition only; TCP/TLS/browser unavailable\n");
     console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
     console_write("Mobile  : ARM64 phone build not implemented\n");
     console_write("Install : Not implemented; do not install to an internal disk\n\n");
