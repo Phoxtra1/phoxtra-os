@@ -14,6 +14,7 @@ static uint32_t peer_next_seq = 1001u;
 static int handshake_replied;
 static int data_ack_replied;
 static int fin_replied;
+static int defer_next_send;
 
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t v) { return (uint16_t)((v << 8) | (v >> 8)); }
@@ -57,6 +58,7 @@ int ipv4_send_packet(netdev_t* dev, uint32_t destination_ip, uint8_t protocol,
                      const uint8_t* payload, uint32_t payload_length) {
     (void)dev;
     if (protocol != IPPROTO_TCP || !payload || payload_length > sizeof(last_tx)) return -1;
+    if (defer_next_send) { defer_next_send = 0; return -2; }
     memcpy(last_tx, payload, payload_length);
     last_tx_length = payload_length;
     last_tx_dest_ip = destination_ip;
@@ -166,7 +168,10 @@ int main(void) {
 
     const uint8_t send_body[] = {'p','h','o','x','t','r','a'};
     data_ack_replied = 0;
-    if (!test_ok("TCP send returns only after peer ACK", sys_send(fd, send_body, sizeof(send_body), 0) == (int)sizeof(send_body))) return 1;
+    defer_next_send = 1;
+    if (!test_ok("TCP send retries after ARP/route deferral and waits for peer ACK",
+                 sys_send(fd, send_body, sizeof(send_body), 0) == (int)sizeof(send_body) &&
+                 defer_next_send == 0 && data_ack_replied)) return 1;
 
     const uint8_t receive_body[] = {'r','e','p','l','y'};
     deliver_segment(server_ip, test_dev.ip_addr, server_port, socket->local_port,
@@ -194,6 +199,62 @@ int main(void) {
     int close_result = sys_close(fd);
     if (!test_ok("TCP close performs FIN/ACK teardown when peer responds", close_result == 0 && fin_replied)) return 1;
     if (!test_ok("closed socket handle is released", socket_get_by_id(fd) == 0)) return 1;
+
+    handshake_replied = 0;
+    data_ack_replied = 0;
+    fin_replied = 0;
+    defer_next_send = 1;
+    int deferred_fd = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (!test_ok("TCP connect retries a deferred initial SYN",
+                 deferred_fd >= 0 && sys_connect(deferred_fd, &remote) == 0 &&
+                 defer_next_send == 0 && handshake_replied)) return 1;
+    if (!test_ok("deferred TCP connection reaches ESTABLISHED",
+                 socket_get_by_id(deferred_fd) &&
+                 socket_get_by_id(deferred_fd)->state == TCP_STATE_ESTABLISHED)) return 1;
+    if (!test_ok("second TCP connection closes cleanly", sys_close(deferred_fd) == 0)) return 1;
+
+    int listener = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in_t local;
+    memset(&local, 0, sizeof(local));
+    local.sin_family = AF_INET;
+    local.sin_port = htons(9090u);
+    if (!test_ok("TCP listener socket allocates", listener >= 0)) return 1;
+    if (!test_ok("TCP listener binds a local port", sys_bind(listener, &local) == 0)) return 1;
+    if (!test_ok("TCP listener enters LISTEN state", sys_listen(listener, 3) == 0 &&
+                 socket_get_by_id(listener)->state == TCP_STATE_LISTEN)) return 1;
+
+    const uint16_t peer_port = 55000u;
+    deliver_segment(server_ip, test_dev.ip_addr, peer_port, 9090u,
+                    3000u, 0u, TCP_FLAG_SYN, 0, 0);
+    int child_id = -1;
+    for (int i = 0; i < MAX_SOCKETS; ++i) {
+        socket_entry_t* candidate = socket_get_by_id(i);
+        if (candidate && candidate->parent_id == listener &&
+            candidate->state == TCP_STATE_SYN_RECEIVED) { child_id = i; break; }
+    }
+    if (!test_ok("passive TCP SYN creates a half-open connection", child_id >= 0)) return 1;
+    socket_entry_t* child = socket_get_by_id(child_id);
+    if (!test_ok("passive open transmits SYN-ACK",
+                 last_tx_length >= sizeof(tcp_header_t) &&
+                 (((tcp_header_t*)last_tx)->flags & (TCP_FLAG_SYN | TCP_FLAG_ACK)) ==
+                    (TCP_FLAG_SYN | TCP_FLAG_ACK))) return 1;
+
+    deliver_segment(server_ip, test_dev.ip_addr, peer_port, 9090u,
+                    3001u, child->snd_nxt, TCP_FLAG_ACK, 0, 0);
+    if (!test_ok("valid final ACK establishes passive connection",
+                 child->state == TCP_STATE_ESTABLISHED)) return 1;
+    sockaddr_in_t peer;
+    memset(&peer, 0, sizeof(peer));
+    int accepted = sys_accept(listener, &peer);
+    if (!test_ok("accept dequeues an established connection",
+                 accepted == child_id && peer.sin_addr == server_ip &&
+                 ntohs(peer.sin_port) == peer_port)) return 1;
+
+    peer_next_seq = 3001u;
+    fin_replied = 0;
+    if (!test_ok("accepted socket closes with FIN teardown", sys_close(accepted) == 0)) return 1;
+    if (!test_ok("listener closes without leaked child handles", sys_close(listener) == 0 &&
+                 socket_get_by_id(listener) == 0)) return 1;
 
     printf("TCP validation tests passed.\n");
     return 0;
