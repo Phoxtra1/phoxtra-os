@@ -47,6 +47,7 @@ struct socket_entry;
 typedef struct socket_entry socket_entry_t;
 
 void tcp_init(void);
+void tcp_poll(void);
 int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
                        const uint8_t* packet, uint32_t length);
 int tcp_connect_socket(socket_entry_t* socket, netdev_t* dev);
