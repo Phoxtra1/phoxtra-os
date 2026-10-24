@@ -211,6 +211,7 @@ int main(void) {
     if (!test_ok("deferred TCP connection reaches ESTABLISHED",
                  socket_get_by_id(deferred_fd) &&
                  socket_get_by_id(deferred_fd)->state == TCP_STATE_ESTABLISHED)) return 1;
+    peer_next_seq = 1001u;
     if (!test_ok("second TCP connection closes cleanly", sys_close(deferred_fd) == 0)) return 1;
 
     int listener = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
