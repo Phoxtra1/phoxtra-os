@@ -1,5 +1,6 @@
 #include "../kernel/net/arp.h"
 #include "../kernel/net/ethernet.h"
+#include "../kernel/net/udp.h"
 #include "../kernel/log/logger.h"
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,12 @@ void klog(log_level_t level, const char* message) { (void)level; (void)message; 
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 uint16_t ntohs(uint16_t value) { return htons(value); }
 int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
+                       const uint8_t* packet, uint32_t length) {
+    (void)dev; (void)source_ip; (void)destination_ip; (void)packet; (void)length;
+    return -3;
+}
+
+int udp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
                        const uint8_t* packet, uint32_t length) {
     (void)dev; (void)source_ip; (void)destination_ip; (void)packet; (void)length;
     return -3;
