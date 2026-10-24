@@ -13,6 +13,11 @@ uint64_t timer_get_ticks(void) { return fake_ticks; }
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 uint16_t ntohs(uint16_t value) { return htons(value); }
+int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
+                       const uint8_t* packet, uint32_t length) {
+    (void)dev; (void)source_ip; (void)destination_ip; (void)packet; (void)length;
+    return -3;
+}
 
 static uint32_t ip4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
     return (uint32_t)a | ((uint32_t)b << 8) | ((uint32_t)c << 16) | ((uint32_t)d << 24);
