@@ -119,11 +119,14 @@ int main(void) {
                           body, sizeof(body), 0);
     CHECK("IPv4 UDP datagram with omitted checksum is accepted",
           udp_receive_packet(&dev, source_ip, destination_ip, packet, length) == (int)sizeof(body));
+    ((udp_header_t*)packet)->dest_port = htons(53002);
+    ((udp_header_t*)packet)->checksum = 0;
     CHECK("unbound UDP port is safely ignored",
           udp_receive_packet(&dev, source_ip, destination_ip, packet, length) == 0);
 
     CHECK("registered handler can be removed",
           udp_unregister_handler(53000, on_datagram, &record) == 0);
+    ((udp_header_t*)packet)->dest_port = htons(53000);
     CHECK("removed handler no longer receives datagrams",
           udp_receive_packet(&dev, source_ip, destination_ip, packet, length) == 0 && record.count == 2);
     printf("UDP receive validation tests passed.\n");
