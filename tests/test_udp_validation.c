@@ -109,6 +109,12 @@ int main(void) {
           udp_receive_packet(&dev, source_ip, destination_ip, packet, length) == -1);
 
     length = build_packet(packet, source_ip, destination_ip, 53001, 53000,
+                          body, sizeof(body), 0);
+    ((udp_header_t*)packet)->length = htons((uint16_t)(length - 1u));
+    CHECK("trailing bytes beyond the declared UDP datagram are rejected",
+          udp_receive_packet(&dev, source_ip, destination_ip, packet, length) == -1);
+
+    length = build_packet(packet, source_ip, destination_ip, 53001, 53000,
                           body, sizeof(body), 1);
     packet[sizeof(udp_header_t)] ^= 0x01u;
     CHECK("invalid UDP checksum is rejected", udp_receive_packet(&dev, source_ip,
