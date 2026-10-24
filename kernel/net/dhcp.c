@@ -13,6 +13,9 @@
 #define DHCP_TIMEOUT_TICKS 800u
 #define DHCP_RETRY_TICKS 200u
 #define DHCP_MAX_POLLS 50000000u
+#define DHCP_TICKS_PER_SECOND 100u
+#define DHCP_REBIND_NUMERATOR 7u
+#define DHCP_REBIND_DENOMINATOR 8u
 
 #define DHCP_DISCOVER 1u
 #define DHCP_OFFER    2u
@@ -29,6 +32,11 @@ static uint32_t offered_mask;
 static uint32_t offered_gateway;
 static uint32_t offered_dns;
 static uint32_t lease_seconds;
+static uint64_t lease_acquired_at;
+static uint64_t lease_renew_at;
+static uint64_t lease_rebind_at;
+static uint64_t lease_expiry_at;
+static uint64_t last_renew_request_at;
 static uint8_t client_mac[ETH_ALEN];
 static int listener_ready;
 
@@ -71,13 +79,66 @@ static uint32_t add_option(uint8_t* packet, uint32_t offset,
     return offset;
 }
 
+static int lease_is_active_state(dhcp_state_t state) {
+    return state == DHCP_STATE_BOUND || state == DHCP_STATE_RENEWING ||
+           state == DHCP_STATE_REBINDING;
+}
+
+static uint32_t next_transaction_id(void) {
+    uint32_t id = (uint32_t)timer_get_ticks() ^ 0x50484F58u;
+    for (uint32_t i = 0; i < ETH_ALEN; ++i)
+        id = (id << 5) ^ (id >> 2) ^ client_mac[i];
+    return id ? id : 0x50484F58u;
+}
+
+static void clear_lease_configuration(void) {
+    if (active_device) {
+        active_device->ip_addr = 0;
+        active_device->netmask = 0;
+        active_device->gateway = 0;
+        active_device->dns_server = 0;
+    }
+    offered_ip = server_ip = offered_mask = offered_gateway = offered_dns = 0;
+    lease_seconds = 0;
+    lease_acquired_at = lease_renew_at = lease_rebind_at = lease_expiry_at = 0;
+    last_renew_request_at = 0;
+}
+
+static uint64_t seconds_to_ticks(uint32_t seconds) {
+    if (seconds > UINT32_MAX / DHCP_TICKS_PER_SECOND)
+        return (uint64_t)UINT32_MAX;
+    return (uint64_t)seconds * DHCP_TICKS_PER_SECOND;
+}
+
+static void schedule_lease_deadlines(uint32_t seconds) {
+    uint64_t now = timer_get_ticks();
+    uint64_t duration = seconds_to_ticks(seconds);
+    lease_seconds = seconds;
+    lease_acquired_at = now;
+    lease_renew_at = now + duration / 2u;
+    lease_rebind_at = now + (duration / DHCP_REBIND_DENOMINATOR) * DHCP_REBIND_NUMERATOR;
+    lease_expiry_at = now + duration;
+    last_renew_request_at = 0;
+}
+
 static uint32_t build_message(uint8_t* packet, uint8_t message_type) {
     for (uint32_t i = 0; i < DHCP_PACKET_MAX; ++i) packet[i] = 0;
     packet[0] = 1; /* BOOTREQUEST */
     packet[1] = 1; /* Ethernet */
     packet[2] = ETH_ALEN;
     write_be32(packet + 4, active_xid);
-    packet[10] = 0x80; /* Broadcast reply requested before address assignment. */
+
+    int renewing = current_dhcp_state == DHCP_STATE_RENEWING;
+    int rebinding = current_dhcp_state == DHCP_STATE_REBINDING;
+    if (renewing || rebinding) {
+        if (!active_device || !active_device->ip_addr) return 0;
+        /* ciaddr is the currently bound address, in network byte order. */
+        for (uint32_t i = 0; i < 4u; ++i)
+            packet[12u + i] = ((const uint8_t*)&active_device->ip_addr)[i];
+        packet[10] = rebinding ? 0x80u : 0u;
+    } else {
+        packet[10] = 0x80u; /* Broadcast reply requested before address assignment. */
+    }
     for (uint32_t i = 0; i < ETH_ALEN; ++i) packet[28u + i] = client_mac[i];
     packet[DHCP_COOKIE_OFFSET] = 99;
     packet[DHCP_COOKIE_OFFSET + 1u] = 130;
@@ -91,7 +152,7 @@ static uint32_t build_message(uint8_t* packet, uint8_t message_type) {
     for (uint32_t i = 0; i < ETH_ALEN; ++i) client_id[i + 1u] = client_mac[i];
     offset = add_option(packet, offset, 61, client_id, sizeof(client_id));
 
-    if (message_type == DHCP_DISCOVER) {
+    if (message_type == DHCP_DISCOVER || renewing || rebinding) {
         const uint8_t params[] = {1, 3, 6, 51};
         offset = add_option(packet, offset, 55, params, sizeof(params));
     } else {
@@ -112,10 +173,12 @@ static uint32_t build_message(uint8_t* packet, uint8_t message_type) {
 static int send_current_message(void) {
     if (!active_device) return -1;
     uint8_t packet[DHCP_PACKET_MAX];
-    uint8_t type = current_dhcp_state == DHCP_STATE_REQUEST ? DHCP_REQUEST : DHCP_DISCOVER;
+    uint8_t type = current_dhcp_state == DHCP_STATE_DISCOVER ? DHCP_DISCOVER : DHCP_REQUEST;
     uint32_t length = build_message(packet, type);
     if (!length) return -1;
-    int result = udp_send_packet(active_device, UINT32_MAX, DHCP_CLIENT_PORT,
+    uint32_t destination_ip = UINT32_MAX;
+    if (current_dhcp_state == DHCP_STATE_RENEWING) destination_ip = server_ip;
+    int result = udp_send_packet(active_device, destination_ip, DHCP_CLIENT_PORT,
                                  DHCP_SERVER_PORT, packet, length);
     if (result < 0) klog(LOG_WARNING, "DHCP packet transmission failed");
     return result;
