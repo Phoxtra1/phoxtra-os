@@ -46,6 +46,9 @@ int udp_send_packet(netdev_t* dev, uint32_t destination_ip, uint16_t source_port
 static uint32_t ip4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
     return ip_to_uint32(a, b, c, d);
 }
+static int fake_send(netdev_t* dev, const uint8_t* data, uint32_t length) {
+    (void)dev; (void)data; (void)length; return 0;
+}
 static void write16(uint8_t* p, uint16_t v) { p[0] = (uint8_t)(v >> 8); p[1] = (uint8_t)v; }
 static void build_response(uint8_t* response, int invalid_id) {
     memset(response, 0, sizeof(last_query));
@@ -95,7 +98,7 @@ int main(void) {
     dev.netmask = ip4(255,255,255,0);
     dev.gateway = ip4(192,168,1,1);
     dev.dns_server = ip4(192,168,1,1);
-    dev.send_packet = (int (*)(netdev_t*, const uint8_t*, uint32_t))1;
+    dev.send_packet = fake_send;
     response_mode = 0; invalid_id_once = 1; fake_ticks = poll_count = send_count = 0;
 
     dns_init();
