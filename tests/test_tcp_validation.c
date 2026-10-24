@@ -117,7 +117,6 @@ void net_poll(void) {
     uint16_t source_port = ntohs(sent->src_port);
     uint16_t destination_port = ntohs(sent->dest_port);
     uint32_t sequence = ntohl(sent->seq_num);
-    uint32_t acknowledgement = ntohl(sent->ack_num);
     uint8_t flags = sent->flags;
     uint32_t payload_length = last_tx_length - sizeof(tcp_header_t);
 
