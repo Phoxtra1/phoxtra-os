@@ -43,7 +43,7 @@ for required in ("BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_WRITE_ENABLED",
         errors.append(f"guarded block writes are missing required safety gate: {required}")
 if "part->block_dev.flags = BLOCKDEV_FLAG_PARTITION | BLOCKDEV_FLAG_READONLY" not in partitions:
     errors.append("discovered partitions must remain read-only and must not inherit write enablement")
-for required in ("JOURNAL_MAGIC", "crc32", "record_crc", "recover_locked",
+for required in ("JOURNAL_MAGIC", "crc32", "JOURNAL_CRC_OFFSET", "recover_locked",
                  "target_is_allowed", "clear_records", "blockdev_write_sectors",
                  "journal->journal_start_lba + 1u", "journal->journal_start_lba + 2u"):
     if required not in journal:
