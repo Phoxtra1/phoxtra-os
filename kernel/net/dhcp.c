@@ -208,12 +208,13 @@ static int dhcp_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
         if (dns) offered_dns = dns;
         if (lease) lease_seconds = lease;
         current_dhcp_state = DHCP_STATE_OFFER;
+        /* Transition before building the packet so the sender emits DHCPREQUEST, not DISCOVER. */
+        current_dhcp_state = DHCP_STATE_REQUEST;
         int result = send_current_message();
         if (result < 0) {
             current_dhcp_state = DHCP_STATE_FAILED;
             return result;
         }
-        current_dhcp_state = DHCP_STATE_REQUEST;
         klog(LOG_INFO, "DHCP offer validated; requested address and server from the offer");
         return 0;
     }
