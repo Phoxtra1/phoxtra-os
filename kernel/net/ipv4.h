@@ -35,6 +35,7 @@ typedef struct icmp_header {
 
 void ipv4_init(void);
 uint16_t net_checksum(const void* data, uint32_t len);
+int ipv4_receive_packet(netdev_t* dev, const uint8_t* packet, uint32_t length);
 int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol, const uint8_t* payload, uint32_t payload_len);
 int icmp_ping(netdev_t* dev, uint32_t dest_ip);
 
