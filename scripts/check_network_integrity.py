@@ -35,6 +35,8 @@ if "tcp_connect_socket(socket, dev)" not in socket or "tcp_send_data(socket, dev
     errors.append("stream sockets must call the TCP handshake, send, and receive implementation")
 if "tcp_receive_packet(dev, ip->src_ip, ip->dest_ip" not in ipv4:
     errors.append("IPv4 TCP packets must reach the TCP receive state machine")
+if "void tcp_poll(void)" not in tcp or "tcp_poll();" not in read("kernel/net/netdev.c"):
+    errors.append("passive TCP handshakes must retry deferred SYN-ACKs during network polling")
 if "int sys_accept(" not in socket or "int sys_close(" not in socket:
     errors.append("stream socket interface must implement accept and close entry points")
 if "payload_len > 1500u" not in ethernet or "!dev->send_packet" not in ethernet:
