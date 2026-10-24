@@ -24,6 +24,8 @@ typedef struct block_device {
     
     int (*read_sectors)(struct block_device* dev, uint64_t lba, uint32_t count, uint8_t* buffer);
     int (*write_sectors)(struct block_device* dev, uint64_t lba, uint32_t count, const uint8_t* buffer);
+    /* Must not report success until prior writes are durable on the device. */
+    int (*flush_sectors)(struct block_device* dev);
     
     void* priv_data;
 } block_device_t;
