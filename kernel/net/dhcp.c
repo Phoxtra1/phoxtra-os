@@ -283,30 +283,53 @@ static int dhcp_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
         return 0;
     }
 
-    if (message_type == DHCP_NAK && current_dhcp_state == DHCP_STATE_REQUEST) {
-        if (sid ? sid != server_ip : source_ip != server_ip) return -1;
+    int initial_request = current_dhcp_state == DHCP_STATE_REQUEST;
+    int renewing = current_dhcp_state == DHCP_STATE_RENEWING;
+    int rebinding = current_dhcp_state == DHCP_STATE_REBINDING;
+
+    if (message_type == DHCP_NAK && (initial_request || renewing || rebinding)) {
+        if (renewing && (sid ? sid != server_ip : source_ip != server_ip)) return -1;
+        if (initial_request && (sid ? sid != server_ip : source_ip != server_ip)) return -1;
+        if (rebinding && !valid_unicast_ip(source_ip)) return -1;
+        if (renewing || rebinding) clear_lease_configuration();
         current_dhcp_state = DHCP_STATE_FAILED;
-        klog(LOG_WARNING, "DHCP server rejected the requested lease");
+        klog(LOG_WARNING, "DHCP server rejected the request; active lease was removed if present");
         return 0;
     }
 
-    if (message_type == DHCP_ACK && current_dhcp_state == DHCP_STATE_REQUEST) {
-        if (sid ? sid != server_ip : source_ip != server_ip) return -1;
-        if (!yiaddr) yiaddr = offered_ip;
-        if (!valid_unicast_ip(yiaddr) || yiaddr != offered_ip) return -1;
+    if (message_type == DHCP_ACK && (initial_request || renewing || rebinding)) {
+        if (initial_request && (sid ? sid != server_ip : source_ip != server_ip)) return -1;
+        if (renewing && (sid ? sid != server_ip : source_ip != server_ip)) return -1;
+        if (rebinding && !valid_unicast_ip(source_ip)) return -1;
+
+        if (initial_request) {
+            if (!yiaddr) yiaddr = offered_ip;
+            if (!valid_unicast_ip(yiaddr) || yiaddr != offered_ip) return -1;
+        } else {
+            /* Renewal ACKs commonly leave yiaddr zero; ciaddr identifies the bound lease. */
+            if (!yiaddr) yiaddr = dev->ip_addr;
+            if (!valid_unicast_ip(dev->ip_addr) || yiaddr != dev->ip_addr) return -1;
+            offered_ip = dev->ip_addr;
+        }
+
         if (mask) offered_mask = mask;
         if (gateway) offered_gateway = gateway;
         if (dns) offered_dns = dns;
         if (lease) lease_seconds = lease;
-        if (!offered_mask) return -1;
+        if (!lease_seconds || !offered_mask) return -1;
         if (offered_gateway &&
             (offered_gateway & offered_mask) != (offered_ip & offered_mask)) return -1;
+        if (sid && valid_unicast_ip(sid)) server_ip = sid;
+
         dev->ip_addr = offered_ip;
         dev->netmask = offered_mask;
         dev->gateway = offered_gateway;
         dev->dns_server = offered_dns;
+        schedule_lease_deadlines(lease_seconds);
         current_dhcp_state = DHCP_STATE_BOUND;
-        klog(LOG_INFO, "DHCP ACK validated; address configuration applied to active interface");
+        klog(LOG_INFO, initial_request
+             ? "DHCP ACK validated; address configuration applied and lease timers started"
+             : "DHCP renewal ACK validated; lease deadlines refreshed");
         return 0;
     }
 
@@ -319,6 +342,8 @@ void dhcp_init(void) {
     active_device = 0;
     active_xid = 0;
     offered_ip = server_ip = offered_mask = offered_gateway = offered_dns = lease_seconds = 0;
+    lease_acquired_at = lease_renew_at = lease_rebind_at = lease_expiry_at = 0;
+    last_renew_request_at = 0;
     listener_ready = (udp_register_handler(DHCP_CLIENT_PORT, dhcp_receive, 0) == 0);
     klog(listener_ready ? LOG_INFO : LOG_ERROR,
          listener_ready ? "DHCP client initialized with bounded OFFER/ACK validation"
@@ -330,14 +355,12 @@ int dhcp_request_lease(netdev_t* dev) {
         klog(LOG_WARNING, "DHCP request refused: interface, MAC address, or UDP listener is unavailable");
         return -1;
     }
-    if (current_dhcp_state == DHCP_STATE_BOUND && active_device == dev &&
+    if (lease_is_active_state(current_dhcp_state) && active_device == dev &&
         dev->ip_addr && dev->netmask) return 0;
 
     active_device = dev;
     for (uint32_t i = 0; i < ETH_ALEN; ++i) client_mac[i] = dev->mac_addr[i];
-    active_xid = (uint32_t)timer_get_ticks() ^ 0x50484F58u;
-    for (uint32_t i = 0; i < ETH_ALEN; ++i) active_xid = (active_xid << 5) ^ (active_xid >> 2) ^ client_mac[i];
-    if (!active_xid) active_xid = 0x50484F58u;
+    active_xid = next_transaction_id();
     offered_ip = server_ip = offered_mask = offered_gateway = offered_dns = lease_seconds = 0;
     current_dhcp_state = DHCP_STATE_DISCOVER;
 
@@ -381,5 +404,48 @@ int dhcp_request_lease(netdev_t* dev) {
     }
     return 0;
 }
+
+void dhcp_poll(void) {
+    if (!active_device || !lease_seconds || !lease_expiry_at ||
+        !lease_is_active_state(current_dhcp_state)) return;
+
+    uint64_t now = timer_get_ticks();
+    if (now >= lease_expiry_at) {
+        clear_lease_configuration();
+        current_dhcp_state = DHCP_STATE_FAILED;
+        klog(LOG_WARNING, "DHCP lease expired; stale IPv4, gateway, subnet and DNS configuration cleared");
+        return;
+    }
+
+    if (current_dhcp_state == DHCP_STATE_BOUND && now >= lease_rebind_at) {
+        current_dhcp_state = DHCP_STATE_REBINDING;
+        active_xid = next_transaction_id();
+        last_renew_request_at = 0;
+        klog(LOG_WARNING, "DHCP lease reached rebinding time; broadcasting a DHCPREQUEST");
+    } else if (current_dhcp_state == DHCP_STATE_BOUND && now >= lease_renew_at) {
+        current_dhcp_state = DHCP_STATE_RENEWING;
+        active_xid = next_transaction_id();
+        last_renew_request_at = 0;
+        klog(LOG_INFO, "DHCP lease reached renewal time; requesting extension from the original server");
+    }
+
+    if (current_dhcp_state == DHCP_STATE_RENEWING && now >= lease_rebind_at) {
+        current_dhcp_state = DHCP_STATE_REBINDING;
+        active_xid = next_transaction_id();
+        last_renew_request_at = 0;
+        klog(LOG_WARNING, "DHCP renewal did not complete before T2; switching to broadcast rebinding");
+    }
+
+    if ((current_dhcp_state == DHCP_STATE_RENEWING ||
+         current_dhcp_state == DHCP_STATE_REBINDING) &&
+        (!last_renew_request_at || now - last_renew_request_at >= DHCP_RETRY_TICKS)) {
+        int result = send_current_message();
+        last_renew_request_at = now;
+        if (result < 0)
+            klog(LOG_WARNING, "DHCP renewal/rebinding transmission failed; retry will be attempted");
+    }
+}
+
+uint32_t dhcp_get_lease_seconds(void) { return lease_seconds; }
 
 dhcp_state_t dhcp_get_state(void) { return current_dhcp_state; }
