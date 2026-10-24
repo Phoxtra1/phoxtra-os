@@ -200,7 +200,7 @@ static void cmd_help(void) {
     console_write("  ifconfig   - Display active network interfaces and IP addresses\n");
     console_write("  ping       - Show current ICMP diagnostic limitations\n");
     console_write("  netstat    - Show socket-subsystem implementation status\n");
-    console_write("  dhcp       - Show DHCP lease support status\n");
+    console_write("  dhcp       - Request a DHCP lease (experimental)\n");
     console_write("  dns        - Show DNS resolver implementation status\n");
     console_write("  elf        - Show ELF validation and execution support status\n");
     console_write("  libc       - Show user-space C runtime support status\n");
@@ -381,7 +381,7 @@ static void cmd_ifconfig(void) {
             uint32_to_ip(dev->ip_addr, ip); uint32_to_ip(dev->netmask, mask); uint32_to_ip(dev->gateway, gateway);
             console_write("  inet "); console_write(ip); console_write(" netmask "); console_write(mask);
             console_write(" gateway "); console_write(gateway); console_write("\n");
-        } else console_write("  IPv4: not configured (DHCP is not implemented)\n");
+        } else console_write("  IPv4: not configured (run dhcp to request a lease)\n");
         console_write("  ether ");
         static const char hex[] = "0123456789abcdef";
         for (int i = 0; i < ETH_ALEN; ++i) {
@@ -418,7 +418,7 @@ static void cmd_dhcp(void) {
     if (!dev) { console_write("No supported hardware network interface is active.\n\n"); return; }
     int result = dhcp_request_lease(dev);
     if (result == 0) console_write("DHCP lease obtained and applied.\n\n");
-    else console_write("DHCP is not implemented end-to-end; no address or lease was assigned.\n\n");
+    else console_write("DHCP lease acquisition failed or timed out; no lease was applied without a validated ACK.\n\n");
 }
 
 static void cmd_dns(const char* host) {
@@ -427,7 +427,7 @@ static void cmd_dns(const char* host) {
     console_write("Hostname: "); console_write(host); console_write("\n");
     netdev_t* dev = netdev_get_default();
     uint32_t resolved_ip = dns_resolve_hostname(dev, host);
-    if (!resolved_ip) console_write("DNS query/response processing is not implemented; no address was returned.\n\n");
+    if (!resolved_ip) console_write("DNS lookup failed or timed out; no usable A record was returned.\n\n");
     else {
         char ip_str[16]; uint32_to_ip(resolved_ip, ip_str);
         console_write("Address: "); console_write(ip_str); console_write("\n\n");
