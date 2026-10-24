@@ -61,6 +61,15 @@ static void make_packet(uint8_t* packet, uint32_t* length, uint32_t src, uint32_
     icmp->checksum = net_checksum(body, 16u);
     *length = sizeof(*ip) + 16u;
 }
+static unsigned tcp_delivery_count;
+int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
+                       const uint8_t* payload, uint32_t payload_length) {
+    (void)dev; (void)source_ip; (void)destination_ip;
+    if (!payload || payload_length < 20u) return -1;
+    ++tcp_delivery_count;
+    return 77;
+}
+
 static unsigned udp_delivery_count;
 static uint32_t udp_delivered_length;
 static int test_udp_delivery(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
@@ -137,6 +146,25 @@ int main(void) {
             sizeof(ipv4_header_t) + sizeof(udp_header_t) + 3u) == 3);
     CHECK("UDP handler receives one payload of the expected size",
           udp_delivery_count == 1 && udp_delivered_length == 3);
+
+    memset(udp_ip_packet, 0, sizeof(udp_ip_packet));
+    ipv4_header_t* tcp_ip = (ipv4_header_t*)udp_ip_packet;
+    tcp_ip->ihl_version = 0x45;
+    tcp_ip->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + 20u));
+    tcp_ip->id = htons(13u);
+    tcp_ip->ttl = 64;
+    tcp_ip->protocol = IPPROTO_TCP;
+    tcp_ip->src_ip = ip4(192, 168, 1, 20);
+    tcp_ip->dest_ip = dev.ip_addr;
+    tcp_ip->checksum = 0;
+    tcp_ip->checksum = net_checksum(tcp_ip, sizeof(*tcp_ip));
+    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 0] = 0xD4;
+    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 1] = 0x31;
+    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 2] = 0x1F;
+    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 3] = 0x90;
+    CHECK("IPv4 forwards TCP payload to the TCP receive handler",
+          ipv4_receive_packet(&dev, udp_ip_packet, sizeof(ipv4_header_t) + 20u) == 77 &&
+          tcp_delivery_count == 1);
 
     uint32_t configured_ip = dev.ip_addr;
     uint32_t configured_mask = dev.netmask;
