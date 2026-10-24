@@ -2,6 +2,8 @@
 
 **Current status: Catalogue entry only — not an integrated or launchable Workspace suite.**
 
+**Networking status (partial prerequisite only):** the prototype now includes bounded ARP/IPv4 validation, UDP receive handlers, a DHCP lease-acquisition exchange, and DNS A-record resolution. These paths have automated unit/build/QEMU coverage but have not been validated on a physical laptop NIC. TCP stream connections, DHCP lease renewal, DNS-over-TCP fallback, TLS/certificate validation, and a browser/web runtime remain unavailable. This partial network milestone does not make Workspace launchable.
+
 The Application Center contains an Amineva Workspace catalogue record describing Docs, Sheets, Slides, Forms, and Drive. The current record has no launch destination and is marked planned/pending. The presence of this entry is not evidence that those products open from Phoxtra OS.
 
 ## Goal
@@ -35,7 +37,7 @@ Until Phoxtra has a supported browser/runtime, documentation may explain that Wo
 
 1. **Inventory the live Workspace deployment.** List each real application URL and whether it works without redirects or undocumented session assumptions. Do not invent URLs.
 2. **Write the integration contract.** Define authentication, session expiry/logout, app-to-app navigation, file types, Drive access, error handling, and what works online/offline.
-3. **Verify OS networking prerequisites.** Separate hardware detection from functional network-driver tests. Confirm DHCP/DNS or configured addressing, TCP, HTTPS/TLS, certificate validation, time validity, and connection failure handling.
+3. **Verify OS networking prerequisites.** The repository now contains experimental DHCP lease acquisition and DNS A-query parsing plus UDP/IPv4 packet validation, but those tests do not prove physical NIC interoperability. Close the remaining gaps: TCP connect/stream receive, DHCP lease renewal/expiry, DNS TCP fallback for truncated replies, HTTPS/TLS, certificate-chain/hostname validation, valid system time, and connection failure handling.
 4. **Choose and integrate a browser/runtime.** Evaluate memory footprint, licensing, architecture, graphics/input integration, sandboxing, security updates, and build reproducibility. Do not use an unsupported web engine simply because it can be linked.
 5. **Add launch metadata only after the runtime exists.** Configure a real verified URL or native client entry. Keep the state pending while unavailable.
 6. **Test authentication and data flow.** Verify login, logout, expired sessions, direct links, file open/save/download/upload, cross-app file access, permission boundaries, and service outage behavior.
