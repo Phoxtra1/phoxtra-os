@@ -9,6 +9,8 @@
 #define TARGET_START 4u
 #define TARGET_COUNT 8u
 #define TARGET_LBA 4u
+#define JOURNAL_MAGIC_TEST 0x314A4850u
+#define JOURNAL_STATE_DONE_TEST 0xD06ECAFEu
 
 typedef struct test_disk {
     uint8_t bytes[TEST_BYTES];
@@ -79,8 +81,9 @@ static void setup(unsigned readonly) {
     device.priv_data = &disk;
     blockdev_init();
     (void)blockdev_register(&device);
-    memset(disk.bytes + TARGET_LBA * STORAGE_JOURNAL_SECTOR_SIZE, 0x11,
-           STORAGE_JOURNAL_SECTOR_SIZE);
+    for (uint64_t lba = TARGET_START; lba < TARGET_START + TARGET_COUNT; ++lba)
+        memset(disk.bytes + lba * STORAGE_JOURNAL_SECTOR_SIZE, 0x11,
+               STORAGE_JOURNAL_SECTOR_SIZE);
 }
 
 static int initialize(storage_journal_t* journal) {
@@ -96,6 +99,10 @@ static int sector_has(uint64_t lba, uint8_t value) {
     return 1;
 }
 
+static uint32_t get_le32_test(const uint8_t* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
 static void put_le32_test(uint8_t* p, uint32_t x) {
     p[0]=(uint8_t)x; p[1]=(uint8_t)(x>>8); p[2]=(uint8_t)(x>>16); p[3]=(uint8_t)(x>>24);
 }
@@ -115,6 +122,17 @@ static void refill_record_crc(uint8_t* record_sector) {
     put_le32_test(record_sector + 28u, 0);
     put_le32_test(record_sector + 28u,
                   crc32_test(record_sector, STORAGE_JOURNAL_SECTOR_SIZE));
+}
+static int record_is_done(uint64_t lba) {
+    const uint8_t* p = disk.bytes + lba * STORAGE_JOURNAL_SECTOR_SIZE;
+    uint8_t copy[STORAGE_JOURNAL_SECTOR_SIZE];
+    if (get_le32_test(p) != JOURNAL_MAGIC_TEST || get_le32_test(p + 4u) != 1u ||
+        get_le32_test(p + 32u) != JOURNAL_STATE_DONE_TEST ||
+        get_le32_test(p + 36u) != ~JOURNAL_STATE_DONE_TEST) return 0;
+    memcpy(copy, p, sizeof(copy));
+    uint32_t stored = get_le32_test(copy + 28u);
+    put_le32_test(copy + 28u, 0);
+    return stored == crc32_test(copy, sizeof(copy));
 }
 
 #define CHECK(label, expression) do { \
