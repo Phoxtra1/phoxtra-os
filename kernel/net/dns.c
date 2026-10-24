@@ -1,10 +1,13 @@
 #include "dns.h"
 #include "udp.h"
+#include "socket.h"
+#include "ipv4.h"
 #include "../include/timer.h"
 #include "../log/logger.h"
 
 #define DNS_PORT 53u
 #define DNS_MAX_PACKET 512u
+#define DNS_TCP_MAX_PACKET 4096u
 #define DNS_MAX_NAME 254u
 #define DNS_MAX_ANSWERS 32u
 #define DNS_TIMEOUT_TICKS 300u
@@ -26,6 +29,7 @@ typedef struct dns_query_context {
     char expected_name[DNS_MAX_NAME];
     uint32_t result_ip;
     uint8_t complete;
+    uint8_t truncated;
 } dns_query_context_t;
 
 static uint16_t next_query_id = 0x5A00u;
@@ -33,6 +37,7 @@ static uint16_t next_local_port = 53000u;
 /* Shared bounded scratch avoids an >8 KiB DNS answer array on the kernel stack.
    The current kernel executes these synchronous queries serially. */
 static dns_record_t dns_answer_scratch[DNS_MAX_ANSWERS];
+static uint8_t dns_tcp_response_scratch[DNS_TCP_MAX_PACKET];
 
 static uint16_t read_be16(const uint8_t* p) {
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
@@ -167,13 +172,9 @@ static int valid_answer_ip(uint32_t ip) {
     return ip != 0 && ip != UINT32_MAX && first != 0 && first < 224;
 }
 
-static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
-                       uint16_t destination_port, const uint8_t* packet,
-                       uint32_t length, void* context) {
-    dns_query_context_t* query = (dns_query_context_t*)context;
-    if (!query || !dev || dev != query->device || source_ip != dev->dns_server ||
-        source_port != DNS_PORT || destination_port != query->local_port ||
-        !packet || length < 12u || length > DNS_MAX_PACKET) return -1;
+static int dns_parse_response(dns_query_context_t* query, const uint8_t* packet,
+                               uint32_t length) {
+    if (!query || !packet || length < 12u || length > DNS_TCP_MAX_PACKET) return -1;
     if (read_be16(packet) != query->id) return -1;
     uint16_t flags = read_be16(packet + 2u);
     if (!(flags & 0x8000u) || (flags & 0x7800u) != 0) return -1;
@@ -187,9 +188,16 @@ static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
         return -1;
     offset += 4u;
 
-    /* Even failures must echo the right question before ending this query. */
-    if ((flags & 0x0200u) || (flags & 0x000Fu) != 0) {
+    /* A truncated UDP response must trigger TCP fallback after its question is verified. */
+    if (flags & 0x0200u) {
         query->complete = 1;
+        query->truncated = 1;
+        query->result_ip = 0;
+        return 0;
+    }
+    if ((flags & 0x000Fu) != 0) {
+        query->complete = 1;
+        query->truncated = 0;
         query->result_ip = 0;
         return 0;
     }
@@ -248,8 +256,81 @@ static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
     return 0;
 }
 
+static int dns_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
+                       uint16_t destination_port, const uint8_t* packet,
+                       uint32_t length, void* context) {
+    dns_query_context_t* query = (dns_query_context_t*)context;
+    if (!query || !dev || dev != query->device || source_ip != dev->dns_server ||
+        source_port != DNS_PORT || destination_port != query->local_port ||
+        !packet || length < 12u || length > DNS_MAX_PACKET) return -1;
+    return dns_parse_response(query, packet, length);
+}
+
+static int dns_read_exact(int sockfd, uint8_t* buffer, uint32_t length) {
+    if (sockfd < 0 || (!buffer && length)) return 0;
+    uint32_t offset = 0;
+    while (offset < length) {
+        int received = sys_recv(sockfd, buffer + offset, length - offset, 0);
+        if (received <= 0) return 0;
+        offset += (uint32_t)received;
+    }
+    return 1;
+}
+
+static uint32_t dns_resolve_over_tcp(netdev_t* dev, dns_query_context_t* query) {
+    /* The socket API currently uses the default NIC; do not silently switch interfaces. */
+    if (!dev || !query || netdev_get_default() != dev) return 0;
+    int sockfd = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sockfd < 0) return 0;
+
+    sockaddr_in_t remote = {0};
+    remote.sin_family = AF_INET;
+    remote.sin_port = htons(DNS_PORT);
+    remote.sin_addr = dev->dns_server;
+    if (sys_connect(sockfd, &remote) != 0) {
+        (void)sys_close(sockfd);
+        return 0;
+    }
+
+    uint8_t request[DNS_MAX_PACKET + 2u];
+    uint32_t query_length = build_query(request + 2u, query->id, query->expected_name);
+    if (!query_length || query_length > DNS_MAX_PACKET) {
+        (void)sys_close(sockfd);
+        return 0;
+    }
+    write_be16(request, (uint16_t)query_length);
+    int sent = sys_send(sockfd, request, query_length + 2u, 0);
+    if (sent != (int)(query_length + 2u)) {
+        (void)sys_close(sockfd);
+        return 0;
+    }
+
+    uint8_t length_prefix[2];
+    if (!dns_read_exact(sockfd, length_prefix, sizeof(length_prefix))) {
+        (void)sys_close(sockfd);
+        return 0;
+    }
+    uint32_t response_length = read_be16(length_prefix);
+    if (response_length < 12u || response_length > DNS_TCP_MAX_PACKET) {
+        (void)sys_close(sockfd);
+        return 0;
+    }
+
+    query->complete = 0;
+    query->truncated = 0;
+    query->result_ip = 0;
+    uint32_t result = 0;
+    if (dns_read_exact(sockfd, dns_tcp_response_scratch, response_length)) {
+        int parsed = dns_parse_response(query, dns_tcp_response_scratch, response_length);
+        if (parsed == 0 && query->complete && !query->truncated)
+            result = query->result_ip;
+    }
+    (void)sys_close(sockfd);
+    return result;
+}
+
 void dns_init(void) {
-    klog(LOG_INFO, "DNS resolver initialized with bounded query/response parsing; TCP fallback for truncated replies is unavailable");
+    klog(LOG_INFO, "DNS resolver initialized with bounded UDP parsing and TCP fallback for truncated responses");
 }
 
 uint32_t dns_resolve_hostname(netdev_t* dev, const char* hostname) {
@@ -263,6 +344,8 @@ uint32_t dns_resolve_hostname(netdev_t* dev, const char* hostname) {
     query.device = dev;
     query.result_ip = 0;
     query.complete = 0;
+    query.truncated = 0;
+    query.local_port = 0;
     if (!normalize_hostname(hostname, query.expected_name)) {
         klog(LOG_WARNING, "DNS rejected an invalid hostname");
         return 0;
@@ -318,6 +401,15 @@ uint32_t dns_resolve_hostname(netdev_t* dev, const char* hostname) {
     }
 
     (void)udp_unregister_handler(query.local_port, dns_receive, &query);
+    if (query.truncated) {
+        query.complete = 0;
+        query.result_ip = 0;
+        query.truncated = 0;
+        uint32_t tcp_result = dns_resolve_over_tcp(dev, &query);
+        if (tcp_result) return tcp_result;
+        klog(LOG_WARNING, "DNS TCP fallback failed or returned no usable A record");
+        return 0;
+    }
     if (!query.complete || !query.result_ip) {
         klog(LOG_WARNING, "DNS query timed out or returned no usable A record");
         return 0;
