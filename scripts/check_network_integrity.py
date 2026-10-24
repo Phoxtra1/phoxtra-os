@@ -18,6 +18,10 @@ if "192, 168, 1, 150" in dhcp or "Received DHCPACK" in dhcp:
     errors.append("DHCP must not fabricate a lease")
 if "Static known host" in dns or "142, 250, 190, 46" in dns:
     errors.append("DNS must not fabricate host answers")
+if "read_dns_name" not in dns or "dns_receive" not in dns or "udp_register_handler" not in dns:
+    errors.append("DNS must build real queries and validate response identity, bounds, and names")
+if "DNS resolver is not complete" in dns:
+    errors.append("DNS resolver must not remain a placeholder")
 if "Default Gateway ARP seed" in arp or "52, 0x54, 0x00, 0x12" in arp:
     errors.append("ARP must not seed a fabricated gateway MAC")
 if "TCP 3-Way Handshake SYN -> SYN/ACK -> ACK Completed" in socket:
