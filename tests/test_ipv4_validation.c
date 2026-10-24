@@ -5,6 +5,20 @@
 #include <stdio.h>
 #include <string.h>
 
+static unsigned tcp_dispatch_count;
+static unsigned udp_dispatch_count;
+static uint32_t dispatch_source_ip, dispatch_destination_ip, dispatch_length;
+int tcp_receive_packet(netdev_t* dev, uint32_t src, uint32_t dst, const uint8_t* data, uint32_t len) {
+    (void)dev; (void)data; ++tcp_dispatch_count;
+    dispatch_source_ip = src; dispatch_destination_ip = dst; dispatch_length = len;
+    return 41;
+}
+int udp_receive_packet(netdev_t* dev, uint32_t src, uint32_t dst, const uint8_t* data, uint32_t len) {
+    (void)dev; (void)data; ++udp_dispatch_count;
+    dispatch_source_ip = src; dispatch_destination_ip = dst; dispatch_length = len;
+    return 42;
+}
+
 static uint8_t sent_packet[1500];
 static uint32_t sent_length;
 static unsigned sent_count;
@@ -99,6 +113,27 @@ int main(void) {
     make_packet(packet, &length, ip4(192, 168, 1, 20), ip4(192, 168, 1, 99));
     CHECK("packet addressed to another host is not answered",
           ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 0);
+    /* Protocol dispatch is tested independently of TCP/UDP implementation details. */
+    make_packet(packet, &length, ip4(192, 168, 1, 20), dev.ip_addr);
+    ((ipv4_header_t*)packet)->protocol = IPPROTO_UDP;
+    ((ipv4_header_t*)packet)->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + 8u));
+    ((ipv4_header_t*)packet)->checksum = 0;
+    ((ipv4_header_t*)packet)->checksum = net_checksum(packet, sizeof(ipv4_header_t));
+    memset(packet + sizeof(ipv4_header_t), 0, 8u);
+    udp_dispatch_count = 0;
+    CHECK("IPv4 dispatches UDP payload to UDP validator",
+          ipv4_receive_packet(&dev, packet, sizeof(ipv4_header_t) + 8u) == 42 && udp_dispatch_count == 1);
+    CHECK("UDP dispatch preserves source, destination and payload length",
+          dispatch_source_ip == ip4(192,168,1,20) && dispatch_destination_ip == dev.ip_addr && dispatch_length == 8u);
+
+    make_packet(packet, &length, ip4(192, 168, 1, 20), dev.ip_addr);
+    ((ipv4_header_t*)packet)->protocol = IPPROTO_TCP;
+    ((ipv4_header_t*)packet)->checksum = 0;
+    ((ipv4_header_t*)packet)->checksum = net_checksum(packet, sizeof(ipv4_header_t));
+    tcp_dispatch_count = 0;
+    CHECK("IPv4 dispatches TCP payload to TCP validator",
+          ipv4_receive_packet(&dev, packet, length) == 41 && tcp_dispatch_count == 1);
+
     printf("IPv4 receive validation tests passed.\n");
     return 0;
 }
