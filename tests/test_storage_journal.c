@@ -156,10 +156,32 @@ int main(void) {
     CHECK("journal can be recovered before use", storage_journal_recover(&journal) == 0);
     CHECK("single-sector transaction commits", storage_journal_write_sector(&journal, TARGET_LBA, replacement) == 0);
     CHECK("committed target contains new complete sector", sector_has(TARGET_LBA, 0xA5));
-    CHECK("commit records are cleared after durable target write",
-          sector_has(JOURNAL_LBA, 0) && sector_has(JOURNAL_LBA + 2u, 0));
-    CHECK("clean journal recovers idempotently", storage_journal_recover(&journal) == 0 &&
+    CHECK("redundant durable DONE markers are retained",
+          record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
+    CHECK("completed journal recovers idempotently", storage_journal_recover(&journal) == 0 &&
           sector_has(TARGET_LBA, 0xA5));
+
+    /* Reusing the journal must preserve the previous committed generation until
+       the new commit marker is durable, and replay only a committed new generation. */
+    memset(replacement, 0xB6, sizeof(replacement));
+    disk.fail_write_call = disk.write_calls + 2u; /* payload write succeeds; new A commit fails */
+    CHECK("uncommitted replacement failure is reported",
+          storage_journal_write_sector(&journal, TARGET_LBA + 1u, replacement) != 0);
+    disk.fail_write_call = 0;
+    CHECK("old generation survives failure before new commit",
+          storage_journal_recover(&journal) == 0 &&
+          sector_has(TARGET_LBA, 0xA5) && sector_has(TARGET_LBA + 1u, 0x11));
+    memset(replacement, 0xC7, sizeof(replacement));
+    disk.fail_write_call = disk.write_calls + 3u; /* new A commit persists; B commit fails */
+    CHECK("partially committed replacement reports failure",
+          storage_journal_write_sector(&journal, TARGET_LBA + 1u, replacement) != 0);
+    disk.fail_write_call = 0;
+    CHECK("new committed generation replays over old DONE generation",
+          storage_journal_recover(&journal) == 0 &&
+          sector_has(TARGET_LBA, 0xA5) && sector_has(TARGET_LBA + 1u, 0xC7));
+    CHECK("both redundant records finish as DONE",
+          record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
+    memset(replacement, 0xA5, sizeof(replacement));
 
     /* Reject out-of-range targets and any journal/target overlap at setup. */
     CHECK("target outside allowed range is refused",
@@ -180,7 +202,7 @@ int main(void) {
 
     /* Inject a failure at each of the six write stages and then reboot/recover.
        Failures before a valid commit leave the old target; later failures replay new data. */
-    for (unsigned fail_at = 1; fail_at <= 6; ++fail_at) {
+    for (unsigned fail_at = 1; fail_at <= 6u; ++fail_at) {
         setup(0);
         storage_journal_t crash_journal;
         CHECK("crash-cut test setup succeeds", initialize(&crash_journal) == 0);
@@ -197,7 +219,7 @@ int main(void) {
             CHECK("committed interruption replays new target", sector_has(TARGET_LBA, 0xA5));
         }
         CHECK("recovery leaves metadata clean",
-              sector_has(JOURNAL_LBA, 0) && sector_has(JOURNAL_LBA + 2u, 0));
+              record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
     }
 
     /* A genuinely torn metadata sector is ambiguous and must not be guessed at. */
@@ -211,6 +233,35 @@ int main(void) {
     disk.fail_write_call = 0;
     CHECK("corrupt lone metadata record fails closed", storage_journal_recover(&torn_journal) != 0);
     CHECK("failed recovery never changes target sector", sector_has(TARGET_LBA, 0x11));
+
+    /* Torn DONE writes are recoverable from the independent commit/complete peer. */
+    setup(0);
+    storage_journal_t torn_done_a;
+    CHECK("torn DONE-A test setup succeeds", initialize(&torn_done_a) == 0);
+    disk.fail_write_call = 5u;
+    disk.partial_write_bytes = 28u;
+    CHECK("torn DONE-A transaction returns failure",
+          storage_journal_write_sector(&torn_done_a, TARGET_LBA, replacement) != 0);
+    disk.fail_write_call = 0;
+    disk.partial_write_bytes = 0;
+    CHECK("valid peer repairs torn DONE-A", storage_journal_recover(&torn_done_a) == 0);
+    CHECK("torn DONE-A recovery retains target and matching DONE records",
+          sector_has(TARGET_LBA, 0xA5) &&
+          record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
+
+    setup(0);
+    storage_journal_t torn_done_b;
+    CHECK("torn DONE-B test setup succeeds", initialize(&torn_done_b) == 0);
+    disk.fail_write_call = 6u;
+    disk.partial_write_bytes = 28u;
+    CHECK("torn DONE-B transaction returns failure",
+          storage_journal_write_sector(&torn_done_b, TARGET_LBA, replacement) != 0);
+    disk.fail_write_call = 0;
+    disk.partial_write_bytes = 0;
+    CHECK("valid peer repairs torn DONE-B", storage_journal_recover(&torn_done_b) == 0);
+    CHECK("torn DONE-B recovery retains target and matching DONE records",
+          sector_has(TARGET_LBA, 0xA5) &&
+          record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
 
     /* Corrupt journal payload after both commit records exist: never replay unchecked data. */
     setup(0);
