@@ -23,6 +23,8 @@ if "read_dns_name" not in dns or "dns_receive" not in dns or "udp_register_handl
     errors.append("DNS must build real queries and validate response identity, bounds, and names")
 if "DNS resolver is not complete" in dns:
     errors.append("DNS resolver must not remain a placeholder")
+if "dns_resolve_over_tcp" not in dns or "sys_connect(sockfd, &remote)" not in dns or "DNS_TCP_MAX_PACKET" not in dns:
+    errors.append("DNS must fall back to bounded TCP reads when a validated UDP response is truncated")
 if "Default Gateway ARP seed" in arp or "52, 0x54, 0x00, 0x12" in arp:
     errors.append("ARP must not seed a fabricated gateway MAC")
 if "TCP 3-Way Handshake SYN -> SYN/ACK -> ACK Completed" in socket:
