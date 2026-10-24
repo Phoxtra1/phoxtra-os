@@ -21,7 +21,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  # Keep push and pull_request runs separate; they otherwise cancel each other on the same branch.
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
