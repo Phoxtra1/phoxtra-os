@@ -138,6 +138,46 @@ int main(void) {
     CHECK("UDP handler receives one payload of the expected size",
           udp_delivery_count == 1 && udp_delivered_length == 3);
 
+    uint32_t configured_ip = dev.ip_addr;
+    uint32_t configured_mask = dev.netmask;
+    dev.ip_addr = 0;
+    dev.netmask = 0;
+    uint8_t bootstrap_udp[sizeof(udp_header_t) + 1u] = {0};
+    udp_header_t* boot_udp = (udp_header_t*)bootstrap_udp;
+    boot_udp->src_port = htons(53001u);
+    boot_udp->dest_port = htons(61000u);
+    boot_udp->length = htons((uint16_t)sizeof(bootstrap_udp));
+    sent_count = 0;
+    CHECK("unconfigured interface cannot transmit arbitrary UDP broadcasts",
+          ipv4_send_packet(&dev, UINT32_MAX, IPPROTO_UDP, bootstrap_udp,
+                           sizeof(bootstrap_udp)) == -2 && sent_count == 0);
+    boot_udp->src_port = htons(68u);
+    boot_udp->dest_port = htons(67u);
+    CHECK("unconfigured interface may send DHCP client broadcast",
+          ipv4_send_packet(&dev, UINT32_MAX, IPPROTO_UDP, bootstrap_udp,
+                           sizeof(bootstrap_udp)) > 0 && sent_count == 1);
+
+    uint8_t broadcast_packet[64] = {0};
+    ipv4_header_t* broadcast_ip = (ipv4_header_t*)broadcast_packet;
+    udp_header_t* broadcast_udp = (udp_header_t*)(broadcast_packet + sizeof(*broadcast_ip));
+    broadcast_ip->ihl_version = 0x45;
+    broadcast_ip->total_length = htons((uint16_t)(sizeof(*broadcast_ip) + sizeof(*broadcast_udp)));
+    broadcast_ip->ttl = 64;
+    broadcast_ip->protocol = IPPROTO_UDP;
+    broadcast_ip->src_ip = ip4(192, 168, 1, 20);
+    broadcast_ip->dest_ip = UINT32_MAX;
+    broadcast_ip->checksum = 0;
+    broadcast_ip->checksum = net_checksum(broadcast_ip, sizeof(*broadcast_ip));
+    broadcast_udp->src_port = htons(53001u);
+    broadcast_udp->dest_port = htons(61000u);
+    broadcast_udp->length = htons((uint16_t)sizeof(*broadcast_udp));
+    broadcast_udp->checksum = 0;
+    CHECK("unconfigured interface rejects non-DHCP UDP broadcast replies",
+          ipv4_receive_packet(&dev, broadcast_packet,
+            sizeof(*broadcast_ip) + sizeof(*broadcast_udp)) == -2);
+    dev.ip_addr = configured_ip;
+    dev.netmask = configured_mask;
+
     printf("IPv4 receive validation tests passed.\n");
     return 0;
 }
