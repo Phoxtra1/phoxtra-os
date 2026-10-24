@@ -1,19 +1,36 @@
 #include "../kernel/net/ipv4.h"
 #include "../kernel/net/ethernet.h"
 #include "../kernel/net/arp.h"
+#include "../kernel/net/udp.h"
 #include "../kernel/log/logger.h"
 #include <stdio.h>
 #include <string.h>
 
+static unsigned tcp_dispatch_count;
+static unsigned udp_dispatch_count;
+static uint32_t dispatch_source_ip, dispatch_destination_ip, dispatch_length;
+int tcp_receive_packet(netdev_t* dev, uint32_t src, uint32_t dst, const uint8_t* data, uint32_t len) {
+    (void)dev; (void)data; ++tcp_dispatch_count;
+    dispatch_source_ip = src; dispatch_destination_ip = dst; dispatch_length = len;
+    return 41;
+}
+int udp_receive_packet(netdev_t* dev, uint32_t src, uint32_t dst, const uint8_t* data, uint32_t len) {
+    (void)dev; (void)data; ++udp_dispatch_count;
+    dispatch_source_ip = src; dispatch_destination_ip = dst; dispatch_length = len;
+    return 42;
+}
+
 static uint8_t sent_packet[1500];
 static uint32_t sent_length;
 static unsigned sent_count;
+static uint32_t arp_lookup_ip;
+static uint8_t sent_destination_mac[ETH_ALEN];
 
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
 uint16_t ntohs(uint16_t value) { return htons(value); }
 int arp_lookup(uint32_t ip, uint8_t mac_out[ETH_ALEN]) {
-    (void)ip;
+    arp_lookup_ip = ip;
     static const uint8_t mac[ETH_ALEN] = {0x02, 0xAA, 0xBB, 0xCC, 0xDD, 0x01};
     if (!mac_out) return -1;
     memcpy(mac_out, mac, ETH_ALEN);
@@ -22,7 +39,8 @@ int arp_lookup(uint32_t ip, uint8_t mac_out[ETH_ALEN]) {
 int arp_send_request(netdev_t* dev, uint32_t target_ip) { (void)dev; (void)target_ip; return 1; }
 int ethernet_send_frame(netdev_t* dev, const uint8_t dest_mac[ETH_ALEN],
                         uint16_t ethertype, const uint8_t* payload, uint32_t payload_len) {
-    (void)dev; (void)dest_mac;
+    (void)dev;
+    if (dest_mac) memcpy(sent_destination_mac, dest_mac, ETH_ALEN);
     if (ethertype != ETHERTYPE_IPV4 || !payload || payload_len > sizeof(sent_packet)) return -1;
     memcpy(sent_packet, payload, payload_len);
     sent_length = payload_len;
@@ -99,6 +117,55 @@ int main(void) {
     make_packet(packet, &length, ip4(192, 168, 1, 20), ip4(192, 168, 1, 99));
     CHECK("packet addressed to another host is not answered",
           ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 0);
-    printf("IPv4 receive validation tests passed.\n");
+    /* Protocol dispatch is tested independently of TCP/UDP implementation details. */
+    make_packet(packet, &length, ip4(192, 168, 1, 20), dev.ip_addr);
+    ((ipv4_header_t*)packet)->protocol = IPPROTO_UDP;
+    ((ipv4_header_t*)packet)->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + 8u));
+    ((ipv4_header_t*)packet)->checksum = 0;
+    ((ipv4_header_t*)packet)->checksum = net_checksum(packet, sizeof(ipv4_header_t));
+    memset(packet + sizeof(ipv4_header_t), 0, 8u);
+    udp_dispatch_count = 0;
+    CHECK("IPv4 dispatches UDP payload to UDP validator",
+          ipv4_receive_packet(&dev, packet, sizeof(ipv4_header_t) + 8u) == 42 && udp_dispatch_count == 1);
+    CHECK("UDP dispatch preserves source, destination and payload length",
+          dispatch_source_ip == ip4(192,168,1,20) && dispatch_destination_ip == dev.ip_addr && dispatch_length == 8u);
+
+    make_packet(packet, &length, ip4(192, 168, 1, 20), dev.ip_addr);
+    ((ipv4_header_t*)packet)->protocol = IPPROTO_TCP;
+    ((ipv4_header_t*)packet)->checksum = 0;
+    ((ipv4_header_t*)packet)->checksum = net_checksum(packet, sizeof(ipv4_header_t));
+    tcp_dispatch_count = 0;
+    CHECK("IPv4 dispatches TCP payload to TCP validator",
+          ipv4_receive_packet(&dev, packet, length) == 41 && tcp_dispatch_count == 1);
+
+    /* Exercise transmit routing, including DHCP bootstrap before address assignment. */
+    uint8_t udp_dhcp[sizeof(udp_header_t)] = {0};
+    udp_header_t* dhcp_header = (udp_header_t*)udp_dhcp;
+    dhcp_header->src_port = htons(68u);
+    dhcp_header->dest_port = htons(67u);
+    dev.ip_addr = 0;
+    dev.netmask = 0;
+    sent_count = 0;
+    CHECK("DHCP bootstrap broadcast transmits before address assignment",
+          ipv4_send_packet(&dev, UINT32_MAX, IPPROTO_UDP, udp_dhcp, sizeof(udp_dhcp)) > 0);
+    CHECK("DHCP bootstrap uses Ethernet broadcast destination",
+          sent_destination_mac[0] == 0xFFu && sent_destination_mac[5] == 0xFFu);
+    CHECK("DHCP bootstrap emits one frame", sent_count == 1);
+
+    dev.ip_addr = ip4(192,168,1,10);
+    dev.netmask = ip4(255,255,255,0);
+    dev.gateway = ip4(192,168,1,1);
+    arp_lookup_ip = 0;
+    CHECK("on-link IPv4 destination resolves directly through ARP",
+          ipv4_send_packet(&dev, ip4(192,168,1,20), IPPROTO_ICMP, udp_dhcp, sizeof(udp_dhcp)) > 0 &&
+          arp_lookup_ip == ip4(192,168,1,20));
+    CHECK("off-link IPv4 destination resolves configured gateway",
+          ipv4_send_packet(&dev, ip4(8,8,8,8), IPPROTO_ICMP, udp_dhcp, sizeof(udp_dhcp)) > 0 &&
+          arp_lookup_ip == dev.gateway);
+    dev.gateway = 0;
+    CHECK("off-link IPv4 traffic is blocked without a gateway",
+          ipv4_send_packet(&dev, ip4(8,8,8,8), IPPROTO_ICMP, udp_dhcp, sizeof(udp_dhcp)) == -2);
+
+    printf("IPv4 receive and transmit tests passed.\n");
     return 0;
 }
