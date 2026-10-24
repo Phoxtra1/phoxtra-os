@@ -14,6 +14,9 @@ errors = []
 # Guard boundary handling and reject malformed/overlapping partition declarations.
 partitions = read("kernel/storage/partition.c")
 blockdev = read("kernel/storage/blockdev.c")
+blockdev_header = read("kernel/storage/blockdev.h")
+journal = read("kernel/storage/storage_journal.c")
+journal_test = read("tests/test_storage_journal.c")
 ramdisk = read("kernel/storage/ahci.c")
 ext2 = read("kernel/storage/ext2.c")
 fat32 = read("kernel/storage/fat32.c")
@@ -27,6 +30,33 @@ if "is_extended_partition" not in partitions or "extended partition skipped" not
     errors.append("unsupported MBR extended-partition chains must not be exposed as ordinary filesystems")
 if "blockdev_register" not in blockdev or "duplicate pointer or name" not in blockdev:
     errors.append("block-device registry must reject duplicate registrations")
+
+# Persistent writes are a gated milestone: only registered, explicitly enabled,
+# simulated, non-read-only devices with a successful durability hook are eligible.
+if "BLOCKDEV_FLAG_WRITE_ENABLED" not in blockdev_header or "flush_sectors" not in blockdev_header:
+    errors.append("block-device API must expose explicit write enablement and a flush hook")
+for required in ("BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_WRITE_ENABLED",
+                 "BLOCKDEV_FLAG_READONLY", "blockdev_is_registered",
+                 "dev->write_sectors(dev, lba, count, buffer)",
+                 "blockdev_flush(dev) == 0"):
+    if required not in blockdev:
+        errors.append(f"guarded block writes are missing required safety gate: {required}")
+if "part->block_dev.flags = BLOCKDEV_FLAG_PARTITION | BLOCKDEV_FLAG_READONLY" not in partitions:
+    errors.append("discovered partitions must remain read-only and must not inherit write enablement")
+for required in ("JOURNAL_MAGIC", "crc32", "JOURNAL_CRC_OFFSET", "recover_locked",
+                 "target_is_allowed", "write_done_pair", "JOURNAL_STATE_DONE",
+                 "replay_commit", "blockdev_write_sectors",
+                 "journal->journal_start_lba + 1u", "journal->journal_start_lba + 2u"):
+    if required not in journal:
+        errors.append(f"safe storage journal is missing required recovery invariant: {required}")
+for required in ("fail_at <= 6u", "partial_write_bytes", "fail_flush_call",
+                 "conflicting metadata copies fail closed",
+                 "corrupt payload is never written to target",
+                 "read-only device refuses journal initialization",
+                 "pre-commit interruption preserves old target",
+                 "committed interruption replays new target"):
+    if required not in journal_test:
+        errors.append(f"storage journal regression tests missing failure case: {required}")
 if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
     errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
 for write_fn in ("ram_test_write_sectors", "ahci_write_sectors"):

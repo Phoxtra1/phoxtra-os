@@ -51,6 +51,7 @@ set(KERNEL_SOURCES
     vfs/devfs.c
     vfs/initrd.c
     storage/blockdev.c
+    storage/storage_journal.c
     storage/ahci.c
     storage/partition.c
     storage/ext2.c
