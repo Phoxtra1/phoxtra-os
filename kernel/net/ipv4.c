@@ -46,10 +46,16 @@ int ipv4_receive_packet(netdev_t* dev, const uint8_t* packet, uint32_t length) {
     uint16_t fragment = ntohs(ip->fragment_offset);
     if ((fragment & 0x3FFFu) != 0) return -2;
 
-    int limited_broadcast_udp = (ip->protocol == IPPROTO_UDP && ip->dest_ip == UINT32_MAX);
+    uint32_t payload_length = (uint32_t)total_length - header_length;
+    int limited_broadcast_udp = 0;
+    if (ip->protocol == IPPROTO_UDP && ip->dest_ip == UINT32_MAX &&
+        payload_length >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)(packet + header_length);
+        /* Before address assignment, accept only DHCP client replies addressed to port 68. */
+        limited_broadcast_udp = (!dev->ip_addr && ntohs(udp->dest_port) == 68u);
+    }
     if ((!dev->ip_addr || ip->dest_ip != dev->ip_addr) && !limited_broadcast_udp) return -2;
 
-    uint32_t payload_length = (uint32_t)total_length - header_length;
     if (ip->protocol == IPPROTO_UDP)
         return udp_receive_packet(dev, ip->src_ip, ip->dest_ip,
                                   packet + header_length, payload_length);
@@ -77,8 +83,13 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
                      const uint8_t* payload, uint32_t payload_len) {
     if (!dev || !payload || !dev->send_packet || !dest_ip ||
         payload_len > 1480u) return -1;
-    int bootstrap_broadcast = (!dev->ip_addr && dest_ip == UINT32_MAX &&
-                               protocol == IPPROTO_UDP);
+    int bootstrap_broadcast = 0;
+    if (!dev->ip_addr && dest_ip == UINT32_MAX && protocol == IPPROTO_UDP &&
+        payload_len >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)payload;
+        bootstrap_broadcast = (ntohs(udp->src_port) == 68u &&
+                               ntohs(udp->dest_port) == 67u);
+    }
     if ((!dev->ip_addr || !dev->netmask) && !bootstrap_broadcast) {
         klog(LOG_WARNING, "IPv4 transmit blocked: interface has no verified address configuration");
         return -2;
