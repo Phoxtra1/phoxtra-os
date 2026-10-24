@@ -173,6 +173,7 @@ int main(void) {
     deliver_segment(server_ip, test_dev.ip_addr, server_port, socket->local_port,
                     peer_next_seq, socket->snd_nxt, TCP_FLAG_ACK | TCP_FLAG_PSH,
                     receive_body, sizeof(receive_body));
+    peer_next_seq += sizeof(receive_body);
     if (!test_ok("inbound TCP payload reaches the stream receive buffer", socket->tcp_rx_count == sizeof(receive_body))) return 1;
     uint8_t received[16] = {0};
     int got = sys_recv(fd, received, sizeof(received), 0);
