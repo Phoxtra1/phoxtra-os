@@ -36,8 +36,10 @@ if "int ipv4_receive_packet(" not in ipv4 or "checksum_valid(packet, header_leng
     errors.append("IPv4 receive path must validate packet/header checksums before dispatch")
 if "ipv4_receive_packet(dev, payload, payload_len)" not in ethernet:
     errors.append("Ethernet must dispatch inbound IPv4 frames to the IPv4 validator")
-if "payload_len > 1472u" not in read("kernel/net/udp.c"):
-    errors.append("UDP transmit path must validate payload bounds")
+if "UDP_MAX_PAYLOAD 1472u" not in udp or "payload_len > UDP_MAX_PAYLOAD" not in udp:
+    errors.append("UDP transmit path must enforce the bounded maximum payload")
+if "declared_length > length" not in udp or "udp_checksum_valid" not in udp:
+    errors.append("UDP receive path must reject overlong datagrams and verify checksums")
 if "int udp_receive_packet(" not in udp or "udp_checksum_valid" not in udp or "udp_register_handler" not in udp:
     errors.append("UDP receive must validate lengths/checksums and dispatch through registered handlers")
 if "udp_receive_packet(dev, ip->src_ip, ip->dest_ip" not in ipv4:
