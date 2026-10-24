@@ -25,6 +25,7 @@ static uint32_t tcp_dns_frame_offset;
 static unsigned tcp_connect_count;
 static unsigned tcp_close_count;
 static unsigned tcp_recv_calls;
+static int tcp_invalid_id_once;
 
 void klog(log_level_t level, const char* message) { (void)level; (void)message; }
 uint16_t htons(uint16_t value) { return (uint16_t)((value << 8) | (value >> 8)); }
@@ -80,6 +81,7 @@ int sys_send(int sockfd, const void* data, uint32_t length, int flags) {
     response[1] = last_query[1];
     response[2] = 0x81u;
     response[3] = 0x80u;
+    if (tcp_invalid_id_once) { response[1] ^= 0x01u; tcp_invalid_id_once = 0; }
     write16(response + 4u, 1u);
     write16(response + 6u, 1u);
     memcpy(response + 12u, last_query + 12u, query_length - 12u);
@@ -198,6 +200,12 @@ int main(void) {
           tcp_recv_calls > 3u && tcp_dns_frame_offset == tcp_dns_frame_length);
     CHECK("DNS TCP fallback leaves no UDP handler registered",
           registered_handler == 0 && registered_port == 0);
+
+    tcp_invalid_id_once = 1;
+    CHECK("DNS refuses a TCP response with the wrong transaction ID",
+          dns_resolve_hostname(&dev, "bad-tcp-id.example") == 0);
+    CHECK("failed DNS TCP response still releases socket and UDP handler",
+          tcp_close_count == 2 && registered_handler == 0 && registered_port == 0);
     printf("DNS query/response validation tests passed.\n");
     return 0;
 }
