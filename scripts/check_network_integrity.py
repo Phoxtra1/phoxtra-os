@@ -10,19 +10,37 @@ dhcp = read("kernel/net/dhcp.c")
 dns = read("kernel/net/dns.c")
 arp = read("kernel/net/arp.c")
 ipv4 = read("kernel/net/ipv4.c")
+udp = read("kernel/net/udp.c")
 ethernet = read("kernel/net/ethernet.c")
 socket = read("kernel/net/socket.c")
+tcp = read("kernel/net/tcp.c")
 e1000 = read("kernel/net/e1000.c")
 if "192, 168, 1, 150" in dhcp or "Received DHCPACK" in dhcp:
     errors.append("DHCP must not fabricate a lease")
 if "Static known host" in dns or "142, 250, 190, 46" in dns:
     errors.append("DNS must not fabricate host answers")
+if "read_dns_name" not in dns or "dns_receive" not in dns or "udp_register_handler" not in dns:
+    errors.append("DNS must build real queries and validate response identity, bounds, and names")
+if "DNS resolver is not complete" in dns:
+    errors.append("DNS resolver must not remain a placeholder")
+if "dns_resolve_over_tcp" not in dns or "sys_connect(sockfd, &remote)" not in dns or "DNS_TCP_MAX_PACKET" not in dns:
+    errors.append("DNS must fall back to bounded TCP reads when a validated UDP response is truncated")
 if "Default Gateway ARP seed" in arp or "52, 0x54, 0x00, 0x12" in arp:
     errors.append("ARP must not seed a fabricated gateway MAC")
 if "TCP 3-Way Handshake SYN -> SYN/ACK -> ACK Completed" in socket:
     errors.append("TCP connect must not claim a handshake without packet exchange")
 if "return len;" in socket:
     errors.append("unsupported TCP send must not report bytes sent")
+if "int tcp_receive_packet(" not in tcp or "tcp_checksum_valid" not in tcp:
+    errors.append("TCP receive must validate transport checksums before processing segments")
+if "tcp_connect_socket(socket, dev)" not in socket or "tcp_send_data(socket, dev" not in socket or "tcp_receive_data(socket, dev" not in socket:
+    errors.append("stream sockets must call the TCP handshake, send, and receive implementation")
+if "tcp_receive_packet(dev, ip->src_ip, ip->dest_ip" not in ipv4:
+    errors.append("IPv4 TCP packets must reach the TCP receive state machine")
+if "void tcp_poll(void)" not in tcp or "tcp_poll();" not in read("kernel/net/netdev.c"):
+    errors.append("passive TCP handshakes must retry deferred SYN-ACKs during network polling")
+if "int sys_accept(" not in socket or "int sys_close(" not in socket:
+    errors.append("stream socket interface must implement accept and close entry points")
 if "payload_len > 1500u" not in ethernet or "!dev->send_packet" not in ethernet:
     errors.append("Ethernet transmit path must validate frame bounds and callback")
 if "payload_len > 1480u" not in ipv4:

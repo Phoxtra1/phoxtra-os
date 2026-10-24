@@ -1,6 +1,8 @@
 #include "ipv4.h"
 #include "ethernet.h"
 #include "arp.h"
+#include "udp.h"
+#include "tcp.h"
 #include "../log/logger.h"
 
 static uint16_t packet_id = 1;
@@ -72,7 +74,14 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
                      const uint8_t* payload, uint32_t payload_len) {
     if (!dev || !payload || !dev->send_packet || !dest_ip ||
         payload_len > 1480u) return -1;
-    if (!dev->ip_addr || !dev->netmask) {
+    int bootstrap_broadcast = 0;
+    if (!dev->ip_addr && dest_ip == UINT32_MAX && protocol == IPPROTO_UDP &&
+        payload_len >= sizeof(udp_header_t)) {
+        const udp_header_t* udp = (const udp_header_t*)payload;
+        bootstrap_broadcast = (ntohs(udp->src_port) == 68u &&
+                               ntohs(udp->dest_port) == 67u);
+    }
+    if ((!dev->ip_addr || !dev->netmask) && !bootstrap_broadcast) {
         klog(LOG_WARNING, "IPv4 transmit blocked: interface has no verified address configuration");
         return -2;
     }
@@ -92,9 +101,6 @@ int ipv4_send_packet(netdev_t* dev, uint32_t dest_ip, uint8_t protocol,
     for (uint32_t i = 0; i < payload_len; ++i)
         packet[sizeof(ipv4_header_t) + i] = payload[i];
 
-    uint32_t next_hop = ((dest_ip & dev->netmask) == (dev->ip_addr & dev->netmask))
-        ? dest_ip : dev->gateway;
-    if (!next_hop) return -2;
     uint8_t target_mac[ETH_ALEN];
     if (arp_lookup(next_hop, target_mac) != 0) {
         (void)arp_send_request(dev, next_hop);

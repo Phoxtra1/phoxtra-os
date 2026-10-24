@@ -200,8 +200,8 @@ static void cmd_help(void) {
     console_write("  ifconfig   - Display active network interfaces and IP addresses\n");
     console_write("  ping       - Show current ICMP diagnostic limitations\n");
     console_write("  netstat    - Show socket-subsystem implementation status\n");
-    console_write("  dhcp       - Show DHCP lease support status\n");
-    console_write("  dns        - Show DNS resolver implementation status\n");
+    console_write("  dhcp       - Request a DHCP lease (experimental)\n");
+    console_write("  dns        - Resolve a hostname with a DNS A query (experimental)\n");
     console_write("  elf        - Show ELF validation and execution support status\n");
     console_write("  libc       - Show user-space C runtime support status\n");
     console_write("  gui        - Launch High-Resolution 1024x768 Desktop GUI Window Manager\n");
@@ -233,7 +233,7 @@ static void cmd_about(void) {
     console_write("Stage   : Experimental bootable x86_64 prototype\n");
     console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
     console_write("Storage : Experimental read-only AHCI/SATA and limited ext2 reads; writes disabled\n");
-    console_write("Network : e1000 hardware path under development; full TCP/IP/TLS unavailable\n");
+    console_write("Network : Experimental E1000/ARP/IPv4/UDP/TCP; DHCP/DNS lookup; TLS/browser unavailable\n");
     console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
     console_write("Mobile  : ARM64 phone build not implemented\n");
     console_write("Install : Not implemented; do not install to an internal disk\n\n");
@@ -381,7 +381,7 @@ static void cmd_ifconfig(void) {
             uint32_to_ip(dev->ip_addr, ip); uint32_to_ip(dev->netmask, mask); uint32_to_ip(dev->gateway, gateway);
             console_write("  inet "); console_write(ip); console_write(" netmask "); console_write(mask);
             console_write(" gateway "); console_write(gateway); console_write("\n");
-        } else console_write("  IPv4: not configured (DHCP is not implemented)\n");
+        } else console_write("  IPv4: not configured (run dhcp to request a lease)\n");
         console_write("  ether ");
         static const char hex[] = "0123456789abcdef";
         for (int i = 0; i < ETH_ALEN; ++i) {
@@ -399,17 +399,17 @@ static void cmd_ifconfig(void) {
 static void cmd_ping(const char* target) {
     console_write("\n=== ICMP Diagnostics Status ===\n");
     if (target && target[0]) { console_write("Requested target: "); console_write(target); console_write("\n"); }
-    console_write("The current prototype has no complete IPv4 receive path or ICMP reply/timeout handling.\n");
+    console_write("IPv4 validation and ICMP echo replies are implemented; this command does not yet collect ping replies or report timeout/loss statistics.\n");
     console_write("No successful ping or packet-loss result can be reported by this build.\n\n");
 }
 
 static void cmd_netstat(void) {
     console_write("\n=== Socket Subsystem Status ===\n");
     console_write("Allocated socket handles: "); print_dec(socket_get_active_count()); console_write("\n");
-    console_write("TCP handshake/state machine : NOT IMPLEMENTED\n");
-    console_write("Inbound protocol dispatch   : PARTIAL (ARP only)\n");
-    console_write("Socket receive queues       : NOT IMPLEMENTED\n");
-    console_write("No listening TCP/UDP ports are claimed.\n\n");
+    console_write("TCP handshake/state machine : EXPERIMENTAL (checksummed segments, bounded stream buffers, retry/timeout)\n");
+    console_write("Inbound protocol dispatch   : ARP, validated IPv4, ICMP, UDP and TCP\n");
+    console_write("Socket receive buffers      : bounded TCP stream buffer; one pending UDP datagram per socket\n");
+    console_write("No TCP/UDP services are listening by default; bind/listen/accept are experimental APIs.\n\n");
 }
 
 static void cmd_dhcp(void) {
@@ -418,7 +418,7 @@ static void cmd_dhcp(void) {
     if (!dev) { console_write("No supported hardware network interface is active.\n\n"); return; }
     int result = dhcp_request_lease(dev);
     if (result == 0) console_write("DHCP lease obtained and applied.\n\n");
-    else console_write("DHCP is not implemented end-to-end; no address or lease was assigned.\n\n");
+    else console_write("DHCP lease acquisition failed or timed out; no lease was applied without a validated ACK.\n\n");
 }
 
 static void cmd_dns(const char* host) {
@@ -427,7 +427,7 @@ static void cmd_dns(const char* host) {
     console_write("Hostname: "); console_write(host); console_write("\n");
     netdev_t* dev = netdev_get_default();
     uint32_t resolved_ip = dns_resolve_hostname(dev, host);
-    if (!resolved_ip) console_write("DNS query/response processing is not implemented; no address was returned.\n\n");
+    if (!resolved_ip) console_write("DNS lookup failed or timed out; no usable A record was returned.\n\n");
     else {
         char ip_str[16]; uint32_to_ip(resolved_ip, ip_str);
         console_write("Address: "); console_write(ip_str); console_write("\n\n");

@@ -1,5 +1,6 @@
 #include "netdev.h"
 #include "ethernet.h"
+#include "tcp.h"
 #include "../log/logger.h"
 static netdev_t netdev_list[MAX_NETDEV_COUNT];
 static uint32_t registered_netdev_count;
@@ -22,12 +23,16 @@ netdev_t* netdev_get_default(void) { return registered_netdev_count ? &netdev_li
 uint32_t netdev_count(void) { return registered_netdev_count; }
 void net_poll(void) {
     netdev_t* dev = netdev_get_default();
-    if (!dev || !dev->receive_packet) return;
-    for (uint32_t i = 0; i < 8; ++i) {
-        int length = dev->receive_packet(dev, rx_frame, sizeof(rx_frame));
-        if (length <= 0) break;
-        if (length <= (int)sizeof(rx_frame)) (void)ethernet_receive_frame(dev, rx_frame, (uint32_t)length);
+    if (dev && dev->receive_packet) {
+        for (uint32_t i = 0; i < 8; ++i) {
+            int length = dev->receive_packet(dev, rx_frame, sizeof(rx_frame));
+            if (length <= 0) break;
+            if (length <= (int)sizeof(rx_frame))
+                (void)ethernet_receive_frame(dev, rx_frame, (uint32_t)length);
+        }
     }
+    /* Retry half-open passive TCP handshakes even when no frame was queued this poll. */
+    tcp_poll();
 }
 uint16_t htons(uint16_t val) { return (uint16_t)((val << 8) | (val >> 8)); }
 uint16_t ntohs(uint16_t val) { return htons(val); }

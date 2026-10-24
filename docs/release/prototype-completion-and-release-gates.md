@@ -13,6 +13,7 @@ A milestone is complete only when the evidence below exists. Each line must be m
 - [ ] Default x86_64 kernel and ISO build successfully.
 - [ ] Desktop and embedded product profiles build successfully.
 - [ ] Storage-safety audit passes.
+- [ ] Network implementation-integrity audit and ARP/IPv4/UDP/DHCP/DNS/TCP packet-validation tests pass; this evidence is separate from physical NIC acceptance.
 - [ ] QEMU reaches the shell and desktop event loop.
 - [ ] Theme switching, Application Center, Workspace catalogue access, mouse/file-manager interaction, RAM-backed file/folder creation, and screenshot sanity checks pass.
 - [ ] Hardware readiness report is exercised; its output clearly distinguishes PCI inventory from real driver support.
@@ -26,6 +27,7 @@ A milestone is complete only when the evidence below exists. Each line must be m
 - [ ] Planned external applications are labelled as planned/pending.
 - [ ] Amineva Workspace integration status is explicit: the current catalogue entry is not a working suite.
 - [ ] The volatile RAM demo, read-only AHCI/SATA restrictions, supported ext2 subset, and unsupported filesystem features are clearly disclosed.
+- [ ] Network scope is accurately disclosed: experimental ARP/IPv4/UDP and minimal TCP stream sockets, DHCP lease acquisition, and DNS A lookup do not imply full TCP standards interoperability, DHCP renewal, general-purpose DNS beyond the bounded A-query/TCP-fallback path, TLS, a browser, or working Workspace integration.
 - [ ] Physical disk writes, installer, formatting, and write-based recovery remain disabled until separately reviewed and tested.
 - [ ] No physical internal disk is written during discovery or prototype testing.
 - [ ] Known limitations are present in README, release notes, and funding/demo descriptions.
@@ -75,7 +77,7 @@ The manual workflow has an explicit opt-in to create an unpublished draft. It do
 
 ## Gate F — Production OS (separate, larger milestone)
 
-A completed prototype is not a production OS. Before general-purpose daily-use claims, plan and implement at least:
+A completed prototype is not a production OS. The prototype now has tested UDP demultiplexing, a DHCP lease-acquisition path, a DNS A resolver, and an experimental bounded TCP stream/socket path; these do not complete the network stack. Before general-purpose daily-use claims, plan and implement at least:
 
 - A robust memory/interrupt/process model and clear kernel/user-space boundaries, verified through targeted tests.
 - Complete writable persistent storage and filesystem support, including safe write/mount semantics, flush behavior, corruption handling, and recovery; the current AHCI/ext2 path is read-only and limited.
