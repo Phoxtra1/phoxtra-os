@@ -1,6 +1,6 @@
 #include "dhcp.h"
 #include "udp.h"
-#include "../net/ipv4.h"
+#include "ipv4.h"
 #include "../include/timer.h"
 #include "../log/logger.h"
 
@@ -131,6 +131,7 @@ static int parse_options(const uint8_t* packet, uint32_t length, uint32_t* yiadd
     if (yiaddr) *yiaddr = read_be32(packet + 16);
     uint32_t offset = DHCP_FIXED_LENGTH;
     int saw_end = 0;
+    int saw_message_type = 0;
     if (message_type) *message_type = 0;
     if (sid) *sid = 0;
     if (mask) *mask = 0;
@@ -148,7 +149,8 @@ static int parse_options(const uint8_t* packet, uint32_t length, uint32_t* yiadd
         const uint8_t* value = packet + offset;
         switch (code) {
             case 53:
-                if (option_length != 1 || (message_type && *message_type)) return -1;
+                if (option_length != 1 || saw_message_type) return -1;
+                saw_message_type = 1;
                 if (message_type) *message_type = value[0];
                 break;
             case 54:
@@ -207,7 +209,6 @@ static int dhcp_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
         if (gateway) offered_gateway = gateway;
         if (dns) offered_dns = dns;
         if (lease) lease_seconds = lease;
-        current_dhcp_state = DHCP_STATE_OFFER;
         /* Transition before building the packet so the sender emits DHCPREQUEST, not DISCOVER. */
         current_dhcp_state = DHCP_STATE_REQUEST;
         int result = send_current_message();
@@ -220,14 +221,14 @@ static int dhcp_receive(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
     }
 
     if (message_type == DHCP_NAK && current_dhcp_state == DHCP_STATE_REQUEST) {
-        if (sid && sid != server_ip) return -1;
+        if (sid ? sid != server_ip : source_ip != server_ip) return -1;
         current_dhcp_state = DHCP_STATE_FAILED;
         klog(LOG_WARNING, "DHCP server rejected the requested lease");
         return 0;
     }
 
     if (message_type == DHCP_ACK && current_dhcp_state == DHCP_STATE_REQUEST) {
-        if (sid && sid != server_ip) return -1;
+        if (sid ? sid != server_ip : source_ip != server_ip) return -1;
         if (!yiaddr) yiaddr = offered_ip;
         if (!valid_unicast_ip(yiaddr) || yiaddr != offered_ip) return -1;
         if (mask) offered_mask = mask;
