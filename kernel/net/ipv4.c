@@ -2,12 +2,13 @@
 #include "ethernet.h"
 #include "arp.h"
 #include "udp.h"
+#include "tcp.h"
 #include "../log/logger.h"
 
 static uint16_t packet_id = 1;
 
 void ipv4_init(void) {
-    klog(LOG_INFO, "IPv4 receive validation, ICMP echo handling, and UDP packet dispatch initialized; TCP receive remains unavailable");
+    klog(LOG_INFO, "IPv4 receive validation dispatches ICMP, UDP, and TCP into bounded protocol handlers");
 }
 
 uint16_t net_checksum(const void* data, uint32_t len) {
@@ -58,6 +59,9 @@ int ipv4_receive_packet(netdev_t* dev, const uint8_t* packet, uint32_t length) {
 
     if (ip->protocol == IPPROTO_UDP)
         return udp_receive_packet(dev, ip->src_ip, ip->dest_ip,
+                                  packet + header_length, payload_length);
+    if (ip->protocol == IPPROTO_TCP)
+        return tcp_receive_packet(dev, ip->src_ip, ip->dest_ip,
                                   packet + header_length, payload_length);
     if (ip->protocol != IPPROTO_ICMP) return -3;
     if (payload_length < sizeof(icmp_header_t)) return -1;

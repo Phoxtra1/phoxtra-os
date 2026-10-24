@@ -233,7 +233,7 @@ static void cmd_about(void) {
     console_write("Stage   : Experimental bootable x86_64 prototype\n");
     console_write("Desktop : Framebuffer UI, shell, file manager and local application catalogue\n");
     console_write("Storage : Experimental read-only AHCI/SATA and limited ext2 reads; writes disabled\n");
-    console_write("Network : Experimental E1000/ARP/IPv4/UDP; DHCP/DNS acquisition only; TCP/TLS/browser unavailable\n");
+    console_write("Network : Experimental E1000/ARP/IPv4/UDP/TCP; DHCP/DNS lookup; TLS/browser unavailable\n");
     console_write("Security: Prototype only; TPM attestation, trusted signatures and isolation are not validated\n");
     console_write("Mobile  : ARM64 phone build not implemented\n");
     console_write("Install : Not implemented; do not install to an internal disk\n\n");
@@ -399,17 +399,17 @@ static void cmd_ifconfig(void) {
 static void cmd_ping(const char* target) {
     console_write("\n=== ICMP Diagnostics Status ===\n");
     if (target && target[0]) { console_write("Requested target: "); console_write(target); console_write("\n"); }
-    console_write("The current prototype has no complete IPv4 receive path or ICMP reply/timeout handling.\n");
+    console_write("IPv4 validation and ICMP echo replies are implemented; this command does not yet collect ping replies or report timeout/loss statistics.\n");
     console_write("No successful ping or packet-loss result can be reported by this build.\n\n");
 }
 
 static void cmd_netstat(void) {
     console_write("\n=== Socket Subsystem Status ===\n");
     console_write("Allocated socket handles: "); print_dec(socket_get_active_count()); console_write("\n");
-    console_write("TCP handshake/state machine : NOT IMPLEMENTED\n");
-    console_write("Inbound protocol dispatch   : PARTIAL (ARP only)\n");
-    console_write("Socket receive queues       : NOT IMPLEMENTED\n");
-    console_write("No listening TCP/UDP ports are claimed.\n\n");
+    console_write("TCP handshake/state machine : EXPERIMENTAL (checksummed segments, bounded stream buffers, retry/timeout)\n");
+    console_write("Inbound protocol dispatch   : ARP, validated IPv4, ICMP, UDP and TCP\n");
+    console_write("Socket receive buffers      : bounded TCP stream buffer; one pending UDP datagram per socket\n");
+    console_write("No TCP/UDP services are listening by default; bind/listen/accept are experimental APIs.\n\n");
 }
 
 static void cmd_dhcp(void) {
