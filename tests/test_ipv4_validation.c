@@ -98,7 +98,7 @@ int main(void) {
 
     make_packet(packet, &length, ip4(192, 168, 1, 20), ip4(192, 168, 1, 99));
     CHECK("packet addressed to another host is not answered",
-          ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 1);
+          ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 0);
     printf("IPv4 receive validation tests passed.\n");
     return 0;
 }
