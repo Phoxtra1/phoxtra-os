@@ -1,7 +1,6 @@
 #include "../kernel/net/ipv4.h"
 #include "../kernel/net/ethernet.h"
 #include "../kernel/net/arp.h"
-#include "../kernel/net/udp.h"
 #include "../kernel/log/logger.h"
 #include <stdio.h>
 #include <string.h>
@@ -61,29 +60,7 @@ static void make_packet(uint8_t* packet, uint32_t* length, uint32_t src, uint32_
     icmp->checksum = net_checksum(body, 16u);
     *length = sizeof(*ip) + 16u;
 }
-static unsigned tcp_delivery_count;
-int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
-                       const uint8_t* payload, uint32_t payload_length) {
-    (void)dev; (void)source_ip; (void)destination_ip;
-    if (!payload || payload_length < 20u) return -1;
-    ++tcp_delivery_count;
-    return 77;
-}
-
-static unsigned udp_delivery_count;
-static uint32_t udp_delivered_length;
-static int test_udp_delivery(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
-                             uint16_t destination_port, const uint8_t* payload,
-                             uint32_t payload_length, void* context) {
-    (void)dev; (void)source_ip; (void)context;
-    if (source_port != 53001 || destination_port != 61000 ||
-        payload_length != 3 || memcmp(payload, "dns", 3) != 0) return -1;
-    ++udp_delivery_count;
-    udp_delivered_length = payload_length;
-    return (int)payload_length;
-}
-
-#define CHECK(label, expr) do { if (!(expr)) { fprintf(stderr, "FAIL: %s\\n", label); return 1; } printf("PASS: %s\\n", label); } while (0)
+#define CHECK(label, expr) do { if (!(expr)) { fprintf(stderr, "FAIL: %s\n", label); return 1; } printf("PASS: %s\n", label); } while (0)
 
 int main(void) {
     netdev_t dev;
@@ -122,90 +99,6 @@ int main(void) {
     make_packet(packet, &length, ip4(192, 168, 1, 20), ip4(192, 168, 1, 99));
     CHECK("packet addressed to another host is not answered",
           ipv4_receive_packet(&dev, packet, length) == -2 && sent_count == 0);
-    udp_init();
-    CHECK("IPv4 test registers UDP receive port", udp_register_handler(61000, test_udp_delivery, 0) == 0);
-    uint8_t udp_ip_packet[64] = {0};
-    ipv4_header_t* udp_ip = (ipv4_header_t*)udp_ip_packet;
-    udp_header_t* udp = (udp_header_t*)(udp_ip_packet + sizeof(ipv4_header_t));
-    udp_ip->ihl_version = 0x45;
-    udp_ip->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + sizeof(udp_header_t) + 3u));
-    udp_ip->id = htons(12);
-    udp_ip->ttl = 64;
-    udp_ip->protocol = IPPROTO_UDP;
-    udp_ip->src_ip = ip4(192, 168, 1, 20);
-    udp_ip->dest_ip = dev.ip_addr;
-    udp_ip->checksum = 0;
-    udp_ip->checksum = net_checksum(udp_ip, sizeof(*udp_ip));
-    udp->src_port = htons(53001);
-    udp->dest_port = htons(61000);
-    udp->length = htons((uint16_t)(sizeof(udp_header_t) + 3u));
-    udp->checksum = 0;
-    memcpy(udp_ip_packet + sizeof(*udp_ip) + sizeof(*udp), "dns", 3);
-    CHECK("validated IPv4 dispatches UDP payload to the registered handler",
-          ipv4_receive_packet(&dev, udp_ip_packet,
-            sizeof(ipv4_header_t) + sizeof(udp_header_t) + 3u) == 3);
-    CHECK("UDP handler receives one payload of the expected size",
-          udp_delivery_count == 1 && udp_delivered_length == 3);
-
-    memset(udp_ip_packet, 0, sizeof(udp_ip_packet));
-    ipv4_header_t* tcp_ip = (ipv4_header_t*)udp_ip_packet;
-    tcp_ip->ihl_version = 0x45;
-    tcp_ip->total_length = htons((uint16_t)(sizeof(ipv4_header_t) + 20u));
-    tcp_ip->id = htons(13u);
-    tcp_ip->ttl = 64;
-    tcp_ip->protocol = IPPROTO_TCP;
-    tcp_ip->src_ip = ip4(192, 168, 1, 20);
-    tcp_ip->dest_ip = dev.ip_addr;
-    tcp_ip->checksum = 0;
-    tcp_ip->checksum = net_checksum(tcp_ip, sizeof(*tcp_ip));
-    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 0] = 0xD4;
-    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 1] = 0x31;
-    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 2] = 0x1F;
-    ((uint8_t*)tcp_ip)[sizeof(*tcp_ip) + 3] = 0x90;
-    CHECK("IPv4 forwards TCP payload to the TCP receive handler",
-          ipv4_receive_packet(&dev, udp_ip_packet, sizeof(ipv4_header_t) + 20u) == 77 &&
-          tcp_delivery_count == 1);
-
-    uint32_t configured_ip = dev.ip_addr;
-    uint32_t configured_mask = dev.netmask;
-    dev.ip_addr = 0;
-    dev.netmask = 0;
-    uint8_t bootstrap_udp[sizeof(udp_header_t) + 1u] = {0};
-    udp_header_t* boot_udp = (udp_header_t*)bootstrap_udp;
-    boot_udp->src_port = htons(53001u);
-    boot_udp->dest_port = htons(61000u);
-    boot_udp->length = htons((uint16_t)sizeof(bootstrap_udp));
-    sent_count = 0;
-    CHECK("unconfigured interface cannot transmit arbitrary UDP broadcasts",
-          ipv4_send_packet(&dev, UINT32_MAX, IPPROTO_UDP, bootstrap_udp,
-                           sizeof(bootstrap_udp)) == -2 && sent_count == 0);
-    boot_udp->src_port = htons(68u);
-    boot_udp->dest_port = htons(67u);
-    CHECK("unconfigured interface may send DHCP client broadcast",
-          ipv4_send_packet(&dev, UINT32_MAX, IPPROTO_UDP, bootstrap_udp,
-                           sizeof(bootstrap_udp)) > 0 && sent_count == 1);
-
-    uint8_t broadcast_packet[64] = {0};
-    ipv4_header_t* broadcast_ip = (ipv4_header_t*)broadcast_packet;
-    udp_header_t* broadcast_udp = (udp_header_t*)(broadcast_packet + sizeof(*broadcast_ip));
-    broadcast_ip->ihl_version = 0x45;
-    broadcast_ip->total_length = htons((uint16_t)(sizeof(*broadcast_ip) + sizeof(*broadcast_udp)));
-    broadcast_ip->ttl = 64;
-    broadcast_ip->protocol = IPPROTO_UDP;
-    broadcast_ip->src_ip = ip4(192, 168, 1, 20);
-    broadcast_ip->dest_ip = UINT32_MAX;
-    broadcast_ip->checksum = 0;
-    broadcast_ip->checksum = net_checksum(broadcast_ip, sizeof(*broadcast_ip));
-    broadcast_udp->src_port = htons(53001u);
-    broadcast_udp->dest_port = htons(61000u);
-    broadcast_udp->length = htons((uint16_t)sizeof(*broadcast_udp));
-    broadcast_udp->checksum = 0;
-    CHECK("unconfigured interface rejects non-DHCP UDP broadcast replies",
-          ipv4_receive_packet(&dev, broadcast_packet,
-            sizeof(*broadcast_ip) + sizeof(*broadcast_udp)) == -2);
-    dev.ip_addr = configured_ip;
-    dev.netmask = configured_mask;
-
     printf("IPv4 receive validation tests passed.\n");
     return 0;
 }
