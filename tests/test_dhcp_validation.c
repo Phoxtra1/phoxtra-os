@@ -123,11 +123,14 @@ static void reset_harness(void) {
     last_source_port = last_destination_port = 0; last_message_type = 0;
     fake_ticks = 0; poll_count = 0; bad_xid_sent = offer_sent = ack_or_nak_sent = 0;
 }
+static int fake_send(netdev_t* dev, const uint8_t* data, uint32_t length) {
+    (void)dev; (void)data; (void)length; return 0;
+}
 static void init_dev(netdev_t* dev) {
     memset(dev, 0, sizeof(*dev));
     const uint8_t mac[6] = {0x02,0x10,0x20,0x30,0x40,0x50};
     memcpy(dev->mac_addr, mac, sizeof(mac));
-    dev->send_packet = (int (*)(netdev_t*, const uint8_t*, uint32_t))1;
+    dev->send_packet = fake_send;
 }
 
 int main(void) {
