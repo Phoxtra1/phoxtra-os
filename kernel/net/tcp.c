@@ -165,6 +165,36 @@ static void queue_accepted_child(socket_entry_t* child) {
     ++listener->pending_count;
 }
 
+void tcp_poll(void) {
+    uint64_t now = timer_get_ticks();
+    for (int i = 0; i < MAX_SOCKETS; ++i) {
+        socket_entry_t* socket = socket_get_by_id(i);
+        if (!socket || socket->type != SOCK_STREAM ||
+            socket->state != TCP_STATE_SYN_RECEIVED) continue;
+        if (now - socket->tcp_tx_sent_at < TCP_RETRY_TICKS) continue;
+        if (socket->tcp_tx_retries >= TCP_MAX_RETRIES) {
+            socket->error = -2;
+            socket->state = TCP_STATE_CLOSED;
+            socket->in_use = 0;
+            continue;
+        }
+        netdev_t* dev = netdev_get_default();
+        if (!dev) continue;
+        int result = tcp_send_segment(dev, socket->local_ip, socket->local_port,
+                                      socket->remote_ip, socket->remote_port,
+                                      socket->snd_una, socket->rcv_nxt,
+                                      TCP_FLAG_SYN | TCP_FLAG_ACK, 0, 0,
+                                      socket_receive_window(socket));
+        socket->tcp_tx_sent_at = now;
+        ++socket->tcp_tx_retries;
+        if (result < 0 && result != -2) {
+            socket->error = result;
+            socket->state = TCP_STATE_CLOSED;
+            socket->in_use = 0;
+        }
+    }
+}
+
 static int accept_syn(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip,
                       const tcp_header_t* incoming, uint32_t sequence) {
     uint16_t source_port = ntohs(incoming->src_port);
@@ -187,13 +217,17 @@ static int accept_syn(netdev_t* dev, uint32_t source_ip, uint32_t destination_ip
     if (!child->snd_una) child->snd_una = 0x50484F58u;
     child->snd_nxt = child->snd_una + 1u;
     child->state = TCP_STATE_SYN_RECEIVED;
-    if (tcp_send_segment(dev, child->local_ip, child->local_port, child->remote_ip,
-                         child->remote_port, child->snd_una, child->rcv_nxt,
-                         TCP_FLAG_SYN | TCP_FLAG_ACK, 0, 0,
-                         socket_receive_window(child)) < 0) {
+    child->tcp_tx_sent_at = timer_get_ticks();
+    child->tcp_tx_retries = 0;
+    int result = tcp_send_segment(dev, child->local_ip, child->local_port, child->remote_ip,
+                                  child->remote_port, child->snd_una, child->rcv_nxt,
+                                  TCP_FLAG_SYN | TCP_FLAG_ACK, 0, 0,
+                                  socket_receive_window(child));
+    /* ARP resolution is asynchronous: keep the half-open socket and retry after net_poll. */
+    if (result < 0 && result != -2) {
         child->state = TCP_STATE_CLOSED;
         child->in_use = 0;
-        return -1;
+        return result;
     }
     return 0;
 }
@@ -224,6 +258,19 @@ int tcp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_i
         if ((flags & TCP_FLAG_SYN) && !(flags & (TCP_FLAG_ACK | TCP_FLAG_RST)))
             return accept_syn(dev, source_ip, destination_ip, header, sequence);
         return send_reset(dev, source_ip, destination_ip, header, payload_length);
+    }
+
+    if (socket->state == TCP_STATE_SYN_RECEIVED &&
+        (flags & TCP_FLAG_SYN) && !(flags & (TCP_FLAG_ACK | TCP_FLAG_RST)) &&
+        sequence + 1u == socket->rcv_nxt) {
+        int result = tcp_send_segment(dev, socket->local_ip, socket->local_port,
+                                      socket->remote_ip, socket->remote_port,
+                                      socket->snd_una, socket->rcv_nxt,
+                                      TCP_FLAG_SYN | TCP_FLAG_ACK, 0, 0,
+                                      socket_receive_window(socket));
+        socket->tcp_tx_sent_at = timer_get_ticks();
+        if (result < 0 && result != -2) return result;
+        return 0;
     }
 
     if (flags & TCP_FLAG_RST) {
@@ -328,7 +375,8 @@ int tcp_connect_socket(socket_entry_t* socket, netdev_t* dev) {
                                 socket->remote_ip, socket->remote_port,
                                 initial_sequence, 0, TCP_FLAG_SYN, 0, 0,
                                 TCP_RECV_CAPACITY);
-    if (sent < 0) {
+    /* -2 means routing/ARP has deferred transmission; the bounded retry loop handles it. */
+    if (sent < 0 && sent != -2) {
         socket->state = TCP_STATE_CLOSED;
         socket->error = sent;
         return sent;
@@ -345,10 +393,14 @@ int tcp_connect_socket(socket_entry_t* socket, netdev_t* dev) {
         if (now - started >= TCP_CONNECT_TIMEOUT_TICKS) break;
         if (now - last_sent >= TCP_RETRY_TICKS) {
             if (retries >= TCP_MAX_RETRIES) break;
-            if (tcp_send_segment(dev, socket->local_ip, socket->local_port,
-                                 socket->remote_ip, socket->remote_port,
-                                 initial_sequence, 0, TCP_FLAG_SYN, 0, 0,
-                                 TCP_RECV_CAPACITY) < 0) break;
+            int retry_result = tcp_send_segment(dev, socket->local_ip, socket->local_port,
+                                                socket->remote_ip, socket->remote_port,
+                                                initial_sequence, 0, TCP_FLAG_SYN, 0, 0,
+                                                TCP_RECV_CAPACITY);
+            if (retry_result < 0 && retry_result != -2) {
+                socket->error = retry_result;
+                break;
+            }
             ++retries;
             last_sent = now;
         }
@@ -379,12 +431,13 @@ static int tcp_wait_for_ack(socket_entry_t* socket, netdev_t* dev) {
                 return 0;
             }
             uint32_t remaining = socket->tcp_tx_length - offset;
-            if (tcp_send_segment(dev, socket->local_ip, socket->local_port,
-                                 socket->remote_ip, socket->remote_port,
-                                 socket->tcp_tx_seq + offset, socket->rcv_nxt,
-                                 TCP_FLAG_ACK | TCP_FLAG_PSH,
-                                 socket->tcp_tx_buffer + offset, remaining,
-                                 socket_receive_window(socket)) < 0) return -2;
+            int retry_result = tcp_send_segment(dev, socket->local_ip, socket->local_port,
+                                                socket->remote_ip, socket->remote_port,
+                                                socket->tcp_tx_seq + offset, socket->rcv_nxt,
+                                                TCP_FLAG_ACK | TCP_FLAG_PSH,
+                                                socket->tcp_tx_buffer + offset, remaining,
+                                                socket_receive_window(socket));
+            if (retry_result < 0 && retry_result != -2) return -2;
             socket->tcp_tx_sent_at = now;
             ++socket->tcp_tx_retries;
         }
@@ -407,15 +460,17 @@ int tcp_send_data(socket_entry_t* socket, netdev_t* dev,
     socket->tcp_tx_sent_at = timer_get_ticks();
     socket->snd_nxt += send_length;
 
-    if (tcp_send_segment(dev, socket->local_ip, socket->local_port,
-                         socket->remote_ip, socket->remote_port,
-                         socket->tcp_tx_seq, socket->rcv_nxt,
-                         TCP_FLAG_ACK | TCP_FLAG_PSH, socket->tcp_tx_buffer,
-                         send_length, socket_receive_window(socket)) < 0) {
+    int send_result = tcp_send_segment(dev, socket->local_ip, socket->local_port,
+                                       socket->remote_ip, socket->remote_port,
+                                       socket->tcp_tx_seq, socket->rcv_nxt,
+                                       TCP_FLAG_ACK | TCP_FLAG_PSH, socket->tcp_tx_buffer,
+                                       send_length, socket_receive_window(socket));
+    if (send_result < 0 && send_result != -2) {
         socket->snd_nxt -= send_length;
         socket->tcp_tx_length = 0;
-        return -2;
+        return send_result;
     }
+    /* Keep the segment outstanding when ARP/route resolution defers the first send. */
     return tcp_wait_for_ack(socket, dev) == 0 ? (int)send_length : -2;
 }
 
