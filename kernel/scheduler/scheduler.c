@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include "../process/pcb.h"
+#include "../process/process.h"
 #include "../memory/vmm.h"
 #include "../log/logger.h"
 
@@ -131,6 +132,8 @@ void scheduler_remove_process(uint32_t pid) {
 }
 
 void scheduler_tick(void) {
+    /* Reap only after the target's address space is no longer the active CR3. */
+    process_reap_terminated();
     tick_counter++;
     current_ticks++;
 
