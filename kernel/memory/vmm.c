@@ -21,6 +21,7 @@
 
 static uint64_t* kernel_pml4_root;
 static uint64_t* active_pml4_root;
+static int nx_supported;
 #ifndef VMM_TESTING
 static spinlock_t vmm_lock = SPINLOCK_INITIALIZER;
 #endif
@@ -258,6 +259,27 @@ void vmm_init(void) {
     uint64_t* current = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
     kernel_pml4_root = current;
     active_pml4_root = current;
+#ifdef VMM_TESTING
+    nx_supported = 1;
+#else
+    uint32_t max_leaf, ebx, ecx, edx;
+    uint32_t leaf = 0x80000000u;
+    __asm__ volatile("cpuid" : "+a"(leaf), "=b"(ebx), "=c"(ecx), "=d"(edx));
+    max_leaf = leaf;
+    if (max_leaf >= 0x80000001u) {
+        leaf = 0x80000001u;
+        __asm__ volatile("cpuid" : "+a"(leaf), "=b"(ebx), "=c"(ecx), "=d"(edx));
+        if (edx & (1u << 20)) {
+            uint32_t low, high;
+            __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(0xC0000080u));
+            uint64_t efer = ((uint64_t)high << 32) | low;
+            efer |= (1ULL << 11);
+            low = (uint32_t)efer; high = (uint32_t)(efer >> 32);
+            __asm__ volatile("wrmsr" : : "c"(0xC0000080u), "a"(low), "d"(high));
+            nx_supported = 1;
+        }
+    }
+#endif
 
     klog(LOG_KERNEL, "Paging structure validated");
     klog(LOG_KERNEL, "Virtual Memory Manager (VMM) started");
@@ -470,6 +492,7 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         virt < VMM_USER_MIN_ADDRESS || !is_lower_canonical(virt) ||
         phys < VMM_RESERVED_PHYSICAL || phys >= VMM_PHYSICAL_LIMIT ||
         !pmm_is_user_page(phys) ||
+        ((flags & VMM_FLAG_NO_EXECUTE) && !nx_supported) ||
         (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | VMM_FLAG_USER | VMM_FLAG_NO_EXECUTE)) != 0) {
         return -1;
     }
