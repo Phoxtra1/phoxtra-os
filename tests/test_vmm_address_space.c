@@ -170,7 +170,8 @@ int main(void) {
     uint64_t kernel_frame = (uint64_t)(uintptr_t)pmm_alloc_page();
     uint64_t frame1 = (uint64_t)(uintptr_t)pmm_alloc_user_page();
     uint64_t frame2 = (uint64_t)(uintptr_t)pmm_alloc_user_page();
-    if (!frame1 || !frame2) fail("test physical frame allocation failed");
+    uint64_t frame3 = (uint64_t)(uintptr_t)pmm_alloc_user_page();
+    if (!frame1 || !frame2 || !frame3) fail("test physical frame allocation failed");
 
     const uint64_t user_va1 = 0x0000000100001000ULL;
     const uint64_t user_va2 = 0x0000000100002000ULL;
@@ -212,8 +213,14 @@ int main(void) {
         fail("user mapping lacks user permission at every paging level");
 
     vmm_switch_page_directory(user_root);
+    const uint64_t user_va3 = 0x0000000100003000ULL;
+    if (vmm_map_user_page(user_root, user_va3, frame3, VMM_FLAG_WRITABLE) != 0)
+        fail("mapping into the active address space failed");
+    if (invalidations == 0)
+        fail("active user mapping did not request a TLB invalidation");
     if (vmm_virt_to_phys(user_va1) != frame1 ||
-        vmm_virt_to_phys(user_va2) != frame2)
+        vmm_virt_to_phys(user_va2) != frame2 ||
+        vmm_virt_to_phys(user_va3) != frame3)
         fail("active address-space translations failed");
     if (vmm_virt_to_phys(0x12345000ULL) != 0x12345000ULL)
         fail("private address space lost kernel identity translation");
@@ -227,11 +234,11 @@ int main(void) {
         fail("inactive private address space teardown failed");
     if (vmm_destroy_user_page_directory(user_root) == 0)
         fail("double destruction was not rejected");
-    if (invalidations == 0) fail("expected TLB invalidations were not requested");
 
     pmm_free_page((void*)(uintptr_t)kernel_frame);
     pmm_free_user_page((void*)(uintptr_t)frame1);
     pmm_free_user_page((void*)(uintptr_t)frame2);
+    pmm_free_user_page((void*)(uintptr_t)frame3);
     munmap(mapping, ARENA_SIZE);
     puts("PASS: private address spaces preserve supervisor mappings, isolate user pages, reject collisions, and teardown safely");
     return EXIT_SUCCESS;
