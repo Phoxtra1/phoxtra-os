@@ -46,7 +46,7 @@ typedef struct pcb {
 } pcb_t;
 
 pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t priority, uint32_t parent_pid);
-void pcb_destroy(pcb_t* pcb);
+int pcb_destroy(pcb_t* pcb);
 const char* pcb_state_to_string(process_state_t state);
 
 #ifdef __cplusplus

@@ -38,6 +38,7 @@ typedef struct __attribute__((packed)) {
 
 static uint8_t pmm_bitmap[BITMAP_SIZE];
 static uint8_t allocated_bitmap[BITMAP_SIZE];
+static uint8_t user_allocated_bitmap[BITMAP_SIZE];
 static uint64_t total_memory_bytes = DEFAULT_MEM_SIZE;
 static uint64_t total_pages_count = DEFAULT_MEM_SIZE / PAGE_SIZE;
 static uint64_t free_pages_count;
@@ -62,6 +63,15 @@ static inline void allocated_set(uint64_t page) {
 }
 static inline void allocated_clear(uint64_t page) {
     allocated_bitmap[page / 8ULL] &= (uint8_t)~(1u << (page % 8ULL));
+}
+static inline void user_allocated_set(uint64_t page) {
+    user_allocated_bitmap[page / 8ULL] |= (uint8_t)(1u << (page % 8ULL));
+}
+static inline void user_allocated_clear(uint64_t page) {
+    user_allocated_bitmap[page / 8ULL] &= (uint8_t)~(1u << (page % 8ULL));
+}
+static inline int user_allocated_test(uint64_t page) {
+    return (user_allocated_bitmap[page / 8ULL] & (uint8_t)(1u << (page % 8ULL))) != 0;
 }
 static inline int allocated_test(uint64_t page) {
     return (allocated_bitmap[page / 8ULL] & (uint8_t)(1u << (page % 8ULL))) != 0;
@@ -131,6 +141,7 @@ void pmm_init(uint64_t mem_size) {
     for (uint64_t i = 0; i < BITMAP_SIZE; ++i) {
         pmm_bitmap[i] = 0xFFu; /* unavailable until firmware marks RAM usable */
         allocated_bitmap[i] = 0;
+        user_allocated_bitmap[i] = 0;
     }
 
     total_memory_bytes = DEFAULT_MEM_SIZE;
@@ -214,6 +225,62 @@ void* pmm_alloc_contiguous_pages(size_t page_count) {
     return NULL;
 }
 
+/*
+ * User frames are marked separately from ordinary kernel allocations. The
+ * VMM will only install a user-accessible PTE for a frame obtained through
+ * this API, preventing accidental exposure of kernel heap/stack/page-table
+ * pages that were allocated through pmm_alloc_page().
+ */
+void* pmm_alloc_user_page(void) {
+    void* page_ptr = pmm_alloc_page();
+    if (!page_ptr) return NULL;
+
+    /* Never expose stale kernel data through a newly user-mappable frame. */
+    uint8_t* bytes = (uint8_t*)page_ptr;
+    for (size_t i = 0; i < PAGE_SIZE; ++i) bytes[i] = 0;
+
+    uint64_t page = (uint64_t)(uintptr_t)page_ptr / PAGE_SIZE;
+    spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
+    if (page >= total_pages_count || page >= MAX_PAGES ||
+        !allocated_test(page)) {
+        spin_unlock_irqrestore(&pmm_lock, flags);
+        pmm_free_page(page_ptr);
+        return NULL;
+    }
+    user_allocated_set(page);
+    spin_unlock_irqrestore(&pmm_lock, flags);
+    return page_ptr;
+}
+
+int pmm_is_user_page(uint64_t phys_addr) {
+    if ((phys_addr & (PAGE_SIZE - 1ULL)) != 0) return 0;
+    uint64_t page = phys_addr / PAGE_SIZE;
+    if (page >= total_pages_count || page >= MAX_PAGES) return 0;
+    spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
+    int result = allocated_test(page) && user_allocated_test(page);
+    spin_unlock_irqrestore(&pmm_lock, flags);
+    return result;
+}
+
+void pmm_free_user_page(void* ptr) {
+    uint64_t addr = (uint64_t)(uintptr_t)ptr;
+    if (!ptr || (addr & (PAGE_SIZE - 1ULL)) != 0) return;
+    uint64_t page = addr / PAGE_SIZE;
+    if (page >= total_pages_count || page >= MAX_PAGES) return;
+
+    spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
+    if (!allocated_test(page) || !user_allocated_test(page)) {
+        spin_unlock_irqrestore(&pmm_lock, flags);
+        return;
+    }
+    /* Clear ownership and allocation atomically to prevent a double-free race. */
+    user_allocated_clear(page);
+    allocated_clear(page);
+    bitmap_clear(page);
+    ++free_pages_count;
+    spin_unlock_irqrestore(&pmm_lock, flags);
+}
+
 void pmm_free_page(void* ptr) {
     uint64_t addr = (uint64_t)(uintptr_t)ptr;
     if (!ptr || (addr & (PAGE_SIZE - 1ULL)) != 0) return;
@@ -226,6 +293,7 @@ void pmm_free_page(void* ptr) {
         return;
     }
     allocated_clear(page);
+    user_allocated_clear(page);
     bitmap_clear(page);
     ++free_pages_count;
     spin_unlock_irqrestore(&pmm_lock, flags);

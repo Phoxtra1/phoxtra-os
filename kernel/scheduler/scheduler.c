@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include "../process/pcb.h"
+#include "../process/process.h"
 #include "../memory/vmm.h"
 #include "../log/logger.h"
 
@@ -103,17 +104,36 @@ void scheduler_add_process(pcb_t* pcb) {
 }
 
 void scheduler_remove_process(uint32_t pid) {
-    /* Mark as terminated; queue_pop will skip terminated entries */
-    for (uint32_t i = 0; i < queue_count; i++) {
-        uint32_t idx = (queue_head + i) % MAX_READY_QUEUE;
-        if (ready_queue[idx] && ready_queue[idx]->pid == pid) {
-            ready_queue[idx]->state = PROCESS_STATE_TERMINATED;
-            return;
+    /*
+     * Physically remove queued entries before their PCB can be freed. Merely
+     * marking a queued PCB terminated leaves a dangling pointer in the ring.
+     */
+    pcb_t* retained[MAX_READY_QUEUE];
+    uint32_t retained_count = 0;
+
+    while (queue_count) {
+        pcb_t* candidate = queue_pop();
+        if (!candidate) continue;
+        if (candidate->pid == pid) {
+            candidate->state = PROCESS_STATE_TERMINATED;
+            continue;
         }
+        retained[retained_count++] = candidate;
     }
+
+    queue_head = 0;
+    queue_tail = 0;
+    queue_count = 0;
+    for (uint32_t i = 0; i < retained_count; ++i)
+        queue_push(retained[i]);
+
+    if (current_process && current_process->pid == pid)
+        current_process->state = PROCESS_STATE_TERMINATED;
 }
 
 void scheduler_tick(void) {
+    /* Reap only after the target's address space is no longer the active CR3. */
+    process_reap_terminated();
     tick_counter++;
     current_ticks++;
 
@@ -139,12 +159,19 @@ void scheduler_yield(void) {
     }
 
     if (!next || next == old) {
-        /* Nothing else to run — stay on current or idle */
         if (old && old != &idle_pcb && old->state == PROCESS_STATE_RUNNING) {
-            /* Re-enqueue self and keep running */
+            /* No peer is ready; keep the current runnable process. */
             queue_push(old);
+            return;
         }
-        return;
+        if (old == &idle_pcb) return;
+
+        /*
+         * A terminated/non-runnable current process must not continue on its
+         * stack merely because the ready queue is empty. Fall back to idle,
+         * which uses the kernel address space.
+         */
+        next = &idle_pcb;
     }
 
     /* Re-enqueue old process if still runnable */
@@ -157,10 +184,11 @@ void scheduler_yield(void) {
     next->state     = PROCESS_STATE_RUNNING;
     current_process = next;
 
-    /* Per-process memory isolation: reload CR3 page directory */
-    if (next->page_directory) {
+    /* Idle uses the kernel root; process tasks use their private roots. */
+    if (next->page_directory)
         vmm_switch_page_directory(next->page_directory);
-    }
+    else
+        vmm_switch_page_directory(vmm_get_kernel_page_directory());
 
     /* Perform the actual register-level context switch */
     context_switch(&old->rsp, next->rsp);
