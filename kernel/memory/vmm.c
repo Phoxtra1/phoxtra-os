@@ -1,253 +1,548 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "../log/logger.h"
+#include "../sync/spinlock.h"
 
-static uint64_t* pml4_root = NULL;
+#define VMM_ADDRESS_MASK       0x000FFFFFFFFFF000ULL
+#define VMM_PTE_PRESENT        0x001ULL
+#define VMM_PTE_WRITABLE       0x002ULL
+#define VMM_PTE_USER           0x004ULL
+#define VMM_PTE_WRITE_THROUGH  0x008ULL
+#define VMM_PTE_CACHE_DISABLE  0x010ULL
+#define VMM_PTE_LARGE          0x080ULL
+#define VMM_PTE_NO_EXECUTE     (1ULL << 63)
+#define VMM_LARGE_PAGE_MASK    0x000FFFFFFFE00000ULL
+#define VMM_GIGA_PAGE_MASK     0x000FFFFFC0000000ULL
+#define VMM_LOWER_HALF_ENTRIES 256u
+#define VMM_USER_MIN_ADDRESS   0x0000000100000000ULL
+#define VMM_USER_MAX_ADDRESS   0x0000800000000000ULL
+#define VMM_PHYSICAL_LIMIT     0x0000000100000000ULL
+#define VMM_RESERVED_PHYSICAL  0x0000000000400000ULL
+
+static uint64_t* kernel_pml4_root;
+static uint64_t* active_pml4_root;
+static spinlock_t vmm_lock = SPINLOCK_INITIALIZER;
+
+#ifdef VMM_TESTING
+extern uint64_t vmm_test_read_cr3(void);
+extern void vmm_test_write_cr3(uint64_t value);
+extern void vmm_test_invlpg(uint64_t address);
+#endif
 
 static inline uint64_t read_cr3(void) {
-    uint64_t cr3_val;
-    asm volatile("mov %%cr3, %0" : "=r"(cr3_val));
-    return cr3_val;
+#ifdef VMM_TESTING
+    return vmm_test_read_cr3();
+#else
+    uint64_t value;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(value));
+    return value;
+#endif
 }
 
-static inline void invlpg(void* m) {
-    asm volatile("invlpg (%0)" : : "b"(m) : "memory");
+static inline void write_cr3(uint64_t value) {
+#ifdef VMM_TESTING
+    vmm_test_write_cr3(value);
+#else
+    __asm__ volatile("mov %0, %%cr3" : : "r"(value) : "memory");
+#endif
+}
+
+static inline void invlpg(void* address) {
+#ifdef VMM_TESTING
+    vmm_test_invlpg((uint64_t)(uintptr_t)address);
+#else
+    __asm__ volatile("invlpg (%0)" : : "b"(address) : "memory");
+#endif
+}
+
+static inline spinlock_irq_flags_t vmm_lock_acquire(void) {
+#ifdef VMM_TESTING
+    return 0;
+#else
+    return spin_lock_irqsave(&vmm_lock);
+#endif
+}
+
+static inline void vmm_lock_release(spinlock_irq_flags_t flags) {
+#ifdef VMM_TESTING
+    (void)flags;
+#else
+    spin_unlock_irqrestore(&vmm_lock, flags);
+#endif
+}
+
+static inline int is_page_aligned(uint64_t value) {
+    return (value & (PAGE_SIZE - 1ULL)) == 0;
+}
+
+static inline int is_lower_canonical(uint64_t address) {
+    return address < VMM_USER_MAX_ADDRESS;
+}
+
+static inline uint64_t* entry_table(uint64_t entry) {
+    return (uint64_t*)(uintptr_t)(entry & VMM_ADDRESS_MASK);
+}
+
+static inline uint64_t table_entry(const void* table, uint64_t flags) {
+    return ((uint64_t)(uintptr_t)table & VMM_ADDRESS_MASK) | flags;
+}
+
+static uint64_t* allocate_zeroed_table(void) {
+    uint64_t* table = (uint64_t*)pmm_alloc_page();
+    if (!table) return NULL;
+    for (size_t i = 0; i < 512; ++i) table[i] = 0;
+    return table;
+}
+
+static void copy_table(uint64_t* destination, const uint64_t* source) {
+    for (size_t i = 0; i < 512; ++i) destination[i] = source[i];
+}
+
+static uint64_t* current_pml4_unlocked(void) {
+    uint64_t* hardware_root = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
+    if (!kernel_pml4_root) kernel_pml4_root = hardware_root;
+    if (!active_pml4_root || active_pml4_root != hardware_root)
+        active_pml4_root = hardware_root;
+    return active_pml4_root;
+}
+
+static uint64_t* kernel_pml4_unlocked(void) {
+    if (!kernel_pml4_root) {
+        uint64_t* current = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
+        kernel_pml4_root = current;
+        if (!active_pml4_root) active_pml4_root = current;
+    }
+    return kernel_pml4_root;
+}
+
+/*
+ * Address-space lower-half page tables are fully private. Leaf PTEs retain
+ * their physical-frame references; ownership of those frames remains with the
+ * mapper. The upper PML4 half is shared and is therefore never freed here.
+ */
+static int destroy_page_directory_unlocked(uint64_t pml4_phys) {
+    if (!pml4_phys || !is_page_aligned(pml4_phys)) return -1;
+
+    uint64_t current_cr3 = read_cr3() & VMM_ADDRESS_MASK;
+    uint64_t* kernel_root = kernel_pml4_unlocked();
+    if (pml4_phys == (uint64_t)(uintptr_t)kernel_root ||
+        pml4_phys == current_cr3) {
+        return -1;
+    }
+
+    uint64_t* root = (uint64_t*)(uintptr_t)pml4_phys;
+    for (size_t pml4_i = 0; pml4_i < VMM_LOWER_HALF_ENTRIES; ++pml4_i) {
+        uint64_t pml4e = root[pml4_i];
+        if (!(pml4e & VMM_PTE_PRESENT)) continue;
+        uint64_t* pdpt = entry_table(pml4e);
+
+        for (size_t pdpt_i = 0; pdpt_i < 512; ++pdpt_i) {
+            uint64_t pdpte = pdpt[pdpt_i];
+            if (!(pdpte & VMM_PTE_PRESENT) || (pdpte & VMM_PTE_LARGE))
+                continue; /* Includes 1 GiB leaf mappings. */
+
+            uint64_t* pd = entry_table(pdpte);
+            for (size_t pd_i = 0; pd_i < 512; ++pd_i) {
+                uint64_t pde = pd[pd_i];
+                if (!(pde & VMM_PTE_PRESENT) || (pde & VMM_PTE_LARGE))
+                    continue; /* A 2 MiB leaf has no PT to release. */
+                pmm_free_page(entry_table(pde));
+            }
+            pmm_free_page(pd);
+        }
+        pmm_free_page(pdpt);
+        root[pml4_i] = 0;
+    }
+
+    pmm_free_page(root);
+    return 0;
+}
+
+/* Called while vmm_lock is held and before the root becomes current. */
+static uint64_t clone_kernel_lower_half(void) {
+    uint64_t* kernel_root = kernel_pml4_unlocked();
+    uint64_t* new_root = allocate_zeroed_table();
+    if (!new_root) return 0;
+
+    /* Upper-half kernel mappings stay supervisor-only and shared. */
+    for (size_t i = VMM_LOWER_HALF_ENTRIES; i < 512; ++i)
+        new_root[i] = kernel_root[i] & ~VMM_PTE_USER;
+
+    /*
+     * Current bootstrap layout identity-maps 0..4 GiB in PML4[0], using
+     * 2 MiB supervisor pages. Clone every table below that slot, not just the
+     * root, so future per-process edits cannot mutate the kernel's hierarchy.
+     */
+    uint64_t* new_pdpt = allocate_zeroed_table();
+    if (!new_pdpt) {
+        pmm_free_page(new_root);
+        return 0;
+    }
+    new_root[0] = table_entry(new_pdpt,
+                              VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
+
+    uint64_t kernel_pml4e = kernel_root[0];
+    if (kernel_pml4e & VMM_PTE_PRESENT) {
+        uint64_t* kernel_pdpt = entry_table(kernel_pml4e);
+        for (size_t pdpt_i = 0; pdpt_i < 512; ++pdpt_i) {
+            uint64_t kernel_pdpte = kernel_pdpt[pdpt_i];
+            if (!(kernel_pdpte & VMM_PTE_PRESENT)) continue;
+
+            /* Preserve a 1 GiB leaf as a supervisor leaf, if one exists. */
+            if (kernel_pdpte & VMM_PTE_LARGE) {
+                new_pdpt[pdpt_i] = kernel_pdpte & ~VMM_PTE_USER;
+                continue;
+            }
+
+            uint64_t* new_pd = allocate_zeroed_table();
+            if (!new_pd) {
+                (void)destroy_page_directory_unlocked((uint64_t)(uintptr_t)new_root);
+                return 0;
+            }
+            new_pdpt[pdpt_i] = table_entry(
+                new_pd, (kernel_pdpte & ~VMM_ADDRESS_MASK) & ~VMM_PTE_USER);
+
+            uint64_t* kernel_pd = entry_table(kernel_pdpte);
+            for (size_t pd_i = 0; pd_i < 512; ++pd_i) {
+                uint64_t kernel_pde = kernel_pd[pd_i];
+                if (!(kernel_pde & VMM_PTE_PRESENT)) continue;
+
+                if (kernel_pde & VMM_PTE_LARGE) {
+                    new_pd[pd_i] = kernel_pde & ~VMM_PTE_USER;
+                    continue;
+                }
+
+                /* Deep-copy existing PTs too, so teardown owns all tables. */
+                uint64_t* kernel_pt = entry_table(kernel_pde);
+                uint64_t* new_pt = allocate_zeroed_table();
+                if (!new_pt) {
+                    (void)destroy_page_directory_unlocked((uint64_t)(uintptr_t)new_root);
+                    return 0;
+                }
+                for (size_t pt_i = 0; pt_i < 512; ++pt_i)
+                    new_pt[pt_i] = kernel_pt[pt_i] & ~VMM_PTE_USER;
+                new_pd[pd_i] = table_entry(
+                    new_pt, (kernel_pde & ~VMM_ADDRESS_MASK) & ~VMM_PTE_USER);
+            }
+        }
+    }
+    return (uint64_t)(uintptr_t)new_root;
 }
 
 void vmm_init(void) {
-    // Acquire current CR3 table initialized in boot.S
-    pml4_root = (uint64_t*)(read_cr3() & ~0xFFFULL);
-    
+    uint64_t* current = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
+    kernel_pml4_root = current;
+    active_pml4_root = current;
+
     klog(LOG_KERNEL, "Paging structure validated");
     klog(LOG_KERNEL, "Virtual Memory Manager (VMM) started");
 }
 
 int vmm_map_page(uint64_t virt, uint64_t phys, uint32_t flags) {
-    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
-    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
-    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
-    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
-
-    if (!pml4_root) {
-        pml4_root = (uint64_t*)(read_cr3() & ~0xFFF);
+    if (!is_page_aligned(virt) || !is_page_aligned(phys) ||
+        !is_lower_canonical(virt) && (virt >> 47) != 0x1FFFFULL ||
+        (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE)) != 0) {
+        return -1;
     }
 
-    uint64_t* pdpt;
-    if (!(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) {
-        pdpt = (uint64_t*)pmm_alloc_page();
-        if (!pdpt) return -1;
-        for (int i = 0; i < 512; i++) pdpt[i] = 0;
-        pml4_root[pml4_idx] = ((uint64_t)pdpt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t* root = current_pml4_unlocked();
+    uint64_t pml4_idx = (virt >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (virt >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (virt >> 12) & 0x1FFULL;
+    int new_pdpt = 0;
+    int new_pd = 0;
+    uint64_t* pdpt = NULL;
+    uint64_t* pd = NULL;
+    uint64_t* pt = NULL;
+
+    if (!(root[pml4_idx] & VMM_PTE_PRESENT)) {
+        pdpt = allocate_zeroed_table();
+        if (!pdpt) goto fail;
+        root[pml4_idx] = table_entry(pdpt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE);
+        new_pdpt = 1;
     } else {
-        pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
+        pdpt = entry_table(root[pml4_idx]);
     }
 
-    uint64_t* pdt;
-    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) {
-        pdt = (uint64_t*)pmm_alloc_page();
-        if (!pdt) return -1;
-        for (int i = 0; i < 512; i++) pdt[i] = 0;
-        pdpt[pdpt_idx] = ((uint64_t)pdt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    if (!(pdpt[pdpt_idx] & VMM_PTE_PRESENT)) {
+        pd = allocate_zeroed_table();
+        if (!pd) goto fail;
+        pdpt[pdpt_idx] = table_entry(pd, VMM_PTE_PRESENT | VMM_PTE_WRITABLE);
+        new_pd = 1;
     } else {
-        pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+        if (pdpt[pdpt_idx] & VMM_PTE_LARGE) goto fail;
+        pd = entry_table(pdpt[pdpt_idx]);
     }
 
-    uint64_t* pt;
-    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) {
-        pt = (uint64_t*)pmm_alloc_page();
-        if (!pt) return -1;
-        for (int i = 0; i < 512; i++) pt[i] = 0;
-        pdt[pdt_idx] = ((uint64_t)pt) | VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | (flags & VMM_FLAG_USER);
+    if (!(pd[pd_idx] & VMM_PTE_PRESENT)) {
+        pt = allocate_zeroed_table();
+        if (!pt) goto fail;
+        pd[pd_idx] = table_entry(pt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE);
     } else {
-        pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+        if (pd[pd_idx] & VMM_PTE_LARGE) goto fail;
+        pt = entry_table(pd[pd_idx]);
     }
 
-    pt[pt_idx] = (phys & ~0xFFF) | (flags & 0xFFF) | VMM_FLAG_PRESENT;
-    invlpg((void*)virt);
+    if (pt[pt_idx] & VMM_PTE_PRESENT) goto fail;
+    pt[pt_idx] = (phys & VMM_ADDRESS_MASK) |
+                 VMM_PTE_PRESENT | (flags & VMM_PTE_WRITABLE);
+    invlpg((void*)(uintptr_t)virt);
+    vmm_lock_release(lock_flags);
     return 0;
+
+fail:
+    if (new_pd) {
+        pdpt[pdpt_idx] = 0;
+        pmm_free_page(pd);
+    }
+    if (new_pdpt) {
+        root[pml4_idx] = 0;
+        pmm_free_page(pdpt);
+    }
+    vmm_lock_release(lock_flags);
+    return -1;
 }
 
 int vmm_unmap_page(uint64_t virt) {
-    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
-    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
-    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
-    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+    if (!is_page_aligned(virt)) return -1;
 
-    if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return -1;
-    uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
-    
-    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return -1;
-    uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t* root = current_pml4_unlocked();
+    uint64_t pml4_idx = (virt >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (virt >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (virt >> 12) & 0x1FFULL;
 
-    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) return -1;
-    uint64_t* pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
+    if (!(root[pml4_idx] & VMM_PTE_PRESENT)) goto fail;
+    uint64_t* pdpt = entry_table(root[pml4_idx]);
+    if (!(pdpt[pdpt_idx] & VMM_PTE_PRESENT) ||
+        (pdpt[pdpt_idx] & VMM_PTE_LARGE)) goto fail;
+    uint64_t* pd = entry_table(pdpt[pdpt_idx]);
+    if (!(pd[pd_idx] & VMM_PTE_PRESENT) ||
+        (pd[pd_idx] & VMM_PTE_LARGE)) goto fail;
+    uint64_t* pt = entry_table(pd[pd_idx]);
+    if (!(pt[pt_idx] & VMM_PTE_PRESENT)) goto fail;
 
     pt[pt_idx] = 0;
-    invlpg((void*)virt);
+    invlpg((void*)(uintptr_t)virt);
+    vmm_lock_release(lock_flags);
     return 0;
+
+fail:
+    vmm_lock_release(lock_flags);
+    return -1;
 }
 
 uint64_t vmm_virt_to_phys(uint64_t virt) {
-    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
-    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
-    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
-    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+    uint64_t pml4_idx = (virt >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (virt >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (virt >> 12) & 0x1FFULL;
 
-    if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return 0;
-    uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFF);
-
-    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return 0;
-    uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
-
-    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) return 0;
-
-    // Check if huge page (2MB)
-    if (pdt[pdt_idx] & 0x80) {
-        return (pdt[pdt_idx] & ~0x1FFFFF) + (virt & 0x1FFFFF);
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t* root = current_pml4_unlocked();
+    if (!(root[pml4_idx] & VMM_PTE_PRESENT)) goto unmapped;
+    uint64_t* pdpt = entry_table(root[pml4_idx]);
+    uint64_t pdpte = pdpt[pdpt_idx];
+    if (!(pdpte & VMM_PTE_PRESENT)) goto unmapped;
+    if (pdpte & VMM_PTE_LARGE) {
+        uint64_t result = (pdpte & VMM_GIGA_PAGE_MASK) + (virt & 0x3FFFFFFFULL);
+        vmm_lock_release(lock_flags);
+        return result;
     }
 
-    uint64_t* pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
-    if (!(pt[pt_idx] & VMM_FLAG_PRESENT)) return 0;
+    uint64_t* pd = entry_table(pdpte);
+    uint64_t pde = pd[pd_idx];
+    if (!(pde & VMM_PTE_PRESENT)) goto unmapped;
+    if (pde & VMM_PTE_LARGE) {
+        uint64_t result = (pde & VMM_LARGE_PAGE_MASK) + (virt & 0x1FFFFFULL);
+        vmm_lock_release(lock_flags);
+        return result;
+    }
 
-    return (pt[pt_idx] & ~0xFFF) + (virt & 0xFFF);
+    uint64_t* pt = entry_table(pde);
+    uint64_t pte = pt[pt_idx];
+    if (!(pte & VMM_PTE_PRESENT)) goto unmapped;
+    {
+        uint64_t result = (pte & VMM_ADDRESS_MASK) + (virt & 0xFFFULL);
+        vmm_lock_release(lock_flags);
+        return result;
+    }
+
+unmapped:
+    vmm_lock_release(lock_flags);
+    return 0;
 }
 
 uint64_t vmm_get_kernel_page_directory(void) {
-    if (!pml4_root) {
-        pml4_root = (uint64_t*)(read_cr3() & ~0xFFFULL);
-    }
-    return (uint64_t)pml4_root;
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t result = (uint64_t)(uintptr_t)kernel_pml4_unlocked();
+    vmm_lock_release(lock_flags);
+    return result;
 }
 
 uint64_t vmm_create_user_page_directory(void) {
-    uint64_t* user_pml4 = (uint64_t*)pmm_alloc_page();
-    if (!user_pml4) {
-        klog(LOG_ERROR, "VMM: Failed to allocate physical page for user PML4");
-        return 0;
-    }
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t result = clone_kernel_lower_half();
+    vmm_lock_release(lock_flags);
+    if (!result)
+        klog(LOG_ERROR, "VMM: failed to create a private page-directory hierarchy");
+    return result;
+}
 
-    uint64_t k_cr3 = vmm_get_kernel_page_directory();
-    uint64_t* k_pml4 = (uint64_t*)k_cr3;
-
-    // Copy identity kernel mappings so kernel code, stacks & hardware memory stay accessible
-    for (int i = 0; i < 512; i++) {
-        user_pml4[i] = k_pml4[i];
-    }
-
-    return (uint64_t)user_pml4;
+int vmm_destroy_user_page_directory(uint64_t pml4_phys) {
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    int result = destroy_page_directory_unlocked(pml4_phys);
+    vmm_lock_release(lock_flags);
+    return result;
 }
 
 void vmm_switch_page_directory(uint64_t cr3_phys) {
-    if (!cr3_phys) return;
-    uint64_t current_cr3 = read_cr3() & ~0xFFFULL;
-    if (current_cr3 != (cr3_phys & ~0xFFFULL)) {
-        asm volatile("mov %0, %%cr3" : : "r"(cr3_phys & ~0xFFFULL) : "memory");
-    }
+    if (!cr3_phys || !is_page_aligned(cr3_phys)) return;
+
+    uint64_t current_cr3 = read_cr3() & VMM_ADDRESS_MASK;
+    if (!kernel_pml4_root)
+        kernel_pml4_root = (uint64_t*)(uintptr_t)current_cr3;
+
+    if (current_cr3 != (cr3_phys & VMM_ADDRESS_MASK))
+        write_cr3(cr3_phys & VMM_ADDRESS_MASK);
+    active_pml4_root = (uint64_t*)(uintptr_t)(cr3_phys & VMM_ADDRESS_MASK);
 }
 
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
-    if (!pml4_phys) return -1;
-    /* Ring 3 may only map lower-half canonical virtual addresses. */
-    if (virt >= 0x0000800000000000ULL) return -1;
-    uint64_t* target_pml4 = (uint64_t*)pml4_phys;
-    uint64_t* kernel_pml4 = (uint64_t*)vmm_get_kernel_page_directory();
-    if (!target_pml4 || target_pml4 == kernel_pml4) {
+    /*
+     * The bootstrap uses supervisor-only 2 MiB identity pages for physical
+     * memory below 4 GiB. Do not let a user mapping replace or alias any of
+     * those addresses. Until a high-half kernel map exists, user virtual
+     * addresses start at 4 GiB; frames still come from the current <4 GiB PMM.
+     */
+    if (!pml4_phys || !is_page_aligned(pml4_phys) ||
+        !is_page_aligned(virt) || !is_page_aligned(phys) ||
+        virt < VMM_USER_MIN_ADDRESS || !is_lower_canonical(virt) ||
+        phys < VMM_RESERVED_PHYSICAL || phys >= VMM_PHYSICAL_LIMIT ||
+        (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | VMM_FLAG_USER)) != 0) {
+        return -1;
+    }
+
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t* kernel_root = kernel_pml4_unlocked();
+    uint64_t* target_root = (uint64_t*)(uintptr_t)pml4_phys;
+    if (target_root == kernel_root) {
+        vmm_lock_release(lock_flags);
         klog(LOG_WARNING, "VMM: refusing user mapping in the kernel page directory");
         return -1;
     }
 
-    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
-    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
-    uint64_t pdt_idx  = (virt >> 21) & 0x1FF;
-    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+    uint64_t pml4_idx = (virt >> 39) & 0x1FFULL;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FFULL;
+    uint64_t pd_idx = (virt >> 21) & 0x1FFULL;
+    uint64_t pt_idx = (virt >> 12) & 0x1FFULL;
+    uint64_t* pdpt = NULL;
+    uint64_t* pd = NULL;
+    uint64_t* pt = NULL;
+    int new_pdpt = 0;
+    int new_pd = 0;
 
-    uint32_t user_flags = flags | VMM_FLAG_PRESENT | VMM_FLAG_USER;
-
-    uint64_t* pdpt;
-    if (!(target_pml4[pml4_idx] & VMM_FLAG_PRESENT)) {
-        pdpt = (uint64_t*)pmm_alloc_page();
-        if (!pdpt) return -1;
-        for (int i = 0; i < 512; i++) pdpt[i] = 0;
-        target_pml4[pml4_idx] = ((uint64_t)pdpt) | user_flags | VMM_FLAG_WRITABLE;
+    if (!(target_root[pml4_idx] & VMM_PTE_PRESENT)) {
+        pdpt = allocate_zeroed_table();
+        if (!pdpt) goto fail;
+        target_root[pml4_idx] = table_entry(
+            pdpt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
+        new_pdpt = 1;
     } else {
-        /* This PML4 entry may be shared with the kernel address space.
-           Never make a shared supervisor mapping user-accessible. */
-        if (!(target_pml4[pml4_idx] & VMM_FLAG_USER)) {
-            klog(LOG_WARNING, "VMM: refusing user mapping in shared supervisor PML4 slot");
-            return -1;
-        }
-        pdpt = (uint64_t*)(target_pml4[pml4_idx] & ~0xFFF);
+        if (!(target_root[pml4_idx] & VMM_PTE_USER)) goto fail;
+        pdpt = entry_table(target_root[pml4_idx]);
     }
 
-    uint64_t* pdt;
-    if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) {
-        pdt = (uint64_t*)pmm_alloc_page();
-        if (!pdt) return -1;
-        for (int i = 0; i < 512; i++) pdt[i] = 0;
-        pdpt[pdpt_idx] = ((uint64_t)pdt) | user_flags | VMM_FLAG_WRITABLE;
+    if (!(pdpt[pdpt_idx] & VMM_PTE_PRESENT)) {
+        pd = allocate_zeroed_table();
+        if (!pd) goto fail;
+        pdpt[pdpt_idx] = table_entry(
+            pd, VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
+        new_pd = 1;
     } else {
-        if (!(pdpt[pdpt_idx] & VMM_FLAG_USER)) {
-            klog(LOG_WARNING, "VMM: refusing user mapping through shared supervisor PDPT slot");
-            return -1;
-        }
-        pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+        if (!(pdpt[pdpt_idx] & VMM_PTE_USER) ||
+            (pdpt[pdpt_idx] & VMM_PTE_LARGE)) goto fail;
+        pd = entry_table(pdpt[pdpt_idx]);
     }
 
-    uint64_t* pt;
-    if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT)) {
-        pt = (uint64_t*)pmm_alloc_page();
-        if (!pt) return -1;
-        for (int i = 0; i < 512; i++) pt[i] = 0;
-        pdt[pdt_idx] = ((uint64_t)pt) | user_flags | VMM_FLAG_WRITABLE;
-    } else {
-        if (!(pdt[pdt_idx] & VMM_FLAG_USER)) {
-            klog(LOG_WARNING, "VMM: refusing user mapping through shared supervisor PD slot");
-            return -1;
-        }
-        pt = (uint64_t*)(pdt[pdt_idx] & ~0xFFF);
-    }
+    /* Never replace an existing (especially supervisor) PDE or huge mapping. */
+    if (pd[pd_idx] & VMM_PTE_PRESENT) goto fail;
+    pt = allocate_zeroed_table();
+    if (!pt) goto fail;
+    pd[pd_idx] = table_entry(
+        pt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
 
-    pt[pt_idx] = (phys & ~0xFFF) | user_flags;
-    invlpg((void*)virt);
+    pt[pt_idx] = (phys & VMM_ADDRESS_MASK) |
+                 VMM_PTE_PRESENT | VMM_PTE_USER |
+                 (flags & VMM_PTE_WRITABLE);
+    if ((read_cr3() & VMM_ADDRESS_MASK) == pml4_phys)
+        invlpg((void*)(uintptr_t)virt);
+    vmm_lock_release(lock_flags);
     return 0;
+
+fail:
+    if (new_pd) {
+        pdpt[pdpt_idx] = 0;
+        pmm_free_page(pd);
+    }
+    if (new_pdpt) {
+        target_root[pml4_idx] = 0;
+        pmm_free_page(pdpt);
+    }
+    vmm_lock_release(lock_flags);
+    return -1;
 }
 
-
-
-/* Bootstrap paging identity-maps physical memory from 0 through 4 GiB. */
 int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size) {
-    if (!size || phys_start >= 0x100000000ULL ||
-        size > 0x100000000ULL - phys_start) return -1;
+    if (!size || phys_start >= VMM_PHYSICAL_LIMIT ||
+        size > VMM_PHYSICAL_LIMIT - phys_start) return -1;
     uint64_t last = phys_start + size - 1;
     if (vmm_virt_to_phys(phys_start) != phys_start ||
         vmm_virt_to_phys(last) != last) return -1;
     return 0;
 }
 
-
-/* Mark the 2 MiB identity-mapped page(s) containing MMIO framebuffer memory
-   uncacheable. The bootstrap uses huge pages, so set PCD/PWT on those PDEs. */
+/* The bootstrap maps the first 4 GiB with 2 MiB pages; keep framebuffer MMIO
+   cache policy changes in the kernel root and only perform them before CR3
+   is switched to a per-process copy of that identity map. */
 int vmm_mark_uncached(uint64_t phys_start, uint64_t size) {
-    if (!size || phys_start >= 0x100000000ULL ||
-        size > 0x100000000ULL - phys_start) return -1;
+    if (!size || phys_start >= VMM_PHYSICAL_LIMIT ||
+        size > VMM_PHYSICAL_LIMIT - phys_start) return -1;
+
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t* root = kernel_pml4_unlocked();
+    if (current_pml4_unlocked() != root) {
+        vmm_lock_release(lock_flags);
+        return -1;
+    }
+
     uint64_t first = phys_start & ~0x1FFFFFULL;
     uint64_t last = (phys_start + size - 1) & ~0x1FFFFFULL;
-
-    /* Flush cached data before changing the memory type of the mapping. */
-    asm volatile("wbinvd" ::: "memory");
+    __asm__ volatile("wbinvd" ::: "memory");
     for (uint64_t base = first; ; base += 0x200000ULL) {
-        uint64_t pml4_idx = (base >> 39) & 0x1FF;
-        uint64_t pdpt_idx = (base >> 30) & 0x1FF;
-        uint64_t pdt_idx  = (base >> 21) & 0x1FF;
-        if (!pml4_root || !(pml4_root[pml4_idx] & VMM_FLAG_PRESENT)) return -1;
-        uint64_t* pdpt = (uint64_t*)(pml4_root[pml4_idx] & ~0xFFFULL);
-        if (!(pdpt[pdpt_idx] & VMM_FLAG_PRESENT)) return -1;
-        uint64_t* pdt = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFFULL);
-        if (!(pdt[pdt_idx] & VMM_FLAG_PRESENT) || !(pdt[pdt_idx] & 0x80ULL)) return -1;
-        pdt[pdt_idx] |= 0x18ULL; /* PWT | PCD: uncached framebuffer access */
-        invlpg((void*)base);
+        uint64_t pml4_idx = (base >> 39) & 0x1FFULL;
+        uint64_t pdpt_idx = (base >> 30) & 0x1FFULL;
+        uint64_t pd_idx = (base >> 21) & 0x1FFULL;
+        if (!(root[pml4_idx] & VMM_PTE_PRESENT)) goto fail;
+        uint64_t* pdpt = entry_table(root[pml4_idx]);
+        if (!(pdpt[pdpt_idx] & VMM_PTE_PRESENT) ||
+            (pdpt[pdpt_idx] & VMM_PTE_LARGE)) goto fail;
+        uint64_t* pd = entry_table(pdpt[pdpt_idx]);
+        if (!(pd[pd_idx] & VMM_PTE_PRESENT) ||
+            !(pd[pd_idx] & VMM_PTE_LARGE)) goto fail;
+        pd[pd_idx] |= VMM_PTE_WRITE_THROUGH | VMM_PTE_CACHE_DISABLE;
+        invlpg((void*)(uintptr_t)base);
         if (base == last) break;
     }
-    asm volatile("wbinvd" ::: "memory");
+    __asm__ volatile("wbinvd" ::: "memory");
+    vmm_lock_release(lock_flags);
     return 0;
+
+fail:
+    __asm__ volatile("wbinvd" ::: "memory");
+    vmm_lock_release(lock_flags);
+    return -1;
 }
