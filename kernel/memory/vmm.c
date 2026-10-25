@@ -589,8 +589,7 @@ int vmm_unmap_user_page(uint64_t pml4_phys, uint64_t virt) {
         !is_page_aligned(virt) || virt < VMM_USER_MIN_ADDRESS ||
         !is_lower_canonical(virt)) return -1;
     spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
-    if (address_space_slot_unlocked(pml4_phys) < 0 ||
-        (read_cr3() & VMM_ADDRESS_MASK) == pml4_phys) {
+    if (address_space_slot_unlocked(pml4_phys) < 0) {
         vmm_lock_release(lock_flags);
         return -1;
     }
@@ -608,6 +607,8 @@ int vmm_unmap_user_page(uint64_t pml4_phys, uint64_t virt) {
     {
         uint64_t frame=pt[pt_idx]&VMM_ADDRESS_MASK;
         pt[pt_idx]=0;
+        if ((read_cr3() & VMM_ADDRESS_MASK) == pml4_phys)
+            invlpg((void*)(uintptr_t)virt);
         vmm_lock_release(lock_flags);
         pmm_release_user_mapping(frame);
         pmm_free_user_page((void*)(uintptr_t)frame);
