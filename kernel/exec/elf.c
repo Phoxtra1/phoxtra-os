@@ -1,6 +1,11 @@
 #include "elf.h"
 #include "../log/logger.h"
+#include "../memory/pmm.h"
+#include "../memory/vmm.h"
 #define ELF_USER_ADDRESS_LIMIT 0x0000800000000000ULL
+#define ELF_USER_ADDRESS_MIN 0x0000000100000000ULL
+#define ELF_STACK_TOP 0x00007FFFFFF00000ULL
+#define ELF_STACK_PAGES 8ULL
 static int range_fits(uint64_t offset, uint64_t length, uint64_t total) {
  return offset <= total && length <= total - offset;
 }
@@ -45,9 +50,13 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
       !range_fits(p->p_offset, p->p_filesz, size)) {
    klog(LOG_WARNING, "ELF validation rejected invalid PT_LOAD file/memory range"); return 0;
   }
-  if (p->p_vaddr >= ELF_USER_ADDRESS_LIMIT ||
+  if (p->p_vaddr < ELF_USER_ADDRESS_MIN || p->p_vaddr >= ELF_USER_ADDRESS_LIMIT ||
       p->p_memsz > ELF_USER_ADDRESS_LIMIT - p->p_vaddr) {
    klog(LOG_WARNING, "ELF validation rejected non-user or overflowing virtual range"); return 0;
+  }
+  if ((p->p_flags & ~(PF_R|PF_W|PF_X)) != 0 ||
+      ((p->p_flags & (PF_W|PF_X)) == (PF_W|PF_X))) {
+   klog(LOG_WARNING, "ELF validation rejects unknown segment flags or writable-executable segments"); return 0;
   }
   if (p->p_align > 1 && (!is_power_of_two(p->p_align) ||
       (p->p_offset & (p->p_align - 1ULL)) != (p->p_vaddr & (p->p_align - 1ULL)))) {
