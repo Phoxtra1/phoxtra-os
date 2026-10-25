@@ -262,14 +262,18 @@ void pmm_free_user_page(void* ptr) {
     if (!ptr || (addr & (PAGE_SIZE - 1ULL)) != 0) return;
     uint64_t page = addr / PAGE_SIZE;
     if (page >= total_pages_count || page >= MAX_PAGES) return;
+
     spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
     if (!allocated_test(page) || !user_allocated_test(page)) {
         spin_unlock_irqrestore(&pmm_lock, flags);
         return;
     }
+    /* Clear ownership and allocation atomically to prevent a double-free race. */
     user_allocated_clear(page);
+    allocated_clear(page);
+    bitmap_clear(page);
+    ++free_pages_count;
     spin_unlock_irqrestore(&pmm_lock, flags);
-    pmm_free_page(ptr);
 }
 
 void pmm_free_page(void* ptr) {
