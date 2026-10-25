@@ -3,6 +3,7 @@
 #include "../process/process.h"
 #include "../memory/vmm.h"
 #include "../log/logger.h"
+extern void gdt_set_kernel_stack(uint64_t rsp0);
 
 
 #define MAX_READY_QUEUE 64
@@ -198,6 +199,10 @@ void scheduler_yield(void) {
         vmm_switch_page_directory(next->page_directory);
     else
         vmm_switch_page_directory(vmm_get_kernel_page_directory());
+    uint64_t kernel_stack_top = next->stack_base
+        ? (uint64_t)(uintptr_t)next->stack_base + next->stack_size
+        : (uint64_t)(uintptr_t)idle_stack + sizeof(idle_stack);
+    gdt_set_kernel_stack(kernel_stack_top);
 
     /* Perform the actual register-level context switch */
     context_switch(&old->rsp, next->rsp);
