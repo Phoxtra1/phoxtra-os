@@ -21,16 +21,25 @@ void user_mode_smoke_init(void) {
 
     elf64_phdr_t* p = (elf64_phdr_t*)(smoke_image + h->e_phoff);
     p->p_type = PT_LOAD; p->p_flags = PF_R | PF_X; p->p_offset = 0x1000;
-    p->p_vaddr = SMOKE_BASE; p->p_filesz = 28 + sizeof("PHOXTRA_USERMODE_SMOKE_OK");
+    p->p_vaddr = SMOKE_BASE; p->p_filesz = 61 + sizeof("PHOXTRA_USERMODE_SMOKE_OK");
     p->p_memsz = p->p_filesz; p->p_align = PAGE_SIZE;
 
-    uint8_t code[28] = {
+    uint8_t code[61] = {
+        0xB8,0x05,0,0,0,             /* mov eax, SYS_GETPID */
+        0xCD,0x80,                   /* int 0x80 */
+        0x48,0x85,0xC0,               /* test rax, rax */
+        0x74,0x2F,                   /* hang if PID is zero */
+        0xB8,0x03,0,0,0,             /* mov eax, SYS_YIELD */
+        0xCD,0x80,
+        0xB8,0x04,0,0,0,             /* mov eax, SYS_SLEEP */
+        0x48,0xC7,0xC7,0x01,0,0,0,   /* mov rdi, 1 tick */
+        0xCD,0x80,
         0xB8,0x01,0,0,0,             /* mov eax, SYS_PRINT */
         0x48,0xBF,0,0,0,0,0,0,0,0,   /* mov rdi, message address */
-        0xCD,0x80,                   /* int 0x80 */
+        0xCD,0x80,
         0xB8,0x02,0,0,0,             /* mov eax, SYS_EXIT */
         0x31,0xFF,                   /* xor edi, edi */
-        0xCD,0x80,                   /* int 0x80 */
+        0xCD,0x80,
         0xEB,0xFE                    /* should never return */
     };
     uint64_t message_address = SMOKE_BASE + sizeof(code);
