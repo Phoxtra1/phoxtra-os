@@ -84,6 +84,7 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     uint64_t stack_top = ((uint64_t)stack + KERNEL_STACK_SIZE) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
 
+    *--sp = 0;               // synthetic return address; keeps SysV entry alignment
     *--sp = (uint64_t)entry; // ret target
     *--sp = 0;               // r15
     *--sp = 0;               // r14
