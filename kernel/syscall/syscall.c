@@ -37,6 +37,7 @@ static void sys_exit(struct registers* regs) {
         return;
     }
     uint32_t pid = current->pid;
+    klog(LOG_INFO, "User process exited via SYS_EXIT");
     process_destroy(pid);
     regs->rax = 0;
     scheduler_yield();
