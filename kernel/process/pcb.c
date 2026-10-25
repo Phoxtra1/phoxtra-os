@@ -113,8 +113,8 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     return pcb;
 }
 
-void pcb_destroy(pcb_t* pcb) {
-    if (!pcb) return;
+int pcb_destroy(pcb_t* pcb) {
+    if (!pcb) return -1;
     /*
      * Address-space teardown refuses the active CR3. Never free a PCB or its
      * stack if its page tables could still be in use; a scheduler-side reaper
@@ -122,10 +122,10 @@ void pcb_destroy(pcb_t* pcb) {
      */
     if (pcb->page_directory &&
         vmm_destroy_user_page_directory(pcb->page_directory) != 0) {
-        klog(LOG_WARNING, "PCB: address space is active or not owned; retaining process resources");
-        return;
+        return -1;
     }
     pcb->page_directory = 0;
     if (pcb->stack_base) kfree(pcb->stack_base);
     kfree(pcb);
+    return 0;
 }
