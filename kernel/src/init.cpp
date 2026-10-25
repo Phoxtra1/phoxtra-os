@@ -43,6 +43,7 @@ extern "C" {
 #include "../net/dhcp.h"
 #include "../net/dns.h"
 #include "../exec/elf.h"
+void user_mode_smoke_init(void);
 #include "../exec/ld_so.h"
 #include "../drivers/framebuffer.h"
 #include "../ui/font.h"
@@ -205,5 +206,8 @@ void system_init()
     phoxtra_hardware_probe_log();
 
     klog(LOG_KERNEL, "All subsystems initialized");
+#ifdef PHOXTRA_ENABLE_USERMODE_SMOKE
+    user_mode_smoke_init();
+#endif
 }
 

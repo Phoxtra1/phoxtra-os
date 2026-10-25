@@ -15,11 +15,13 @@
 #define WRITABLE 0x002ULL
 #define USER 0x004ULL
 #define LARGE 0x080ULL
+#define NO_EXECUTE (1ULL << 63)
 #define ADDR_MASK 0x000FFFFFFFFFF000ULL
 
 static uint8_t* arena;
 static uint8_t allocated[PAGE_COUNT];
 static uint8_t user_allocated[PAGE_COUNT];
+static uint8_t user_mapped[PAGE_COUNT];
 static uint64_t fake_cr3;
 static uint64_t kernel_cr3;
 static unsigned invalidations;
@@ -67,13 +69,29 @@ int pmm_is_user_page(uint64_t phys_addr) {
     return index < PAGE_COUNT && allocated[index] && user_allocated[index];
 }
 
+int pmm_claim_user_page(uint64_t phys_addr) {
+    uintptr_t address = (uintptr_t)phys_addr, base = (uintptr_t)arena;
+    if (address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return 0;
+    size_t index = (address - base) / PAGE_SIZE;
+    if (index >= PAGE_COUNT || !allocated[index] || !user_allocated[index] || user_mapped[index]) return 0;
+    user_mapped[index] = 1;
+    return 1;
+}
+void pmm_release_user_mapping(uint64_t phys_addr) {
+    uintptr_t address = (uintptr_t)phys_addr, base = (uintptr_t)arena;
+    if (address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return;
+    size_t index = (address - base) / PAGE_SIZE;
+    if (index < PAGE_COUNT && allocated[index] && user_allocated[index]) user_mapped[index] = 0;
+}
 void pmm_free_user_page(void* ptr) {
     uintptr_t address = (uintptr_t)ptr;
     uintptr_t base = (uintptr_t)arena;
     if (!ptr || address < base || address >= base + ARENA_SIZE ||
         ((address - base) & (PAGE_SIZE - 1u))) return;
     size_t index = (address - base) / PAGE_SIZE;
-    if (index >= PAGE_COUNT || !user_allocated[index]) return;
+    if (index >= PAGE_COUNT || !user_allocated[index] || user_mapped[index]) return;
     user_allocated[index] = 0;
     pmm_free_page(ptr);
 }
@@ -189,6 +207,18 @@ int main(void) {
         fail("second page in same 2 MiB user region failed");
     if (vmm_map_user_page(user_root, user_va1, frame2, VMM_FLAG_WRITABLE) == 0)
         fail("mapping collision unexpectedly replaced an existing user page");
+    const char seed[] = "hello";
+    char copied[sizeof(seed)] = {0};
+    memcpy((void*)(uintptr_t)frame1, seed, sizeof(seed));
+    if (vmm_copy_from_user(user_root, copied, user_va1, sizeof(seed)) != 0 ||
+        memcmp(copied, seed, sizeof(seed)) != 0)
+        fail("checked copy-from-user failed for a valid mapping");
+    const char replacement[] = "world";
+    if (vmm_copy_to_user(user_root, user_va1, replacement, sizeof(replacement)) != 0 ||
+        memcmp((void*)(uintptr_t)frame1, replacement, sizeof(replacement)) != 0)
+        fail("checked copy-to-user failed for a writable mapping");
+    if (vmm_copy_from_user(user_root, copied, user_va1 + 0x4000ULL, 1) == 0)
+        fail("copy-from-user accepted an unmapped address");
     if (vmm_map_user_page(user_root, user_va1 + 0x3000ULL, kernel_frame, VMM_FLAG_WRITABLE) == 0)
         fail("ordinary kernel allocation was exposed through a user PTE");
     if (vmm_map_user_page(user_root, 0x2000, frame2, VMM_FLAG_WRITABLE) == 0)
@@ -214,10 +244,18 @@ int main(void) {
 
     vmm_switch_page_directory(user_root);
     const uint64_t user_va3 = 0x0000000100003000ULL;
-    if (vmm_map_user_page(user_root, user_va3, frame3, VMM_FLAG_WRITABLE) != 0)
+    if (vmm_map_user_page(user_root, user_va3, frame3, VMM_FLAG_NO_EXECUTE) != 0)
         fail("mapping into the active address space failed");
     if (invalidations == 0)
         fail("active user mapping did not request a TLB invalidation");
+    uint64_t* root_for_nx = (uint64_t*)(uintptr_t)user_root;
+    uint64_t* pdpt_for_nx = table(root_for_nx[(user_va3 >> 39) & 0x1ff]);
+    uint64_t* pd_for_nx = table(pdpt_for_nx[(user_va3 >> 30) & 0x1ff]);
+    uint64_t* pt_for_nx = table(pd_for_nx[(user_va3 >> 21) & 0x1ff]);
+    if (!(pt_for_nx[(user_va3 >> 12) & 0x1ff] & NO_EXECUTE))
+        fail("non-executable user mapping did not set the NX bit");
+    if (vmm_copy_to_user(user_root, user_va3, "x", 1) == 0)
+        fail("copy-to-user ignored read-only page permissions");
     if (vmm_virt_to_phys(user_va1) != frame1 ||
         vmm_virt_to_phys(user_va2) != frame2 ||
         vmm_virt_to_phys(user_va3) != frame3)

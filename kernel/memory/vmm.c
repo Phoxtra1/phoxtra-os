@@ -21,6 +21,7 @@
 
 static uint64_t* kernel_pml4_root;
 static uint64_t* active_pml4_root;
+static int nx_supported;
 #ifndef VMM_TESTING
 static spinlock_t vmm_lock = SPINLOCK_INITIALIZER;
 #endif
@@ -162,7 +163,16 @@ static int destroy_page_directory_unlocked(uint64_t pml4_phys) {
                 uint64_t pde = pd[pd_i];
                 if (!(pde & VMM_PTE_PRESENT) || (pde & VMM_PTE_LARGE))
                     continue; /* A 2 MiB leaf has no PT to release. */
-                pmm_free_page(entry_table(pde));
+                uint64_t* pt = entry_table(pde);
+                for (size_t pt_i = 0; pt_i < 512; ++pt_i) {
+                    uint64_t pte = pt[pt_i];
+                    if (!(pte & VMM_PTE_PRESENT) || !(pte & VMM_PTE_USER)) continue;
+                    uint64_t frame = pte & VMM_ADDRESS_MASK;
+                    pmm_release_user_mapping(frame);
+                    pmm_free_user_page((void*)(uintptr_t)frame);
+                    pt[pt_i] = 0;
+                }
+                pmm_free_page(pt);
             }
             pmm_free_page(pd);
         }
@@ -249,6 +259,27 @@ void vmm_init(void) {
     uint64_t* current = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
     kernel_pml4_root = current;
     active_pml4_root = current;
+#ifdef VMM_TESTING
+    nx_supported = 1;
+#else
+    uint32_t max_leaf, ebx, ecx, edx;
+    uint32_t leaf = 0x80000000u;
+    __asm__ volatile("cpuid" : "+a"(leaf), "=b"(ebx), "=c"(ecx), "=d"(edx));
+    max_leaf = leaf;
+    if (max_leaf >= 0x80000001u) {
+        leaf = 0x80000001u;
+        __asm__ volatile("cpuid" : "+a"(leaf), "=b"(ebx), "=c"(ecx), "=d"(edx));
+        if (edx & (1u << 20)) {
+            uint32_t low, high;
+            __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(0xC0000080u));
+            uint64_t efer = ((uint64_t)high << 32) | low;
+            efer |= (1ULL << 11);
+            low = (uint32_t)efer; high = (uint32_t)(efer >> 32);
+            __asm__ volatile("wrmsr" : : "c"(0xC0000080u), "a"(low), "d"(high));
+            nx_supported = 1;
+        }
+    }
+#endif
 
     klog(LOG_KERNEL, "Paging structure validated");
     klog(LOG_KERNEL, "Virtual Memory Manager (VMM) started");
@@ -341,9 +372,15 @@ int vmm_unmap_page(uint64_t virt) {
     uint64_t* pt = entry_table(pd[pd_idx]);
     if (!(pt[pt_idx] & VMM_PTE_PRESENT)) goto fail;
 
+    uint64_t pte = pt[pt_idx];
     pt[pt_idx] = 0;
     invlpg((void*)(uintptr_t)virt);
     vmm_lock_release(lock_flags);
+    if (pte & VMM_PTE_USER) {
+        uint64_t frame = pte & VMM_ADDRESS_MASK;
+        pmm_release_user_mapping(frame);
+        pmm_free_user_page((void*)(uintptr_t)frame);
+    }
     return 0;
 
 fail:
@@ -455,9 +492,13 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         virt < VMM_USER_MIN_ADDRESS || !is_lower_canonical(virt) ||
         phys < VMM_RESERVED_PHYSICAL || phys >= VMM_PHYSICAL_LIMIT ||
         !pmm_is_user_page(phys) ||
-        (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | VMM_FLAG_USER)) != 0) {
+        ((flags & VMM_FLAG_NO_EXECUTE) && !nx_supported) ||
+        (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | VMM_FLAG_USER | VMM_FLAG_NO_EXECUTE)) != 0) {
         return -1;
     }
+
+    /* Mapping transfers exclusive ownership of this frame to the address space. */
+    if (!pmm_claim_user_page(phys)) return -1;
 
     spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
     uint64_t* kernel_root = kernel_pml4_unlocked();
@@ -465,6 +506,7 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     if (target_root == kernel_root ||
         address_space_slot_unlocked(pml4_phys) < 0) {
         vmm_lock_release(lock_flags);
+        pmm_release_user_mapping(phys);
         klog(LOG_WARNING, "VMM: refusing user mapping in an unowned page directory");
         return -1;
     }
@@ -521,7 +563,8 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     if (pt[pt_idx] & VMM_PTE_PRESENT) goto fail;
     pt[pt_idx] = (phys & VMM_ADDRESS_MASK) |
                  VMM_PTE_PRESENT | VMM_PTE_USER |
-                 (flags & VMM_PTE_WRITABLE);
+                 (flags & VMM_PTE_WRITABLE) |
+                 ((flags & VMM_FLAG_NO_EXECUTE) ? VMM_PTE_NO_EXECUTE : 0);
     if ((read_cr3() & VMM_ADDRESS_MASK) == pml4_phys)
         invlpg((void*)(uintptr_t)virt);
     vmm_lock_release(lock_flags);
@@ -537,7 +580,99 @@ fail:
         pmm_free_page(pdpt);
     }
     vmm_lock_release(lock_flags);
+    pmm_release_user_mapping(phys);
     return -1;
+}
+
+int vmm_unmap_user_page(uint64_t pml4_phys, uint64_t virt) {
+    if (!pml4_phys || !is_page_aligned(pml4_phys) ||
+        !is_page_aligned(virt) || virt < VMM_USER_MIN_ADDRESS ||
+        !is_lower_canonical(virt)) return -1;
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    if (address_space_slot_unlocked(pml4_phys) < 0) {
+        vmm_lock_release(lock_flags);
+        return -1;
+    }
+    uint64_t* root = (uint64_t*)(uintptr_t)pml4_phys;
+    uint64_t* pdpt; uint64_t* pd; uint64_t* pt;
+    uint64_t pml4_idx=(virt>>39)&0x1FFULL, pdpt_idx=(virt>>30)&0x1FFULL;
+    uint64_t pd_idx=(virt>>21)&0x1FFULL, pt_idx=(virt>>12)&0x1FFULL;
+    if (!(root[pml4_idx]&VMM_PTE_PRESENT) || !(root[pml4_idx]&VMM_PTE_USER)) goto unmap_fail;
+    pdpt=entry_table(root[pml4_idx]);
+    if (!(pdpt[pdpt_idx]&VMM_PTE_PRESENT) || !(pdpt[pdpt_idx]&VMM_PTE_USER) || (pdpt[pdpt_idx]&VMM_PTE_LARGE)) goto unmap_fail;
+    pd=entry_table(pdpt[pdpt_idx]);
+    if (!(pd[pd_idx]&VMM_PTE_PRESENT) || !(pd[pd_idx]&VMM_PTE_USER) || (pd[pd_idx]&VMM_PTE_LARGE)) goto unmap_fail;
+    pt=entry_table(pd[pd_idx]);
+    if (!(pt[pt_idx]&VMM_PTE_PRESENT) || !(pt[pt_idx]&VMM_PTE_USER)) goto unmap_fail;
+    {
+        uint64_t frame=pt[pt_idx]&VMM_ADDRESS_MASK;
+        pt[pt_idx]=0;
+        if ((read_cr3() & VMM_ADDRESS_MASK) == pml4_phys)
+            invlpg((void*)(uintptr_t)virt);
+        vmm_lock_release(lock_flags);
+        pmm_release_user_mapping(frame);
+        pmm_free_user_page((void*)(uintptr_t)frame);
+        return 0;
+    }
+unmap_fail:
+    vmm_lock_release(lock_flags);
+    return -1;
+}
+
+static int user_translate_unlocked(uint64_t pml4_phys, uint64_t virt,
+                                      int require_write, uint64_t* phys_out) {
+    if (!pml4_phys || !phys_out || virt < VMM_USER_MIN_ADDRESS ||
+        !is_lower_canonical(virt)) return -1;
+    uint64_t* root=(uint64_t*)(uintptr_t)pml4_phys;
+    uint64_t e=root[(virt>>39)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER)) return -1;
+    uint64_t* pdpt=entry_table(e);
+    e=pdpt[(virt>>30)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) || (e&VMM_PTE_LARGE)) return -1;
+    uint64_t* pd=entry_table(e);
+    e=pd[(virt>>21)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) || (e&VMM_PTE_LARGE)) return -1;
+    uint64_t* pt=entry_table(e);
+    e=pt[(virt>>12)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) ||
+        (require_write && !(e&VMM_PTE_WRITABLE))) return -1;
+    *phys_out=(e&VMM_ADDRESS_MASK)|(virt&0xFFFULL);
+    return 0;
+}
+
+static int user_copy(uint64_t pml4_phys, uint64_t user_addr,
+                     void* kernel_buf, size_t length, int to_user) {
+    if (!kernel_buf && length) return -1;
+    if (!length) return 0;
+    if (user_addr < VMM_USER_MIN_ADDRESS ||
+        user_addr >= VMM_USER_MAX_ADDRESS ||
+        (uint64_t)length > VMM_USER_MAX_ADDRESS-user_addr) return -1;
+    spinlock_irq_flags_t flags=vmm_lock_acquire();
+    if (address_space_slot_unlocked(pml4_phys)<0) {
+        vmm_lock_release(flags);
+        return -1;
+    }
+    uint8_t* k=(uint8_t*)kernel_buf;
+    for (size_t i=0;i<length;++i) {
+        uint64_t phys;
+        if (user_translate_unlocked(pml4_phys,user_addr+i,to_user,&phys)!=0) {
+            vmm_lock_release(flags);
+            return -1;
+        }
+        if (to_user) *(volatile uint8_t*)(uintptr_t)phys=k[i];
+        else k[i]=*(volatile const uint8_t*)(uintptr_t)phys;
+    }
+    vmm_lock_release(flags);
+    return 0;
+}
+
+int vmm_copy_to_user(uint64_t pml4_phys, uint64_t user_dest,
+                     const void* kernel_src, size_t length) {
+    return user_copy(pml4_phys,user_dest,(void*)kernel_src,length,1);
+}
+int vmm_copy_from_user(uint64_t pml4_phys, void* kernel_dest,
+                       uint64_t user_src, size_t length) {
+    return user_copy(pml4_phys,user_src,kernel_dest,length,0);
 }
 
 int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size) {

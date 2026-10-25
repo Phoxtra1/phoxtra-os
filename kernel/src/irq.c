@@ -1,6 +1,7 @@
 #include "irq.h"
 #include "pic.h"
 #include "panic.hpp"
+#include "../syscall/syscall.h"
 
 #define PIC1_DATA 0x21
 #define PIC2_DATA 0xA1
@@ -110,6 +111,8 @@ void interrupt_handler(struct registers* regs) {
     if (regs->int_no < 32) {
         // CPU Exception
         kernel_panic(exception_names[regs->int_no], regs);
+    } else if (regs->int_no == 0x80) {
+        syscall_handler(regs);
     } else if (regs->int_no >= 32 && regs->int_no < 48) {
         // Hardware IRQ
         int irq = regs->int_no - 32;

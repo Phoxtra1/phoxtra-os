@@ -1,122 +1,105 @@
 #include "syscall.h"
-#include "../arch/x86_64/idt.h"
 #include "../include/irq.h"
 #include "../log/logger.h"
 #include "../scheduler/scheduler.h"
+#include "../process/process.h"
+#include "../memory/vmm.h"
 
-/* ────────────────────────────────────────────────
-   Individual Syscall Handlers
-   ──────────────────────────────────────────────── */
+#define USER_PRINT_MAX 256
+#define SYS_ERROR_INVALID (-22)
+#define SYS_ERROR_FAULT   (-14)
+
 static void sys_print(struct registers* regs) {
-    /* rsi holds the pointer to the string to print (convention) */
-    (void)regs;
-    klog(LOG_INFO, "[SYS_PRINT] syscall invoked");
+    pcb_t* current = scheduler_current();
+    if (!regs || !current || (regs->cs & 3u) != 3u) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    char message[USER_PRINT_MAX + 1];
+    size_t i = 0;
+    for (; i < USER_PRINT_MAX; ++i) {
+        if (vmm_copy_from_user(current->page_directory, &message[i], regs->rdi + i, 1) != 0) {
+            regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT;
+            return;
+        }
+        if (!message[i]) break;
+    }
+    message[USER_PRINT_MAX] = '\0';
+    if (i == USER_PRINT_MAX) message[USER_PRINT_MAX] = '\0';
+    klog(LOG_INFO, message);
+    regs->rax = (uint64_t)i;
 }
 
 static void sys_exit(struct registers* regs) {
-    (void)regs;
-    klog(LOG_INFO, "[SYS_EXIT] process exit requested");
-    /* TODO: terminate calling process when process-context integration is complete */
+    pcb_t* current = scheduler_current();
+    if (!regs || !current || current->pid == 0xFFFFFFFFu || (regs->cs & 3u) != 3u) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    uint32_t pid = current->pid;
+    klog(LOG_INFO, "User process exited via SYS_EXIT");
+    process_destroy(pid);
+    regs->rax = 0;
+    scheduler_yield();
 }
 
 static void sys_yield(struct registers* regs) {
-    (void)regs;
-    klog(LOG_INFO, "[SYS_YIELD] voluntary yield");
+    if (!regs || (regs->cs & 3u) != 3u) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    regs->rax = 0;
     scheduler_yield();
 }
 
 static void sys_sleep(struct registers* regs) {
-    (void)regs;
-    klog(LOG_INFO, "[SYS_SLEEP] sleep requested");
-    /* TODO: implement sleep queue when process states are fully wired */
+    pcb_t* current = scheduler_current();
+    if (!regs || !current || (regs->cs & 3u) != 3u) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    uint64_t ticks = regs->rdi;
+    if (ticks > 0x7FFFFFFFFFFFFFFFULL - scheduler_get_uptime_ticks()) {
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    current->wake_tick = scheduler_get_uptime_ticks() + (ticks ? ticks : 1);
+    current->state = PROCESS_STATE_SLEEPING;
+    regs->rax = 0;
+    scheduler_yield();
 }
 
 static void sys_getpid(struct registers* regs) {
-    (void)regs;
     pcb_t* current = scheduler_current();
-    uint32_t pid = current ? current->pid : 0;
-    /* Return value placed in rax (standard System V convention) */
-    if (regs) {
-        /* regs->rax = pid;  — uncomment once regs is fully linked to irq_regs */
-        (void)pid;
+    if (!regs || !current || (regs->cs & 3u) != 3u) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
     }
-    klog(LOG_INFO, "[SYS_GETPID] pid returned");
+    regs->rax = current->pid;
 }
 
-/* ────────────────────────────────────────────────
-   Dispatcher Table
-   ──────────────────────────────────────────────── */
 typedef void (*syscall_fn_t)(struct registers*);
-
 static syscall_fn_t syscall_table[] = {
-    (void*)0,       /* 0 — reserved */
-    sys_print,      /* 1 — SYS_PRINT  */
-    sys_exit,       /* 2 — SYS_EXIT   */
-    sys_yield,      /* 3 — SYS_YIELD  */
-    sys_sleep,      /* 4 — SYS_SLEEP  */
-    sys_getpid,     /* 5 — SYS_GETPID */
+    (void*)0, sys_print, sys_exit, sys_yield, sys_sleep, sys_getpid
 };
-
 #define SYSCALL_TABLE_SIZE (sizeof(syscall_table) / sizeof(syscall_table[0]))
 
-/* ────────────────────────────────────────────────
-   Main Syscall Handler — invoked from IDT gate 0x80
-   ──────────────────────────────────────────────── */
 void syscall_handler(struct registers* regs) {
-    /* Syscall number passed in rax */
-    uint64_t num = regs ? regs->rax : 0;
-
-    if (num > 0 && num < SYSCALL_TABLE_SIZE && syscall_table[num]) {
-        syscall_table[num](regs);
-    } else {
-        klog(LOG_WARNING, "syscall: invalid syscall number");
+    if (!regs) return;
+    uint64_t num = regs->rax;
+    if ((regs->cs & 3u) != 3u) {
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
     }
+    if (num > 0 && num < SYSCALL_TABLE_SIZE && syscall_table[num])
+        syscall_table[num](regs);
+    else
+        regs->rax = (uint64_t)(int64_t)-38;
 }
 
-/* ────────────────────────────────────────────────
-   Initialization — register IDT gate 0x80
-   ──────────────────────────────────────────────── */
-
-/* ISR stub for int 0x80 is already in isr.asm; install it as an IRQ handler
-   via the generic IRQ dispatcher on vector 128 (0x80) using irq_install_handler.
-   Since vectors 0x20-0x2F are hardware IRQs, int 0x80 routes through the
-   generic ISR path; we hook it at the high-level handler stage.              */
-#define MSR_EFER  0xC0000080
-#define MSR_STAR  0xC0000081
-#define MSR_LSTAR 0xC0000082
-#define MSR_FMASK 0xC0000084
-
-extern void syscall_entry(void);
-
-static inline void wrmsr(uint32_t msr, uint64_t val) {
-    uint32_t low = (uint32_t)val;
-    uint32_t high = (uint32_t)(val >> 32);
-    asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
-}
-
-static inline uint64_t rdmsr(uint32_t msr) {
-    uint32_t low, high;
-    asm volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((uint64_t)high << 32) | low;
-}
-
-static irq_handler_t old_handler = (void*)0;
-
-static void syscall_irq_bridge(struct registers* regs) {
-    (void)old_handler;
-    syscall_handler(regs);
-}
-
+/* int 0x80 uses the interrupt gate so the CPU switches to TSS.RSP0 before
+   entering C. The fast SYSCALL MSR path stays disabled until its dedicated
+   stack-switching entry/return path has been independently validated. */
 void syscall_init(void) {
-    /* Register handler for software interrupt int 0x80 */
-    irq_install_handler(128 - 32, syscall_irq_bridge);
-
-    /* Configure Model Specific Registers (MSR) for fast hardware syscall/sysret */
-    wrmsr(MSR_EFER, rdmsr(MSR_EFER) | 0x1); // SCE: System Call Enable
-    wrmsr(MSR_STAR, ((uint64_t)0x0013 << 48) | ((uint64_t)0x0008 << 32));
-    wrmsr(MSR_LSTAR, (uint64_t)syscall_entry);
-    wrmsr(MSR_FMASK, 0x200); // Clear IF flag during syscall execution
-
-    klog(LOG_KERNEL, "Syscall framework initialized (int 0x80 & syscall MSR)");
+    klog(LOG_KERNEL, "Syscall framework initialized (Ring 3 int 0x80)");
 }
-
