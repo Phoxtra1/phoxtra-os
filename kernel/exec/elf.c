@@ -172,6 +172,7 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
                         VMM_FLAG_PRESENT | VMM_FLAG_USER |
                         VMM_FLAG_WRITABLE | VMM_FLAG_NO_EXECUTE) != 0) {
    pmm_free_user_page(frame);
+   elf_rollback_mappings(pml4_phys,h,ph);
    return -1;
   }
  }
