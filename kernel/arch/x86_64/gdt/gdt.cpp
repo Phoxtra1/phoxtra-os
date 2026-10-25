@@ -25,6 +25,10 @@ static void set_entry(
     gdt[index].base_high = (base >> 24) & 0xFF;
 }
 
+extern "C" void gdt_set_kernel_stack(uint64_t rsp0) {
+    gdt::set_tss_stack(rsp0);
+}
+
 static void set_tss_descriptor(int index, uint64_t base, uint32_t limit) {
     set_entry(index, (uint32_t)base, limit, 0x89, 0x00);
     
