@@ -182,9 +182,17 @@ int main(void) {
     if (vmm_map_user_page(fake_cr3, user_va1, frame2, VMM_FLAG_WRITABLE) == 0)
         fail("mapping into kernel root was allowed");
 
-    uint64_t* kernel_pte = lookup_pte(user_root, 0x12345000ULL);
-    if (!kernel_pte || !(*kernel_pte & PRESENT) || (*kernel_pte & USER))
-        fail("cloned kernel identity mapping lost supervisor-only protection");
+    uint64_t* cloned_root = (uint64_t*)(uintptr_t)user_root;
+    uint64_t* cloned_pdpt = table(cloned_root[0]);
+    uint64_t kernel_pdpte = cloned_pdpt[0];
+    if (!(kernel_pdpte & PRESENT) || (kernel_pdpte & USER))
+        fail("cloned kernel identity PDPT entry lost supervisor-only protection");
+    uint64_t* cloned_pd = table(kernel_pdpte);
+    uint64_t kernel_pde = cloned_pd[(0x12345000ULL >> 21) & 0x1ff];
+    if (!(kernel_pde & PRESENT) || !(kernel_pde & LARGE) || (kernel_pde & USER))
+        fail("cloned kernel huge-page mapping lost supervisor-only protection");
+    if (effective_user(user_root, 0x12345000ULL))
+        fail("kernel identity mapping is user-accessible");
     if (!effective_user(user_root, user_va1) || !effective_user(user_root, user_va2))
         fail("user mapping lacks user permission at every paging level");
 
