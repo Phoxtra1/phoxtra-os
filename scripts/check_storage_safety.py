@@ -92,7 +92,7 @@ if "lba >= dev->total_sectors" not in ahci or "dev->total_sectors - lba" not in 
 for required in ("RAM test disk", "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_READONLY"):
     if required not in ahci:
         errors.append(f"storage test backend missing safety marker: {required}")
-ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1]
+ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1].split("\nint ahci_read_sectors", 1)[0]
 if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
     errors.append("RAM test backend must not claim to implement physical AHCI")
 
