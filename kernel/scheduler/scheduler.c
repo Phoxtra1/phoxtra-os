@@ -156,12 +156,19 @@ void scheduler_yield(void) {
     }
 
     if (!next || next == old) {
-        /* Nothing else to run — stay on current or idle */
         if (old && old != &idle_pcb && old->state == PROCESS_STATE_RUNNING) {
-            /* Re-enqueue self and keep running */
+            /* No peer is ready; keep the current runnable process. */
             queue_push(old);
+            return;
         }
-        return;
+        if (old == &idle_pcb) return;
+
+        /*
+         * A terminated/non-runnable current process must not continue on its
+         * stack merely because the ready queue is empty. Fall back to idle,
+         * which uses the kernel address space.
+         */
+        next = &idle_pcb;
     }
 
     /* Re-enqueue old process if still runnable */
@@ -174,10 +181,11 @@ void scheduler_yield(void) {
     next->state     = PROCESS_STATE_RUNNING;
     current_process = next;
 
-    /* Per-process memory isolation: reload CR3 page directory */
-    if (next->page_directory) {
+    /* Idle uses the kernel root; process tasks use their private roots. */
+    if (next->page_directory)
         vmm_switch_page_directory(next->page_directory);
-    }
+    else
+        vmm_switch_page_directory(vmm_get_kernel_page_directory());
 
     /* Perform the actual register-level context switch */
     context_switch(&old->rsp, next->rsp);
