@@ -84,8 +84,8 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     uint64_t stack_top = ((uint64_t)stack + KERNEL_STACK_SIZE) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
 
-    *--sp = 0;               // synthetic return address; keeps SysV entry alignment
-    *--sp = (uint64_t)entry; // ret target
+    *--sp = 0; // synthetic return address; keeps SysV entry alignment
+    *--sp = (uint64_t)pcb_process_entry_trampoline; // ret target
     *--sp = 0;               // r15
     *--sp = 0;               // r14
     *--sp = 0;               // r13
@@ -132,6 +132,19 @@ int pcb_destroy(pcb_t* pcb) {
     if (pcb->stack_base) kfree(pcb->stack_base);
     kfree(pcb);
     return 0;
+}
+
+/* Start every fresh task with interrupts enabled and reap it if its entry returns. */
+void pcb_process_entry_trampoline(void) {
+    pcb_t* current = scheduler_current();
+    if (!current || !current->rip) {
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+    __asm__ volatile("sti" ::: "memory");
+    ((void (*)(void))(uintptr_t)current->rip)();
+    current->state = PROCESS_STATE_TERMINATED;
+    scheduler_yield();
+    for (;;) __asm__ volatile("cli; hlt");
 }
 
 /* Initial kernel context for an ELF process; iretq enters Ring 3 and never returns. */
