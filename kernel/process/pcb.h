@@ -35,6 +35,7 @@ typedef struct pcb {
     uint64_t page_directory;
     uint32_t security_context;
     uint64_t creation_time;
+    uint64_t wake_tick;
     uint8_t  process_hash[32];
     uint8_t  signature[64];
     uint32_t identity_status;
