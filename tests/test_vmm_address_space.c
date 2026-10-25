@@ -92,20 +92,6 @@ static uint64_t* table(uint64_t entry) {
     return (uint64_t*)(uintptr_t)(entry & ADDR_MASK);
 }
 
-static uint64_t* lookup_pte(uint64_t root_phys, uint64_t virt) {
-    uint64_t* root = (uint64_t*)(uintptr_t)root_phys;
-    uint64_t pml4e = root[(virt >> 39) & 0x1ff];
-    if (!(pml4e & PRESENT)) return NULL;
-    uint64_t* pdpt = table(pml4e);
-    uint64_t pdpte = pdpt[(virt >> 30) & 0x1ff];
-    if (!(pdpte & PRESENT) || (pdpte & LARGE)) return NULL;
-    uint64_t* pd = table(pdpte);
-    uint64_t pde = pd[(virt >> 21) & 0x1ff];
-    if (!(pde & PRESENT) || (pde & LARGE)) return NULL;
-    uint64_t* pt = table(pde);
-    return &pt[(virt >> 12) & 0x1ff];
-}
-
 static int effective_user(uint64_t root_phys, uint64_t virt) {
     uint64_t* root = (uint64_t*)(uintptr_t)root_phys;
     uint64_t pml4e = root[(virt >> 39) & 0x1ff];
