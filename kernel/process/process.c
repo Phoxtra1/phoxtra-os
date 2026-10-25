@@ -32,6 +32,7 @@ pcb_t* process_create(const char* name, void (*entry)(void), uint32_t priority) 
             process_table_arr[i] = pcb;
             active_count++;
             pcb->state = PROCESS_STATE_READY;
+            scheduler_add_process(pcb);
             return pcb;
         }
     }
