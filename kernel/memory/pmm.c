@@ -292,7 +292,7 @@ int pmm_claim_user_page(uint64_t phys_addr) {
 void pmm_release_user_mapping(uint64_t phys_addr) {
     if ((phys_addr & (PAGE_SIZE - 1ULL)) != 0) return;
     uint64_t page = phys_addr / PAGE_SIZE;
-    if (page >= total_memory_bytes / PAGE_SIZE && page >= total_pages_count) return;
+    if (page >= total_pages_count) return;
     if (page >= MAX_PAGES) return;
     spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
     if (allocated_test(page) && user_allocated_test(page))
