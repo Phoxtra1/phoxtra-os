@@ -15,6 +15,8 @@ endif()
 enable_language(ASM)
 enable_language(ASM_NASM)
 
+option(PHOXTRA_ENABLE_USERMODE_SMOKE "Run a Ring 3 syscall smoke test during QEMU CI" OFF)
+
 set(KERNEL_SOURCES
     arch/x86_64/boot.S
     arch/x86_64/cpu/cpu.cpp
@@ -74,6 +76,7 @@ set(KERNEL_SOURCES
     net/dhcp.c
     net/dns.c
     exec/elf.c
+    exec/user_mode_smoke.c
     exec/ld_so.c
     drivers/framebuffer.c
     drivers/pci.c
@@ -132,6 +135,9 @@ target_include_directories(phoxtra-kernel PRIVATE
 
 target_compile_features(phoxtra-kernel PRIVATE cxx_std_20)
 target_compile_definitions(phoxtra-kernel PRIVATE PHOXTRA_PRODUCT_KIND=${PHOXTRA_PRODUCT_KIND})
+if(PHOXTRA_ENABLE_USERMODE_SMOKE)
+    target_compile_definitions(phoxtra-kernel PRIVATE PHOXTRA_ENABLE_USERMODE_SMOKE=1)
+endif()
 
 target_compile_options(phoxtra-kernel PRIVATE
     $<$<COMPILE_LANGUAGE:C,CXX>:-ffreestanding>
