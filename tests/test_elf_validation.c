@@ -31,6 +31,19 @@ int vmm_map_user_page(uint64_t root,uint64_t va,uint64_t phys,uint32_t flags) {
  mapped_va[mapped_count]=va; mapped_frame[mapped_count]=phys;
  mapped_flags[mapped_count]=flags; ++mapped_count; return 0;
 }
+int vmm_copy_to_user(uint64_t root,uint64_t dest,const void* src,size_t length) {
+ (void)root;
+ const uint8_t* input=(const uint8_t*)src;
+ for (size_t n=0;n<length;++n) {
+  uint64_t va=dest+n;
+  unsigned i;
+  for (i=0;i<mapped_count;++i)
+   if (va>=mapped_va[i] && va-mapped_va[i]<PAGE_SIZE) break;
+  if (i==mapped_count || !(mapped_flags[i]&VMM_FLAG_WRITABLE)) return -1;
+  ((uint8_t*)(uintptr_t)mapped_frame[i])[va-mapped_va[i]]=input[n];
+ }
+ return 0;
+}
 static elf64_header_t* valid_image(void) {
  memset(image, 0, sizeof(image));
  elf64_header_t* h = (elf64_header_t*)image;
