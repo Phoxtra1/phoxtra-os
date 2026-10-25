@@ -59,8 +59,15 @@ jobs:
           /tmp/test_ext2_readonly
       - name: Test safe storage journal and crash recovery
         run: |
-          cc -std=c11 -Wall -Wextra -Werror tests/test_storage_journal.c kernel/storage/storage_journal.c kernel/storage/blockdev.c -o /tmp/test_storage_journal
-          /tmp/test_storage_journal
+          set +e
+          cc -std=c11 -Wall -Wextra -Werror tests/test_storage_journal.c kernel/storage/storage_journal.c kernel/storage/blockdev.c -o /tmp/test_storage_journal > /tmp/phoxtra-ci-failure.log 2>&1
+          build_status=$?
+          cat /tmp/phoxtra-ci-failure.log
+          if [ "$build_status" -ne 0 ]; then exit "$build_status"; fi
+          /tmp/test_storage_journal >> /tmp/phoxtra-ci-failure.log 2>&1
+          test_status=$?
+          cat /tmp/phoxtra-ci-failure.log
+          exit "$test_status"
       - name: Audit network implementation integrity
         run: python3 scripts/check_network_integrity.py
       - name: Audit prototype claim integrity
@@ -247,6 +254,7 @@ jobs:
           path: |
             /tmp/phoxtra-screen.ppm
             /tmp/phoxtra-serial.log
+            /tmp/phoxtra-ci-failure.log
           if-no-files-found: warn
 
       - name: Generate ISO checksum
