@@ -2,6 +2,7 @@
 #include "../memory/heap.h"
 #include "../memory/pmm.h"
 #include "../memory/vmm.h"
+#include "../scheduler/scheduler.h"
 #include "../log/logger.h"
 #include "../security/process_identity.h"
 #include "../security/audit_logger.h"
@@ -9,6 +10,8 @@
 #include "../security/mac.h"
 
 #define KERNEL_STACK_SIZE (16 * 1024) // 16KB stack per process
+extern void switch_to_user_mode(uint64_t entry_point, uint64_t user_rsp);
+extern void gdt_set_kernel_stack(uint64_t rsp0);
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
     int i;
@@ -128,4 +131,19 @@ int pcb_destroy(pcb_t* pcb) {
     if (pcb->stack_base) kfree(pcb->stack_base);
     kfree(pcb);
     return 0;
+}
+
+/* Initial kernel context for an ELF process; iretq enters Ring 3 and never returns. */
+void pcb_user_entry_trampoline(void) {
+    pcb_t* current = scheduler_current();
+    if (!current || !current->user_mode || !current->user_entry || !current->user_stack) {
+        if (current) current->state = PROCESS_STATE_TERMINATED;
+        scheduler_yield();
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+    gdt_set_kernel_stack((uint64_t)(uintptr_t)current->stack_base + current->stack_size);
+    switch_to_user_mode(current->user_entry, current->user_stack);
+    current->state = PROCESS_STATE_TERMINATED;
+    scheduler_yield();
+    for (;;) __asm__ volatile("cli; hlt");
 }
