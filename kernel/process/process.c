@@ -1,4 +1,5 @@
 #include "process.h"
+#include "../exec/elf.h"
 #include "pcb.h"
 #include "../log/logger.h"
 #include "../memory/heap.h"
@@ -38,6 +39,39 @@ pcb_t* process_create(const char* name, void (*entry)(void), uint32_t priority) 
     }
 
     pcb_destroy(pcb);
+    return (void*)0;
+}
+
+pcb_t* process_create_user_from_elf(const char* name, const uint8_t* image,
+                                    uint64_t image_size, uint32_t priority) {
+    if (!name || !image || !image_size || active_count >= MAX_PROCESSES) return (void*)0;
+    pcb_t* pcb = pcb_create(next_pid++, name, pcb_user_entry_trampoline, priority, 0);
+    if (!pcb) return (void*)0;
+
+    uint64_t entry = 0, stack_top = 0;
+    if (elf_load_into_address_space(pcb->page_directory, image, image_size,
+                                    &entry, &stack_top) != 0) {
+        (void)pcb_destroy(pcb);
+        klog(LOG_WARNING, "Process Manager: ELF load failed; process creation rolled back");
+        return (void*)0;
+    }
+
+    pcb->user_mode = 1;
+    pcb->user_entry = entry;
+    pcb->user_stack = stack_top;
+    pcb->rip = (uint64_t)pcb_user_entry_trampoline;
+
+    for (int i = 0; i < MAX_PROCESSES; ++i) {
+        if (!process_table_arr[i]) {
+            process_table_arr[i] = pcb;
+            ++active_count;
+            pcb->state = PROCESS_STATE_READY;
+            scheduler_add_process(pcb);
+            return pcb;
+        }
+    }
+
+    (void)pcb_destroy(pcb);
     return (void*)0;
 }
 
