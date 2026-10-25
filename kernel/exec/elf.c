@@ -152,8 +152,14 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
    return -1;
   }
  }
+ /* Provide a minimal ABI-compatible initial stack: argc=0, argv terminator,
+    envp terminator, AT_NULL pair, and one alignment word. */
+ uint64_t initial_stack[6] = {0, 0, 0, 0, 0, 0};
+ uint64_t initial_rsp = ELF_STACK_TOP - sizeof(initial_stack);
+ if (vmm_copy_to_user(pml4_phys, initial_rsp, initial_stack,
+                      sizeof(initial_stack)) != 0) return -1;
  *entry_out = entry;
- *stack_top_out = ELF_STACK_TOP;
+ *stack_top_out = initial_rsp;
  return 0;
 }
 
