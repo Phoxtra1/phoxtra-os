@@ -234,6 +234,11 @@ void* pmm_alloc_contiguous_pages(size_t page_count) {
 void* pmm_alloc_user_page(void) {
     void* page_ptr = pmm_alloc_page();
     if (!page_ptr) return NULL;
+
+    /* Never expose stale kernel data through a newly user-mappable frame. */
+    uint8_t* bytes = (uint8_t*)page_ptr;
+    for (size_t i = 0; i < PAGE_SIZE; ++i) bytes[i] = 0;
+
     uint64_t page = (uint64_t)(uintptr_t)page_ptr / PAGE_SIZE;
     spinlock_irq_flags_t flags = spin_lock_irqsave(&pmm_lock);
     if (page >= total_pages_count || page >= MAX_PAGES ||
