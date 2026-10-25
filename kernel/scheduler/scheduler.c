@@ -3,6 +3,7 @@
 #include "../process/process.h"
 #include "../memory/vmm.h"
 #include "../log/logger.h"
+extern void gdt_set_kernel_stack(uint64_t rsp0);
 
 
 #define MAX_READY_QUEUE 64
@@ -62,8 +63,14 @@ static void idle_pcb_init(void) {
 
     uint64_t stack_top = ((uint64_t)idle_stack + sizeof(idle_stack)) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
-    sp--; *sp = 0;
-    sp--; *sp = (uint64_t)idle_task;
+    *--sp = 0; /* synthetic return address: ABI entry RSP is 8 mod 16 */
+    *--sp = (uint64_t)idle_task; /* ret target after callee-saved restores */
+    *--sp = 0; /* r15 */
+    *--sp = 0; /* r14 */
+    *--sp = 0; /* r13 */
+    *--sp = 0; /* r12 */
+    *--sp = 0; /* rbp */
+    *--sp = 0; /* rbx */
 
     /* Build PCB by hand (no heap needed for idle) */
     static const char idle_name[] = "idle";
@@ -136,6 +143,15 @@ void scheduler_tick(void) {
     process_reap_terminated();
     tick_counter++;
     current_ticks++;
+    pcb_t** processes = process_table();
+    for (uint32_t i = 0; i < MAX_PROCESSES; ++i) {
+        pcb_t* p = processes[i];
+        if (p && p->state == PROCESS_STATE_SLEEPING && p->wake_tick <= current_ticks) {
+            p->wake_tick = 0;
+            p->state = PROCESS_STATE_READY;
+            queue_push(p);
+        }
+    }
 
     /* Only switch every TIME_SLICE_TICKS ticks */
     if (tick_counter < TIME_SLICE_TICKS) return;
@@ -189,6 +205,10 @@ void scheduler_yield(void) {
         vmm_switch_page_directory(next->page_directory);
     else
         vmm_switch_page_directory(vmm_get_kernel_page_directory());
+    uint64_t kernel_stack_top = next->stack_base
+        ? (uint64_t)(uintptr_t)next->stack_base + next->stack_size
+        : (uint64_t)(uintptr_t)idle_stack + sizeof(idle_stack);
+    gdt_set_kernel_stack(kernel_stack_top);
 
     /* Perform the actual register-level context switch */
     context_switch(&old->rsp, next->rsp);
