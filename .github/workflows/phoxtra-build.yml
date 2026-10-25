@@ -68,6 +68,13 @@ jobs:
           test_status=$?
           cat /tmp/phoxtra-ci-failure.log
           exit "$test_status"
+      - name: Preserve storage-journal test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoxtra-storage-journal-diagnostics
+          path: /tmp/phoxtra-ci-failure.log
+          if-no-files-found: warn
       - name: Audit network implementation integrity
         run: python3 scripts/check_network_integrity.py
       - name: Audit prototype claim integrity
