@@ -1,10 +1,36 @@
 #include "../kernel/exec/elf.h"
+#include "../kernel/memory/pmm.h"
+#include "../kernel/memory/vmm.h"
 #include "../kernel/log/logger.h"
 #include <stdio.h>
 #include <string.h>
 static unsigned logs;
 void klog(log_level_t level, const char* message) { (void)level; (void)message; ++logs; }
 static uint8_t image[8192];
+static uint8_t user_frames[16][PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
+static uint8_t frame_used[16];
+static uint64_t mapped_va[32];
+static uint64_t mapped_frame[32];
+static uint32_t mapped_flags[32];
+static unsigned mapped_count;
+static int map_fail_after = -1;
+void* pmm_alloc_user_page(void) {
+ for (unsigned i=0;i<16;++i) if (!frame_used[i]) {
+  frame_used[i]=1; memset(user_frames[i],0,PAGE_SIZE); return user_frames[i];
+ }
+ return 0;
+}
+void pmm_free_user_page(void* ptr) {
+ for (unsigned i=0;i<16;++i) if (ptr==user_frames[i]) frame_used[i]=0;
+}
+int vmm_map_user_page(uint64_t root,uint64_t va,uint64_t phys,uint32_t flags) {
+ (void)root;
+ if (map_fail_after==0) return -1;
+ if (map_fail_after>0) --map_fail_after;
+ if (mapped_count>=32) return -1;
+ mapped_va[mapped_count]=va; mapped_frame[mapped_count]=phys;
+ mapped_flags[mapped_count]=flags; ++mapped_count; return 0;
+}
 static elf64_header_t* valid_image(void) {
  memset(image, 0, sizeof(image));
  elf64_header_t* h = (elf64_header_t*)image;
@@ -23,6 +49,13 @@ static elf64_header_t* valid_image(void) {
 int main(void) {
  uint64_t entry=0; elf64_header_t* h=valid_image();
  CHECK("valid static ELF64 image",elf_validate_image(image,sizeof(image),&entry)&&entry==0x100000000ULL);
+ h=valid_image(); mapped_count=0; memset(frame_used,0,sizeof(frame_used)); map_fail_after=-1;
+ uint64_t stack_top=0;
+ CHECK("load ELF segments and private stack",elf_load_into_address_space(0x1000,image,sizeof(image),&entry,&stack_top)==0 && entry==0x100000000ULL && stack_top==0x7FFFFFF00000ULL && mapped_count==9);
+ CHECK("ELF code bytes copied to mapped frame",((uint8_t*)(uintptr_t)mapped_frame[0])[0]==0x90 && ((uint8_t*)(uintptr_t)mapped_frame[0])[3]==0xC3);
+ CHECK("user stack pages are writable and non-executable",(mapped_flags[1] & VMM_FLAG_NO_EXECUTE) && (mapped_flags[1] & VMM_FLAG_WRITABLE));
+ h=valid_image(); mapped_count=0; memset(frame_used,0,sizeof(frame_used)); map_fail_after=1; stack_top=123;
+ CHECK("loader reports mapping failure",elf_load_into_address_space(0x1000,image,sizeof(image),&entry,&stack_top)==-1 && stack_top==0);
  h=valid_image(); h->e_phoff=UINT64_MAX-4;
  CHECK("reject overflowing program-header table",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); h->e_phentsize--;
