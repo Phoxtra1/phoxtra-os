@@ -20,6 +20,7 @@
 static uint8_t* arena;
 static uint8_t allocated[PAGE_COUNT];
 static uint8_t user_allocated[PAGE_COUNT];
+static uint8_t user_mapped[PAGE_COUNT];
 static uint64_t fake_cr3;
 static uint64_t kernel_cr3;
 static unsigned invalidations;
@@ -67,13 +68,29 @@ int pmm_is_user_page(uint64_t phys_addr) {
     return index < PAGE_COUNT && allocated[index] && user_allocated[index];
 }
 
+int pmm_claim_user_page(uint64_t phys_addr) {
+    uintptr_t address = (uintptr_t)phys_addr, base = (uintptr_t)arena;
+    if (address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return 0;
+    size_t index = (address - base) / PAGE_SIZE;
+    if (index >= PAGE_COUNT || !allocated[index] || !user_allocated[index] || user_mapped[index]) return 0;
+    user_mapped[index] = 1;
+    return 1;
+}
+void pmm_release_user_mapping(uint64_t phys_addr) {
+    uintptr_t address = (uintptr_t)phys_addr, base = (uintptr_t)arena;
+    if (address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return;
+    size_t index = (address - base) / PAGE_SIZE;
+    if (index < PAGE_COUNT && allocated[index] && user_allocated[index]) user_mapped[index] = 0;
+}
 void pmm_free_user_page(void* ptr) {
     uintptr_t address = (uintptr_t)ptr;
     uintptr_t base = (uintptr_t)arena;
     if (!ptr || address < base || address >= base + ARENA_SIZE ||
         ((address - base) & (PAGE_SIZE - 1u))) return;
     size_t index = (address - base) / PAGE_SIZE;
-    if (index >= PAGE_COUNT || !user_allocated[index]) return;
+    if (index >= PAGE_COUNT || !user_allocated[index] || user_mapped[index]) return;
     user_allocated[index] = 0;
     pmm_free_page(ptr);
 }
