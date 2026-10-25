@@ -454,6 +454,7 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         !is_page_aligned(virt) || !is_page_aligned(phys) ||
         virt < VMM_USER_MIN_ADDRESS || !is_lower_canonical(virt) ||
         phys < VMM_RESERVED_PHYSICAL || phys >= VMM_PHYSICAL_LIMIT ||
+        !pmm_is_user_page(phys) ||
         (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE | VMM_FLAG_USER)) != 0) {
         return -1;
     }
