@@ -240,7 +240,7 @@ void vmm_init(void) {
 
 int vmm_map_page(uint64_t virt, uint64_t phys, uint32_t flags) {
     if (!is_page_aligned(virt) || !is_page_aligned(phys) ||
-        !is_lower_canonical(virt) && (virt >> 47) != 0x1FFFFULL ||
+        (!is_lower_canonical(virt) && (virt >> 47) != 0x1FFFFULL) ||
         (flags & ~(VMM_FLAG_PRESENT | VMM_FLAG_WRITABLE)) != 0) {
         return -1;
     }
@@ -468,13 +468,23 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
         pd = entry_table(pdpt[pdpt_idx]);
     }
 
-    /* Never replace an existing (especially supervisor) PDE or huge mapping. */
-    if (pd[pd_idx] & VMM_PTE_PRESENT) goto fail;
-    pt = allocate_zeroed_table();
-    if (!pt) goto fail;
-    pd[pd_idx] = table_entry(
-        pt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
+    /*
+     * Existing user-owned PTs may hold several pages in the same 2 MiB
+     * region. A pre-existing huge page or supervisor PDE is never split or
+     * replaced; only a missing PDE may acquire a new user PT.
+     */
+    if (pd[pd_idx] & VMM_PTE_PRESENT) {
+        if (!(pd[pd_idx] & VMM_PTE_USER) ||
+            (pd[pd_idx] & VMM_PTE_LARGE)) goto fail;
+        pt = entry_table(pd[pd_idx]);
+    } else {
+        pt = allocate_zeroed_table();
+        if (!pt) goto fail;
+        pd[pd_idx] = table_entry(
+            pt, VMM_PTE_PRESENT | VMM_PTE_WRITABLE | VMM_PTE_USER);
+    }
 
+    if (pt[pt_idx] & VMM_PTE_PRESENT) goto fail;
     pt[pt_idx] = (phys & VMM_ADDRESS_MASK) |
                  VMM_PTE_PRESENT | VMM_PTE_USER |
                  (flags & VMM_PTE_WRITABLE);
