@@ -11,10 +11,10 @@ static elf64_header_t* valid_image(void) {
  h->e_ident[0]=0x7f; h->e_ident[1]='E'; h->e_ident[2]='L'; h->e_ident[3]='F';
  h->e_ident[4]=ELF_CLASS_64; h->e_ident[5]=ELF_DATA_LSB; h->e_ident[6]=ELF_VERSION_CURRENT;
  h->e_type=ELF_TYPE_EXEC; h->e_machine=ELF_ARCH_X86_64; h->e_version=ELF_VERSION_CURRENT;
- h->e_entry=0x400000; h->e_phoff=sizeof(*h); h->e_ehsize=sizeof(*h);
+ h->e_entry=0x100000000ULL; h->e_phoff=sizeof(*h); h->e_ehsize=sizeof(*h);
  h->e_phentsize=sizeof(elf64_phdr_t); h->e_phnum=1;
  elf64_phdr_t* p=(elf64_phdr_t*)(image+h->e_phoff);
- p->p_type=PT_LOAD; p->p_flags=PF_R|PF_X; p->p_offset=0x1000; p->p_vaddr=0x400000;
+ p->p_type=PT_LOAD; p->p_flags=PF_R|PF_X; p->p_offset=0x1000; p->p_vaddr=0x100000000ULL;
  p->p_filesz=4; p->p_memsz=8; p->p_align=0x1000;
  image[0x1000]=0x90; image[0x1001]=0x90; image[0x1002]=0x90; image[0x1003]=0xC3;
  return h;
@@ -22,7 +22,7 @@ static elf64_header_t* valid_image(void) {
 #define CHECK(label, expr) do { if (!(expr)) { fprintf(stderr,"FAIL: %s\n",label); return 1; } printf("PASS: %s\n",label); } while (0)
 int main(void) {
  uint64_t entry=0; elf64_header_t* h=valid_image();
- CHECK("valid static ELF64 image",elf_validate_image(image,sizeof(image),&entry)&&entry==0x400000);
+ CHECK("valid static ELF64 image",elf_validate_image(image,sizeof(image),&entry)&&entry==0x100000000ULL);
  h=valid_image(); h->e_phoff=UINT64_MAX-4;
  CHECK("reject overflowing program-header table",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); h->e_phentsize--;
@@ -33,8 +33,10 @@ int main(void) {
  CHECK("reject filesz larger than memsz",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_align=3;
  CHECK("reject invalid alignment",!elf_validate_image(image,sizeof(image),&entry));
- h=valid_image(); h->e_entry=0x500000;
+ h=valid_image(); h->e_entry=0x100500000ULL;
  CHECK("reject entry outside executable segment",!elf_validate_image(image,sizeof(image),&entry));
+ h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=0x400000ULL; h->e_entry=0x400000ULL;
+ CHECK("reject low addresses overlapping kernel identity map",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_type=PT_DYNAMIC;
  CHECK("reject unsupported dynamic image",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=UINT64_MAX-3;
