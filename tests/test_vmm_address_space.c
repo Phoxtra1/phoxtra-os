@@ -19,6 +19,7 @@
 
 static uint8_t* arena;
 static uint8_t allocated[PAGE_COUNT];
+static uint8_t user_allocated[PAGE_COUNT];
 static uint64_t fake_cr3;
 static unsigned invalidations;
 
@@ -41,6 +42,36 @@ void pmm_free_page(void* ptr) {
         ((address - base) & (PAGE_SIZE - 1u))) return;
     size_t index = (address - base) / PAGE_SIZE;
     if (index >= RESERVED_TEST_PAGES) allocated[index] = 0;
+}
+
+
+void* pmm_alloc_user_page(void) {
+    void* page = pmm_alloc_page();
+    if (page) {
+        size_t index = ((uintptr_t)page - (uintptr_t)arena) / PAGE_SIZE;
+        if (index < PAGE_COUNT) user_allocated[index] = 1;
+    }
+    return page;
+}
+
+int pmm_is_user_page(uint64_t phys_addr) {
+    uintptr_t address = (uintptr_t)phys_addr;
+    uintptr_t base = (uintptr_t)arena;
+    if (address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return 0;
+    size_t index = (address - base) / PAGE_SIZE;
+    return index < PAGE_COUNT && allocated[index] && user_allocated[index];
+}
+
+void pmm_free_user_page(void* ptr) {
+    uintptr_t address = (uintptr_t)ptr;
+    uintptr_t base = (uintptr_t)arena;
+    if (!ptr || address < base || address >= base + ARENA_SIZE ||
+        ((address - base) & (PAGE_SIZE - 1u))) return;
+    size_t index = (address - base) / PAGE_SIZE;
+    if (index >= PAGE_COUNT || !user_allocated[index]) return;
+    user_allocated[index] = 0;
+    pmm_free_page(ptr);
 }
 
 void klog(int level, const char* message) {
@@ -129,8 +160,9 @@ int main(void) {
 
     user_root = vmm_create_user_page_directory();
     if (!user_root) fail("second private address-space creation failed");
-    uint64_t frame1 = (uint64_t)(uintptr_t)pmm_alloc_page();
-    uint64_t frame2 = (uint64_t)(uintptr_t)pmm_alloc_page();
+    uint64_t kernel_frame = (uint64_t)(uintptr_t)pmm_alloc_page();
+    uint64_t frame1 = (uint64_t)(uintptr_t)pmm_alloc_user_page();
+    uint64_t frame2 = (uint64_t)(uintptr_t)pmm_alloc_user_page();
     if (!frame1 || !frame2) fail("test physical frame allocation failed");
 
     const uint64_t user_va1 = 0x0000000100001000ULL;
@@ -141,6 +173,8 @@ int main(void) {
         fail("second page in same 2 MiB user region failed");
     if (vmm_map_user_page(user_root, user_va1, frame2, VMM_FLAG_WRITABLE) == 0)
         fail("mapping collision unexpectedly replaced an existing user page");
+    if (vmm_map_user_page(user_root, user_va1 + 0x3000ULL, kernel_frame, VMM_FLAG_WRITABLE) == 0)
+        fail("ordinary kernel allocation was exposed through a user PTE");
     if (vmm_map_user_page(user_root, 0x2000, frame2, VMM_FLAG_WRITABLE) == 0)
         fail("user mapping was allowed in the bootstrap identity region");
     if (vmm_map_user_page(user_root, user_va1, 0x200000ULL, VMM_FLAG_WRITABLE) == 0)
@@ -172,8 +206,9 @@ int main(void) {
         fail("double destruction was not rejected");
     if (invalidations == 0) fail("expected TLB invalidations were not requested");
 
-    pmm_free_page((void*)(uintptr_t)frame1);
-    pmm_free_page((void*)(uintptr_t)frame2);
+    pmm_free_page((void*)(uintptr_t)kernel_frame);
+    pmm_free_user_page((void*)(uintptr_t)frame1);
+    pmm_free_user_page((void*)(uintptr_t)frame2);
     munmap(mapping, ARENA_SIZE);
     puts("PASS: private address spaces preserve supervisor mappings, isolate user pages, reject collisions, and teardown safely");
     return EXIT_SUCCESS;
