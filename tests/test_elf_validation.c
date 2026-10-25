@@ -100,8 +100,8 @@ int main(void) {
  ((elf64_phdr_t*)(image+h->e_phoff))->p_filesz=4;
  ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=8;
  elf64_phdr_t* second=(elf64_phdr_t*)(image+h->e_phoff+sizeof(elf64_phdr_t));
- *second=*((elf64_phdr_t*)(image+h->e_phoff)); second->p_vaddr=0x100001000ULL;
- second->p_offset=0x1000ULL; h->e_phnum=2;
+ *second=*((elf64_phdr_t*)(image+h->e_phoff)); second->p_vaddr=0x100000900ULL;
+ second->p_offset=0x1900ULL; h->e_phnum=2;
  CHECK("reject segments sharing a mapped page",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_flags=PF_R|PF_W|PF_X;
  CHECK("reject writable-executable segments",!elf_validate_image(image,sizeof(image),&entry));
