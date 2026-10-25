@@ -43,7 +43,7 @@ void user_mode_smoke_init(void) {
         0xEB,0xFE                    /* should never return */
     };
     uint64_t message_address = SMOKE_BASE + sizeof(code);
-    for (unsigned i = 0; i < 8; ++i) code[7 + i] = (uint8_t)(message_address >> (i * 8));
+    for (unsigned i = 0; i < 8; ++i) code[40 + i] = (uint8_t)(message_address >> (i * 8));
     for (size_t i = 0; i < sizeof(code); ++i) smoke_image[0x1000 + i] = code[i];
     static const char message[] = "PHOXTRA_USERMODE_SMOKE_OK";
     for (size_t i = 0; i < sizeof(message); ++i)
