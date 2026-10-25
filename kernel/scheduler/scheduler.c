@@ -63,8 +63,13 @@ static void idle_pcb_init(void) {
 
     uint64_t stack_top = ((uint64_t)idle_stack + sizeof(idle_stack)) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
-    sp--; *sp = 0;
-    sp--; *sp = (uint64_t)idle_task;
+    *--sp = (uint64_t)idle_task; /* ret target after callee-saved restores */
+    *--sp = 0; /* r15 */
+    *--sp = 0; /* r14 */
+    *--sp = 0; /* r13 */
+    *--sp = 0; /* r12 */
+    *--sp = 0; /* rbp */
+    *--sp = 0; /* rbx */
 
     /* Build PCB by hand (no heap needed for idle) */
     static const char idle_name[] = "idle";
