@@ -483,6 +483,7 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     if (target_root == kernel_root ||
         address_space_slot_unlocked(pml4_phys) < 0) {
         vmm_lock_release(lock_flags);
+        pmm_release_user_mapping(phys);
         klog(LOG_WARNING, "VMM: refusing user mapping in an unowned page directory");
         return -1;
     }
