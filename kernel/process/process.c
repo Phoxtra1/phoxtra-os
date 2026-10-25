@@ -2,6 +2,7 @@
 #include "pcb.h"
 #include "../log/logger.h"
 #include "../memory/heap.h"
+#include "../scheduler/scheduler.h"
 
 static pcb_t* process_table_arr[MAX_PROCESSES];
 static uint32_t next_pid = 0;
@@ -40,6 +41,7 @@ pcb_t* process_create(const char* name, void (*entry)(void), uint32_t priority) 
 }
 
 void process_destroy(uint32_t pid) {
+    scheduler_remove_process(pid);
     for (int i = 0; i < MAX_PROCESSES; i++) {
         if (process_table_arr[i] && process_table_arr[i]->pid == pid) {
             process_table_arr[i]->state = PROCESS_STATE_TERMINATED;
