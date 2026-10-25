@@ -19,7 +19,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 concurrency:
   group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -49,78 +48,50 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
       - name: Audit storage write safety
-        id: storage_safety
         run: python3 scripts/check_storage_safety.py
       - name: Test partition and storage boundaries
-        id: partition_test
         run: |
           cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
           /tmp/test_partition_validation
       - name: Test read-only ext2 filesystem
-        id: ext2_test
         run: |
           cc -std=gnu17 -Wall -Wextra -Werror tests/test_ext2_readonly.c kernel/storage/ext2.c kernel/vfs/vfs.c kernel/storage/blockdev.c -o /tmp/test_ext2_readonly
           /tmp/test_ext2_readonly
       - name: Test safe storage journal and crash recovery
-        id: journal_test
         run: |
-          set +e
-          cc -std=c11 -Wall -Wextra -Werror tests/test_storage_journal.c kernel/storage/storage_journal.c kernel/storage/blockdev.c -o /tmp/test_storage_journal > /tmp/phoxtra-ci-failure.log 2>&1
-          build_status=$?
-          cat /tmp/phoxtra-ci-failure.log
-          if [ "$build_status" -ne 0 ]; then exit "$build_status"; fi
-          /tmp/test_storage_journal >> /tmp/phoxtra-ci-failure.log 2>&1
-          test_status=$?
-          cat /tmp/phoxtra-ci-failure.log
-          exit "$test_status"
-      - name: Preserve storage-journal test diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phoxtra-storage-journal-diagnostics
-          path: /tmp/phoxtra-ci-failure.log
-          if-no-files-found: warn
+          cc -std=c11 -Wall -Wextra -Werror tests/test_storage_journal.c kernel/storage/storage_journal.c kernel/storage/blockdev.c -o /tmp/test_storage_journal
+          /tmp/test_storage_journal
       - name: Audit network implementation integrity
-        id: network_audit
         run: python3 scripts/check_network_integrity.py
       - name: Audit prototype claim integrity
-        id: prototype_audit
         run: python3 scripts/check_prototype_claims.py
       - name: Test ARP packet validation
-        id: arp_test
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_arp_validation.c kernel/net/arp.c kernel/net/ethernet.c kernel/net/ipv4.c -o /tmp/test_arp_validation
           /tmp/test_arp_validation
       - name: Test IPv4 receive validation
-        id: ipv4_test
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_ipv4_validation.c kernel/net/ipv4.c -o /tmp/test_ipv4_validation
           /tmp/test_ipv4_validation
       - name: Test ELF64 image validation
-        id: elf_test
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
           /tmp/test_elf_validation
       - name: Configure
-        id: configure
         run: cmake -B build -S .
       - name: Build kernel
-        id: kernel_build
         run: cmake --build build -j2
       - name: Build alternate product profiles
-        id: profiles_build
         run: |
           cmake -B build-desktop -S . -DPHOXTRA_PRODUCT_PROFILE=desktop
           cmake --build build-desktop -j2
           cmake -B build-embedded -S . -DPHOXTRA_PRODUCT_PROFILE=embedded
           cmake --build build-embedded -j2
       - name: Build bootable ISO
-        id: iso_build
         run: cmake --build build --target iso
       - name: Verify ISO artifact
         run: test -s build/phoxtra.iso
       - name: Boot ISO and check desktop framebuffer
-        id: qemu_test
         shell: bash
         run: |
           rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-ahci-test.img
@@ -276,7 +247,6 @@ jobs:
           path: |
             /tmp/phoxtra-screen.ppm
             /tmp/phoxtra-serial.log
-            /tmp/phoxtra-ci-failure.log
           if-no-files-found: warn
 
       - name: Generate ISO checksum
@@ -293,39 +263,6 @@ jobs:
             build/phoxtra.iso.sha256
           if-no-files-found: error
           retention-days: 14
-
-      - name: Report failed CI stage to pull request
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const stages = {
-              storage_safety: '${{ steps.storage_safety.outcome }}',
-              partition_test: '${{ steps.partition_test.outcome }}',
-              ext2_test: '${{ steps.ext2_test.outcome }}',
-              journal_test: '${{ steps.journal_test.outcome }}',
-              network_audit: '${{ steps.network_audit.outcome }}',
-              prototype_audit: '${{ steps.prototype_audit.outcome }}',
-              arp_test: '${{ steps.arp_test.outcome }}',
-              ipv4_test: '${{ steps.ipv4_test.outcome }}',
-              elf_test: '${{ steps.elf_test.outcome }}',
-              configure: '${{ steps.configure.outcome }}',
-              kernel_build: '${{ steps.kernel_build.outcome }}',
-              profiles_build: '${{ steps.profiles_build.outcome }}',
-              iso_build: '${{ steps.iso_build.outcome }}',
-              qemu_test: '${{ steps.qemu_test.outcome }}'
-            };
-            const body = [
-              'Temporary Phoxtra CI failure-stage diagnostic for commit ' + context.sha,
-              '',
-              ...Object.entries(stages).map(([name, outcome]) => '- ' + name + ': ' + (outcome || 'not reported'))
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
 
       - name: Create unpublished draft release (manual opt-in only)
         if: success() && github.event_name == 'workflow_dispatch' && inputs.create_draft_release
