@@ -21,7 +21,11 @@
 
 static uint64_t* kernel_pml4_root;
 static uint64_t* active_pml4_root;
+#ifndef VMM_TESTING
 static spinlock_t vmm_lock = SPINLOCK_INITIALIZER;
+#endif
+#define VMM_MAX_ADDRESS_SPACES 256u
+static uint64_t owned_address_spaces[VMM_MAX_ADDRESS_SPACES];
 
 #ifdef VMM_TESTING
 extern uint64_t vmm_test_read_cr3(void);
@@ -113,6 +117,22 @@ static uint64_t* kernel_pml4_unlocked(void) {
         if (!active_pml4_root) active_pml4_root = current;
     }
     return kernel_pml4_root;
+}
+
+static int address_space_slot_unlocked(uint64_t pml4_phys) {
+    for (size_t i = 0; i < VMM_MAX_ADDRESS_SPACES; ++i)
+        if (owned_address_spaces[i] == pml4_phys) return (int)i;
+    return -1;
+}
+
+static int register_address_space_unlocked(uint64_t pml4_phys) {
+    for (size_t i = 0; i < VMM_MAX_ADDRESS_SPACES; ++i) {
+        if (!owned_address_spaces[i]) {
+            owned_address_spaces[i] = pml4_phys;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 /*
@@ -386,6 +406,10 @@ uint64_t vmm_get_kernel_page_directory(void) {
 uint64_t vmm_create_user_page_directory(void) {
     spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
     uint64_t result = clone_kernel_lower_half();
+    if (result && register_address_space_unlocked(result) != 0) {
+        (void)destroy_page_directory_unlocked(result);
+        result = 0;
+    }
     vmm_lock_release(lock_flags);
     if (!result)
         klog(LOG_ERROR, "VMM: failed to create a private page-directory hierarchy");
@@ -394,7 +418,13 @@ uint64_t vmm_create_user_page_directory(void) {
 
 int vmm_destroy_user_page_directory(uint64_t pml4_phys) {
     spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    int slot = address_space_slot_unlocked(pml4_phys);
+    if (slot < 0) {
+        vmm_lock_release(lock_flags);
+        return -1;
+    }
     int result = destroy_page_directory_unlocked(pml4_phys);
+    if (result == 0) owned_address_spaces[slot] = 0;
     vmm_lock_release(lock_flags);
     return result;
 }
@@ -402,13 +432,19 @@ int vmm_destroy_user_page_directory(uint64_t pml4_phys) {
 void vmm_switch_page_directory(uint64_t cr3_phys) {
     if (!cr3_phys || !is_page_aligned(cr3_phys)) return;
 
-    uint64_t current_cr3 = read_cr3() & VMM_ADDRESS_MASK;
-    if (!kernel_pml4_root)
-        kernel_pml4_root = (uint64_t*)(uintptr_t)current_cr3;
+    spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
+    uint64_t kernel_phys = (uint64_t)(uintptr_t)kernel_pml4_unlocked();
+    if (cr3_phys != kernel_phys && address_space_slot_unlocked(cr3_phys) < 0) {
+        vmm_lock_release(lock_flags);
+        klog(LOG_WARNING, "VMM: refusing to switch to an unowned page directory");
+        return;
+    }
 
+    uint64_t current_cr3 = read_cr3() & VMM_ADDRESS_MASK;
     if (current_cr3 != (cr3_phys & VMM_ADDRESS_MASK))
         write_cr3(cr3_phys & VMM_ADDRESS_MASK);
     active_pml4_root = (uint64_t*)(uintptr_t)(cr3_phys & VMM_ADDRESS_MASK);
+    vmm_lock_release(lock_flags);
 }
 
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags) {
