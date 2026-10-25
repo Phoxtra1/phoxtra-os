@@ -153,6 +153,14 @@ void scheduler_tick(void) {
         }
     }
 
+    /* Sleeping, paused, and terminated tasks must leave the CPU immediately. */
+    if (current_process && current_process != &idle_pcb &&
+        current_process->state != PROCESS_STATE_RUNNING) {
+        tick_counter = 0;
+        scheduler_yield();
+        return;
+    }
+
     /* Only switch every TIME_SLICE_TICKS ticks */
     if (tick_counter < TIME_SLICE_TICKS) return;
     tick_counter = 0;
@@ -172,6 +180,13 @@ void scheduler_yield(void) {
             next = candidate;
             break;
         }
+    }
+
+    if (next == old && old && old != &idle_pcb &&
+        old->state == PROCESS_STATE_READY) {
+        /* A sleeping task reached its wake deadline before this tick's yield. */
+        old->state = PROCESS_STATE_RUNNING;
+        return;
     }
 
     if (!next || next == old) {
