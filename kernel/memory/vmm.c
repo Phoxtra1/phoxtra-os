@@ -595,6 +595,62 @@ unmap_fail:
     return -1;
 }
 
+static int user_translate_unlocked(uint64_t pml4_phys, uint64_t virt,
+                                      int require_write, uint64_t* phys_out) {
+    if (!pml4_phys || !phys_out || virt < VMM_USER_MIN_ADDRESS ||
+        !is_lower_canonical(virt)) return -1;
+    uint64_t* root=(uint64_t*)(uintptr_t)pml4_phys;
+    uint64_t e=root[(virt>>39)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER)) return -1;
+    uint64_t* pdpt=entry_table(e);
+    e=pdpt[(virt>>30)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) || (e&VMM_PTE_LARGE)) return -1;
+    uint64_t* pd=entry_table(e);
+    e=pd[(virt>>21)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) || (e&VMM_PTE_LARGE)) return -1;
+    uint64_t* pt=entry_table(e);
+    e=pt[(virt>>12)&0x1FFULL];
+    if (!(e&VMM_PTE_PRESENT) || !(e&VMM_PTE_USER) ||
+        (require_write && !(e&VMM_PTE_WRITABLE))) return -1;
+    *phys_out=(e&VMM_ADDRESS_MASK)|(virt&0xFFFULL);
+    return 0;
+}
+
+static int user_copy(uint64_t pml4_phys, uint64_t user_addr,
+                     void* kernel_buf, size_t length, int to_user) {
+    if (!kernel_buf && length) return -1;
+    if (!length) return 0;
+    if (user_addr < VMM_USER_MIN_ADDRESS ||
+        user_addr >= VMM_USER_MAX_ADDRESS ||
+        (uint64_t)length > VMM_USER_MAX_ADDRESS-user_addr) return -1;
+    spinlock_irq_flags_t flags=vmm_lock_acquire();
+    if (address_space_slot_unlocked(pml4_phys)<0) {
+        vmm_lock_release(flags);
+        return -1;
+    }
+    uint8_t* k=(uint8_t*)kernel_buf;
+    for (size_t i=0;i<length;++i) {
+        uint64_t phys;
+        if (user_translate_unlocked(pml4_phys,user_addr+i,to_user,&phys)!=0) {
+            vmm_lock_release(flags);
+            return -1;
+        }
+        if (to_user) *(volatile uint8_t*)(uintptr_t)phys=k[i];
+        else k[i]=*(volatile const uint8_t*)(uintptr_t)phys;
+    }
+    vmm_lock_release(flags);
+    return 0;
+}
+
+int vmm_copy_to_user(uint64_t pml4_phys, uint64_t user_dest,
+                     const void* kernel_src, size_t length) {
+    return user_copy(pml4_phys,user_dest,(void*)kernel_src,length,1);
+}
+int vmm_copy_from_user(uint64_t pml4_phys, void* kernel_dest,
+                       uint64_t user_src, size_t length) {
+    return user_copy(pml4_phys,user_src,kernel_dest,length,0);
+}
+
 int vmm_ensure_identity_mapped(uint64_t phys_start, uint64_t size) {
     if (!size || phys_start >= VMM_PHYSICAL_LIMIT ||
         size > VMM_PHYSICAL_LIMIT - phys_start) return -1;
