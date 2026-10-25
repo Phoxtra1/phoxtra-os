@@ -1,5 +1,6 @@
 #include "heap.h"
 #include "pmm.h"
+#include "../sync/spinlock.h"
 #include "../log/logger.h"
 
 #define HEAP_ALIGNMENT 16u
@@ -16,6 +17,7 @@ typedef struct heap_large_allocation {
 } heap_large_allocation_t;
 
 static heap_block_t* heap_start = NULL;
+static spinlock_t heap_lock = SPINLOCK_INITIALIZER;
 static heap_large_allocation_t* large_allocations = NULL;
 #define HEAP_HEADER_SIZE ((sizeof(heap_block_t) + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u))
 #define HEAP_LARGE_HEADER_SIZE ((sizeof(heap_large_allocation_t) + (HEAP_ALIGNMENT - 1u)) & ~(size_t)(HEAP_ALIGNMENT - 1u))
@@ -65,7 +67,7 @@ void heap_init(void) {
     klog(LOG_KERNEL, "Kernel heap initialized with on-demand small blocks and contiguous large allocations");
 }
 
-void* kmalloc(size_t requested_size) {
+static void* kmalloc_unlocked(size_t requested_size) {
     size_t size = align_size(requested_size);
     if (!size) return NULL;
 
@@ -101,7 +103,7 @@ void* kmalloc(size_t requested_size) {
     }
 }
 
-void kfree(void* ptr) {
+static void kfree_unlocked(void* ptr) {
     if (!ptr) return;
     heap_block_t* current = heap_start;
     while (current) {
@@ -147,4 +149,19 @@ void kfree(void* ptr) {
             current = next;
         }
     }
+}
+
+/* Heap metadata is shared by all kernel contexts. Keep the lock order one-way:
+   heap lock first, then PMM lock when a new/free page is needed. */
+void* kmalloc(size_t requested_size) {
+    spinlock_irq_flags_t flags = spin_lock_irqsave(&heap_lock);
+    void* result = kmalloc_unlocked(requested_size);
+    spin_unlock_irqrestore(&heap_lock, flags);
+    return result;
+}
+
+void kfree(void* ptr) {
+    spinlock_irq_flags_t flags = spin_lock_irqsave(&heap_lock);
+    kfree_unlocked(ptr);
+    spin_unlock_irqrestore(&heap_lock, flags);
 }
