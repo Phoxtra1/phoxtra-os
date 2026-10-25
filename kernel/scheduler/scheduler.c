@@ -136,6 +136,15 @@ void scheduler_tick(void) {
     process_reap_terminated();
     tick_counter++;
     current_ticks++;
+    pcb_t** processes = process_table();
+    for (uint32_t i = 0; i < MAX_PROCESSES; ++i) {
+        pcb_t* p = processes[i];
+        if (p && p->state == PROCESS_STATE_SLEEPING && p->wake_tick <= current_ticks) {
+            p->wake_tick = 0;
+            p->state = PROCESS_STATE_READY;
+            queue_push(p);
+        }
+    }
 
     /* Only switch every TIME_SLICE_TICKS ticks */
     if (tick_counter < TIME_SLICE_TICKS) return;
