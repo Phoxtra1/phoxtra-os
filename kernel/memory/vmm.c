@@ -98,10 +98,6 @@ static uint64_t* allocate_zeroed_table(void) {
     return table;
 }
 
-static void copy_table(uint64_t* destination, const uint64_t* source) {
-    for (size_t i = 0; i < 512; ++i) destination[i] = source[i];
-}
-
 static uint64_t* current_pml4_unlocked(void) {
     uint64_t* hardware_root = (uint64_t*)(uintptr_t)(read_cr3() & VMM_ADDRESS_MASK);
     if (!kernel_pml4_root) kernel_pml4_root = hardware_root;
@@ -465,9 +461,10 @@ int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t
     spinlock_irq_flags_t lock_flags = vmm_lock_acquire();
     uint64_t* kernel_root = kernel_pml4_unlocked();
     uint64_t* target_root = (uint64_t*)(uintptr_t)pml4_phys;
-    if (target_root == kernel_root) {
+    if (target_root == kernel_root ||
+        address_space_slot_unlocked(pml4_phys) < 0) {
         vmm_lock_release(lock_flags);
-        klog(LOG_WARNING, "VMM: refusing user mapping in the kernel page directory");
+        klog(LOG_WARNING, "VMM: refusing user mapping in an unowned page directory");
         return -1;
     }
 
