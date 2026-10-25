@@ -109,8 +109,10 @@ void process_pause(uint32_t pid) {
 
 void process_resume(uint32_t pid) {
     pcb_t* p = process_lookup(pid);
-    if (p && p->state == PROCESS_STATE_WAITING)
+    if (p && p->state == PROCESS_STATE_WAITING) {
         p->state = PROCESS_STATE_READY;
+        scheduler_add_process(p);
+    }
 }
 
 pcb_t* process_lookup(uint32_t pid) {
