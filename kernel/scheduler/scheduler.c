@@ -103,14 +103,31 @@ void scheduler_add_process(pcb_t* pcb) {
 }
 
 void scheduler_remove_process(uint32_t pid) {
-    /* Mark as terminated; queue_pop will skip terminated entries */
-    for (uint32_t i = 0; i < queue_count; i++) {
-        uint32_t idx = (queue_head + i) % MAX_READY_QUEUE;
-        if (ready_queue[idx] && ready_queue[idx]->pid == pid) {
-            ready_queue[idx]->state = PROCESS_STATE_TERMINATED;
-            return;
+    /*
+     * Physically remove queued entries before their PCB can be freed. Merely
+     * marking a queued PCB terminated leaves a dangling pointer in the ring.
+     */
+    pcb_t* retained[MAX_READY_QUEUE];
+    uint32_t retained_count = 0;
+
+    while (queue_count) {
+        pcb_t* candidate = queue_pop();
+        if (!candidate) continue;
+        if (candidate->pid == pid) {
+            candidate->state = PROCESS_STATE_TERMINATED;
+            continue;
         }
+        retained[retained_count++] = candidate;
     }
+
+    queue_head = 0;
+    queue_tail = 0;
+    queue_count = 0;
+    for (uint32_t i = 0; i < retained_count; ++i)
+        queue_push(retained[i]);
+
+    if (current_process && current_process->pid == pid)
+        current_process->state = PROCESS_STATE_TERMINATED;
 }
 
 void scheduler_tick(void) {
