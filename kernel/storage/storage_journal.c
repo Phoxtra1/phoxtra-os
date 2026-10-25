@@ -180,7 +180,6 @@ static int recover_locked(storage_journal_t* journal) {
     uint64_t sequence = use_a ? seq_a : seq_b;
     uint64_t target = use_a ? target_a : target_b;
     uint32_t expected_crc = use_a ? crc_a : crc_b;
-    uint32_t state = use_a ? state_a : state_b;
 
     if (!target_is_allowed(journal, target)) return -2;
 
