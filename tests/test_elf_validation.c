@@ -72,6 +72,13 @@ int main(void) {
  CHECK("reject low addresses overlapping kernel identity map",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_type=PT_DYNAMIC;
  CHECK("reject unsupported dynamic image",!elf_validate_image(image,sizeof(image),&entry));
+ h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_flags=PF_R|PF_W|PF_X;
+ CHECK("reject writable-executable segments",!elf_validate_image(image,sizeof(image),&entry));
+ h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=0x5000000ULL;
+ CHECK("reject image exceeding per-process page budget",!elf_validate_image(image,sizeof(image),&entry));
+ h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=0x7FFFFFF00000ULL-0x1000ULL;
+ ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=0x2000ULL;
+ CHECK("reject ELF segment overlapping reserved user stack",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=UINT64_MAX-3;
  CHECK("reject overflowing virtual range",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); entry=123;
