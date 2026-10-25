@@ -95,7 +95,7 @@ int main(void) {
  CHECK("reject low addresses overlapping kernel identity map",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_type=PT_DYNAMIC;
  CHECK("reject unsupported dynamic image",!elf_validate_image(image,sizeof(image),&entry));
- h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=0x100000800ULL;
+ h=valid_image(); h->e_entry=0x100000800ULL; ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=0x100000800ULL;
  ((elf64_phdr_t*)(image+h->e_phoff))->p_offset=0x1800ULL;
  ((elf64_phdr_t*)(image+h->e_phoff))->p_filesz=4;
  ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=8;
