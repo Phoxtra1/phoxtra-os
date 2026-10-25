@@ -35,6 +35,8 @@ void vmm_switch_page_directory(uint64_t cr3_phys);
 uint64_t vmm_get_kernel_page_directory(void);
 int vmm_map_user_page(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint32_t flags);
 int vmm_unmap_user_page(uint64_t pml4_phys, uint64_t virt);
+int vmm_copy_to_user(uint64_t pml4_phys, uint64_t user_dest, const void* kernel_src, size_t length);
+int vmm_copy_from_user(uint64_t pml4_phys, void* kernel_dest, uint64_t user_src, size_t length);
 
 #ifdef __cplusplus
 }
