@@ -31,8 +31,9 @@ typedef struct elf64_phdr {
 void elf_init(void);
 int elf_validate_header(const elf64_header_t* header);
 int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out);
-/* Returns -2 until real per-process address-space loading is implemented. */
+/* Legacy validation-only API; returns -2 because no target address space is supplied. */
 int elf_load_binary(const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out);
+int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out, uint64_t* user_stack_top_out);
 #ifdef __cplusplus
 }
 #endif
