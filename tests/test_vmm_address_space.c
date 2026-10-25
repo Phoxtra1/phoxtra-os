@@ -23,8 +23,11 @@ static uint8_t user_allocated[PAGE_COUNT];
 static uint64_t fake_cr3;
 static uint64_t kernel_cr3;
 static unsigned invalidations;
+static int allocation_budget = -1;
 
 void* pmm_alloc_page(void) {
+    if (allocation_budget == 0) return NULL;
+    if (allocation_budget > 0) --allocation_budget;
     for (size_t i = RESERVED_TEST_PAGES; i < PAGE_COUNT; ++i) {
         if (!allocated[i]) {
             allocated[i] = 1;
@@ -89,6 +92,13 @@ static void fail(const char* message) {
     exit(EXIT_FAILURE);
 }
 
+static size_t allocated_page_count(void) {
+    size_t count = 0;
+    for (size_t i = 0; i < PAGE_COUNT; ++i)
+        if (allocated[i]) ++count;
+    return count;
+}
+
 static uint64_t* table(uint64_t entry) {
     return (uint64_t*)(uintptr_t)(entry & ADDR_MASK);
 }
@@ -140,6 +150,15 @@ int main(void) {
     if (vmm_virt_to_phys(0x12345000ULL) != 0x12345000ULL)
         fail("kernel huge-page identity translation failed");
 
+    size_t before_failed_clone = allocated_page_count();
+    allocation_budget = 3;
+    uint64_t failed_root = vmm_create_user_page_directory();
+    allocation_budget = -1;
+    if (failed_root != 0)
+        fail("address-space creation unexpectedly succeeded after injected allocation failure");
+    if (allocated_page_count() != before_failed_clone)
+        fail("failed address-space creation leaked page-table pages");
+
     uint64_t user_root = vmm_create_user_page_directory();
     if (!user_root || user_root == fake_cr3)
         fail("private address-space creation failed");
@@ -155,6 +174,14 @@ int main(void) {
 
     const uint64_t user_va1 = 0x0000000100001000ULL;
     const uint64_t user_va2 = 0x0000000100002000ULL;
+    size_t before_failed_map = allocated_page_count();
+    allocation_budget = 1;
+    int failed_map = vmm_map_user_page(user_root, user_va1, frame1, VMM_FLAG_WRITABLE);
+    allocation_budget = -1;
+    if (failed_map == 0)
+        fail("user mapping unexpectedly succeeded after injected allocation failure");
+    if (allocated_page_count() != before_failed_map)
+        fail("failed user mapping leaked page-table pages");
     if (vmm_map_user_page(user_root, user_va1, frame1, VMM_FLAG_WRITABLE) != 0)
         fail("first user mapping failed");
     if (vmm_map_user_page(user_root, user_va2, frame2, VMM_FLAG_WRITABLE) != 0)
