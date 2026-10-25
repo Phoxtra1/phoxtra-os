@@ -53,6 +53,7 @@ static pcb_t* queue_pop(void) {
    Idle Process — runs only when nothing else can
    ──────────────────────────────────────────────── */
 static void idle_task(void) {
+    asm volatile("sti" ::: "memory");
     while (1) {
         asm volatile("hlt");
     }
