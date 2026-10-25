@@ -123,6 +123,13 @@ static void refill_record_crc(uint8_t* record_sector) {
     put_le32_test(record_sector + 28u,
                   crc32_test(record_sector, STORAGE_JOURNAL_SECTOR_SIZE));
 }
+static int sector_is_blank(uint64_t lba) {
+    const uint8_t* p = disk.bytes + lba * STORAGE_JOURNAL_SECTOR_SIZE;
+    for (uint32_t i = 0; i < STORAGE_JOURNAL_SECTOR_SIZE; ++i)
+        if (p[i] != 0) return 0;
+    return 1;
+}
+
 static int record_is_done(uint64_t lba) {
     const uint8_t* p = disk.bytes + lba * STORAGE_JOURNAL_SECTOR_SIZE;
     uint8_t copy[STORAGE_JOURNAL_SECTOR_SIZE];
@@ -218,8 +225,14 @@ int main(void) {
         } else {
             CHECK("committed interruption replays new target", sector_has(TARGET_LBA, 0xA5));
         }
-        CHECK("recovery leaves metadata clean",
-              record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
+        if (fail_at <= 2u) {
+            /* Before A/COMMIT is durable, a blank journal is the clean state. */
+            CHECK("pre-commit recovery leaves journal metadata blank",
+                  sector_is_blank(JOURNAL_LBA) && sector_is_blank(JOURNAL_LBA + 2u));
+        } else {
+            CHECK("committed recovery leaves metadata clean",
+                  record_is_done(JOURNAL_LBA) && record_is_done(JOURNAL_LBA + 2u));
+        }
     }
 
     /* A genuinely torn metadata sector is ambiguous and must not be guessed at. */
