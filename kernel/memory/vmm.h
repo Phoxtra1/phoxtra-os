@@ -23,9 +23,11 @@ uint64_t vmm_virt_to_phys(uint64_t virt);
  * New address spaces keep private lower-half page tables and share only the
  * supervisor-only upper PML4 half. The current boot map identity-maps 0..4 GiB
  * with huge pages, so user mappings are restricted to virtual addresses >=4
- * GiB and below the canonical lower-half limit. Physical frames must be
- * allocated by the caller and remain caller-owned until explicitly released;
- * destroying an address space frees only its page-table pages.
+ * GiB and below the canonical lower-half limit. User frames must come from
+ * pmm_alloc_user_page() so ordinary kernel allocations cannot be exposed by
+ * accident. Callers retain frame ownership and must not release a frame while
+ * any PTE references it. Destroying an address space frees only its page-table
+ * pages, not mapped user frames.
  */
 uint64_t vmm_create_user_page_directory(void);
 int vmm_destroy_user_page_directory(uint64_t pml4_phys);
