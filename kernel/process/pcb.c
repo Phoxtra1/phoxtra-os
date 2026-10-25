@@ -71,16 +71,9 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     pcb->rip = (uint64_t)entry;
 
 
-    // Set up initial stack frame for context_switch:
-    // context_switch() does: pop rbx, pop rbp, pop r12, pop r13, pop r14, pop r15, ret
-    // Stack layout (growing downward, RSP points to lowest slot = rbx):
-    //   [RSP+48] = entry   (ret target — jumped to after the 6 pops)
-    //   [RSP+40] = r15
-    //   [RSP+32] = r14
-    //   [RSP+24] = r13
-    //   [RSP+16] = r12
-    //   [RSP+8]  = rbp
-    //   [RSP+0]  = rbx  ← RSP points here
+    // Set up the initial context_switch frame. It restores six callee-saved
+    // registers, returns to pcb_process_entry_trampoline, and leaves a synthetic
+    // return address so the C entry obeys the SysV AMD64 stack alignment.
     uint64_t stack_top = ((uint64_t)stack + KERNEL_STACK_SIZE) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
 
