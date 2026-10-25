@@ -33,6 +33,9 @@ typedef struct pcb {
     uint64_t rip;
     cpu_registers_t regs;
     uint64_t page_directory;
+    uint64_t user_entry;
+    uint64_t user_stack;
+    uint32_t user_mode;
     uint32_t security_context;
     uint64_t creation_time;
     uint64_t wake_tick;
@@ -46,6 +49,7 @@ typedef struct pcb {
     struct pcb* next;
 } pcb_t;
 
+void pcb_user_entry_trampoline(void);
 pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t priority, uint32_t parent_pid);
 int pcb_destroy(pcb_t* pcb);
 const char* pcb_state_to_string(process_state_t state);
