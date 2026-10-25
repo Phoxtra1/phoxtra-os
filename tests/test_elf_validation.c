@@ -44,6 +44,15 @@ int vmm_copy_to_user(uint64_t root,uint64_t dest,const void* src,size_t length) 
  }
  return 0;
 }
+int vmm_unmap_user_page(uint64_t root,uint64_t va) {
+ (void)root;
+ for (unsigned i=0;i<mapped_count;++i) if (mapped_va[i]==va && mapped_flags[i]) {
+  mapped_flags[i]=0;
+  for (unsigned j=0;j<16;++j) if (mapped_frame[i]==(uint64_t)(uintptr_t)user_frames[j]) frame_used[j]=0;
+  return 0;
+ }
+ return -1;
+}
 static elf64_header_t* valid_image(void) {
  memset(image, 0, sizeof(image));
  elf64_header_t* h = (elf64_header_t*)image;
@@ -64,11 +73,12 @@ int main(void) {
  CHECK("valid static ELF64 image",elf_validate_image(image,sizeof(image),&entry)&&entry==0x100000000ULL);
  h=valid_image(); mapped_count=0; memset(frame_used,0,sizeof(frame_used)); map_fail_after=-1;
  uint64_t stack_top=0;
- CHECK("load ELF segments and private stack",elf_load_into_address_space(0x1000,image,sizeof(image),&entry,&stack_top)==0 && entry==0x100000000ULL && stack_top==0x7FFFFFF00000ULL && mapped_count==9);
+ CHECK("load ELF segments and private stack",elf_load_into_address_space(0x1000,image,sizeof(image),&entry,&stack_top)==0 && entry==0x100000000ULL && stack_top==(0x7FFFFFF00000ULL-6ULL*sizeof(uint64_t)) && mapped_count==9);
  CHECK("ELF code bytes copied to mapped frame",((uint8_t*)(uintptr_t)mapped_frame[0])[0]==0x90 && ((uint8_t*)(uintptr_t)mapped_frame[0])[3]==0xC3);
  CHECK("user stack pages are writable and non-executable",(mapped_flags[1] & VMM_FLAG_NO_EXECUTE) && (mapped_flags[1] & VMM_FLAG_WRITABLE));
  h=valid_image(); mapped_count=0; memset(frame_used,0,sizeof(frame_used)); map_fail_after=1; stack_top=123;
  CHECK("loader reports mapping failure",elf_load_into_address_space(0x1000,image,sizeof(image),&entry,&stack_top)==-1 && stack_top==0);
+ CHECK("loader rolls back all partial mappings",mapped_count==1 && mapped_flags[0]==0 && frame_used[0]==0);
  h=valid_image(); h->e_phoff=UINT64_MAX-4;
  CHECK("reject overflowing program-header table",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); h->e_phentsize--;
@@ -85,6 +95,14 @@ int main(void) {
  CHECK("reject low addresses overlapping kernel identity map",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_type=PT_DYNAMIC;
  CHECK("reject unsupported dynamic image",!elf_validate_image(image,sizeof(image),&entry));
+ h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_vaddr=0x100000800ULL;
+ ((elf64_phdr_t*)(image+h->e_phoff))->p_offset=0x1800ULL;
+ ((elf64_phdr_t*)(image+h->e_phoff))->p_filesz=4;
+ ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=8;
+ elf64_phdr_t* second=(elf64_phdr_t*)(image+h->e_phoff+sizeof(elf64_phdr_t));
+ *second=*((elf64_phdr_t*)(image+h->e_phoff)); second->p_vaddr=0x100001000ULL;
+ second->p_offset=0x1000ULL; h->e_phnum=2;
+ CHECK("reject segments sharing a mapped page",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_flags=PF_R|PF_W|PF_X;
  CHECK("reject writable-executable segments",!elf_validate_image(image,sizeof(image),&entry));
  h=valid_image(); ((elf64_phdr_t*)(image+h->e_phoff))->p_memsz=0x5000000ULL;
