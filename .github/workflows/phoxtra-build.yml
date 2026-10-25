@@ -53,6 +53,10 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pthread tests/test_spinlock.c -o /tmp/test_spinlock
           /tmp/test_spinlock
+      - name: Test private virtual address spaces
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror -DVMM_TESTING tests/test_vmm_address_space.c kernel/memory/vmm.c -o /tmp/test_vmm_address_space
+          /tmp/test_vmm_address_space
       - name: Test partition and storage boundaries
         run: |
           cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
