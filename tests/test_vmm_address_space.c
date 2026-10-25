@@ -21,6 +21,7 @@ static uint8_t* arena;
 static uint8_t allocated[PAGE_COUNT];
 static uint8_t user_allocated[PAGE_COUNT];
 static uint64_t fake_cr3;
+static uint64_t kernel_cr3;
 static unsigned invalidations;
 
 void* pmm_alloc_page(void) {
@@ -131,9 +132,10 @@ int main(void) {
         }
     }
 
-    fake_cr3 = (uint64_t)(uintptr_t)kernel_root;
+    kernel_cr3 = (uint64_t)(uintptr_t)kernel_root;
+    fake_cr3 = kernel_cr3;
     vmm_init();
-    if (vmm_get_kernel_page_directory() != fake_cr3)
+    if (vmm_get_kernel_page_directory() != kernel_cr3)
         fail("kernel root was not recorded");
     if (vmm_virt_to_phys(0x12345000ULL) != 0x12345000ULL)
         fail("kernel huge-page identity translation failed");
@@ -165,7 +167,7 @@ int main(void) {
         fail("user mapping was allowed in the bootstrap identity region");
     if (vmm_map_user_page(user_root, user_va1, 0x200000ULL, VMM_FLAG_WRITABLE) == 0)
         fail("user mapping was allowed to alias reserved low physical memory");
-    if (vmm_map_user_page(fake_cr3, user_va1, frame2, VMM_FLAG_WRITABLE) == 0)
+    if (vmm_map_user_page(kernel_cr3, user_va1, frame2, VMM_FLAG_WRITABLE) == 0)
         fail("mapping into kernel root was allowed");
 
     uint64_t* cloned_root = (uint64_t*)(uintptr_t)user_root;
@@ -191,7 +193,7 @@ int main(void) {
     if (vmm_destroy_user_page_directory(user_root) == 0)
         fail("active address space was incorrectly destroyed");
 
-    vmm_switch_page_directory(fake_cr3);
+    vmm_switch_page_directory(kernel_cr3);
     if (vmm_virt_to_phys(user_va1) != 0)
         fail("user mapping leaked into the kernel address space");
     if (vmm_destroy_user_page_directory(user_root) != 0)
