@@ -83,12 +83,71 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
  *entry_out = h->e_entry;
  return 1;
 }
+int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
+                                 uint64_t size, uint64_t* entry_out,
+                                 uint64_t* stack_top_out) {
+ uint64_t entry = 0;
+ if (entry_out) *entry_out = 0;
+ if (stack_top_out) *stack_top_out = 0;
+ if (!pml4_phys || !entry_out || !stack_top_out ||
+     !elf_validate_image(buffer, size, &entry)) return -1;
+
+ const elf64_header_t* h = (const elf64_header_t*)buffer;
+ const elf64_phdr_t* ph = (const elf64_phdr_t*)(buffer + h->e_phoff);
+ for (uint16_t i = 0; i < h->e_phnum; ++i) {
+  const elf64_phdr_t* p = &ph[i];
+  if (p->p_type != PT_LOAD) continue;
+  uint64_t first = p->p_vaddr & ~(PAGE_SIZE - 1ULL);
+  uint64_t end = p->p_vaddr + p->p_memsz;
+  if (end > UINT64_MAX - (PAGE_SIZE - 1ULL)) return -1;
+  uint64_t rounded_end = (end + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
+  if (rounded_end < end || first < ELF_USER_ADDRESS_MIN ||
+      rounded_end > ELF_USER_ADDRESS_LIMIT) return -1;
+  for (uint64_t va = first; va < rounded_end; va += PAGE_SIZE) {
+   void* frame = pmm_alloc_user_page();
+   if (!frame) return -1;
+   uint64_t copy_start = va > p->p_vaddr ? va : p->p_vaddr;
+   uint64_t file_end = p->p_vaddr + p->p_filesz;
+   uint64_t page_end = va + PAGE_SIZE;
+   uint64_t copy_end = page_end < file_end ? page_end : file_end;
+   if (copy_end > copy_start) {
+    uint64_t source_offset = p->p_offset + (copy_start - p->p_vaddr);
+    uint64_t dest_offset = copy_start - va;
+    uint8_t* dst = (uint8_t*)frame + dest_offset;
+    const uint8_t* src = buffer + source_offset;
+    for (uint64_t n = 0; n < copy_end - copy_start; ++n) dst[n] = src[n];
+   }
+   uint32_t flags = VMM_FLAG_PRESENT | VMM_FLAG_USER;
+   if (p->p_flags & PF_W) flags |= VMM_FLAG_WRITABLE;
+   if (!(p->p_flags & PF_X)) flags |= VMM_FLAG_NO_EXECUTE;
+   if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame, flags) != 0) {
+    pmm_free_user_page(frame);
+    return -1;
+   }
+  }
+ }
+
+ /* A fixed, private eight-page stack; frames are zeroed by the PMM. */
+ uint64_t stack_bottom = ELF_STACK_TOP - ELF_STACK_PAGES * PAGE_SIZE;
+ for (uint64_t va = stack_bottom; va < ELF_STACK_TOP; va += PAGE_SIZE) {
+  void* frame = pmm_alloc_user_page();
+  if (!frame) return -1;
+  if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame,
+                        VMM_FLAG_PRESENT | VMM_FLAG_USER |
+                        VMM_FLAG_WRITABLE | VMM_FLAG_NO_EXECUTE) != 0) {
+   pmm_free_user_page(frame);
+   return -1;
+  }
+ }
+ *entry_out = entry;
+ *stack_top_out = ELF_STACK_TOP;
+ return 0;
+}
+
 int elf_load_binary(const uint8_t* buffer, uint64_t size, uint64_t* entry_out) {
  uint64_t validated_entry = 0;
  if (entry_out) *entry_out = 0;
  if (!elf_validate_image(buffer, size, &validated_entry)) return -1;
- /* Validation is not execution. No process address-space builder, segment permission
-    mapping, user entry/exit path, or loader rollback exists yet. Never claim success. */
- klog(LOG_WARNING, "ELF image validated but execution is disabled until process address-space loading is implemented");
+ klog(LOG_WARNING, "ELF image validated only: use elf_load_into_address_space");
  return -2;
 }
