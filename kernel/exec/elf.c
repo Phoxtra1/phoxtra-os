@@ -82,8 +82,12 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
        q->p_vaddr >= ELF_USER_ADDRESS_LIMIT ||
        q->p_memsz > ELF_USER_ADDRESS_LIMIT - q->p_vaddr) continue;
    uint64_t qend = q->p_vaddr + q->p_memsz;
-   if (p->p_vaddr < qend && q->p_vaddr < end) {
-    klog(LOG_WARNING, "ELF validation rejected overlapping PT_LOAD virtual ranges"); return 0;
+   uint64_t qfirst_page = q->p_vaddr & ~(PAGE_SIZE - 1ULL);
+   uint64_t qrounded_end = qend <= UINT64_MAX-(PAGE_SIZE-1ULL)
+       ? (qend+PAGE_SIZE-1ULL)&~(PAGE_SIZE-1ULL) : UINT64_MAX;
+   if ((p->p_vaddr < qend && q->p_vaddr < end) ||
+       (first_page < qrounded_end && qfirst_page < rounded_end)) {
+    klog(LOG_WARNING, "ELF validation rejected overlapping PT_LOAD byte ranges or pages"); return 0;
    }
   }
   if ((p->p_flags & PF_X) && h->e_entry >= p->p_vaddr && h->e_entry < end)
@@ -96,6 +100,24 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
  *entry_out = h->e_entry;
  return 1;
 }
+static void elf_rollback_mappings(uint64_t pml4_phys,
+                                    const elf64_header_t* h,
+                                    const elf64_phdr_t* ph) {
+ for (uint16_t i=0; i<h->e_phnum; ++i) {
+  const elf64_phdr_t* p=&ph[i];
+  if (p->p_type!=PT_LOAD || !p->p_memsz ||
+      p->p_vaddr>=ELF_USER_ADDRESS_LIMIT ||
+      p->p_memsz>ELF_USER_ADDRESS_LIMIT-p->p_vaddr) continue;
+  uint64_t first=p->p_vaddr & ~(PAGE_SIZE-1ULL);
+  uint64_t end=p->p_vaddr+p->p_memsz;
+  uint64_t rounded_end=(end+PAGE_SIZE-1ULL)&~(PAGE_SIZE-1ULL);
+  for(uint64_t va=first;va<rounded_end;va+=PAGE_SIZE)
+   (void)vmm_unmap_user_page(pml4_phys,va);
+ }
+ for(uint64_t va=ELF_STACK_BOTTOM;va<ELF_STACK_TOP;va+=PAGE_SIZE)
+  (void)vmm_unmap_user_page(pml4_phys,va);
+}
+
 int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
                                  uint64_t size, uint64_t* entry_out,
                                  uint64_t* stack_top_out) {
@@ -112,13 +134,13 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
   if (p->p_type != PT_LOAD) continue;
   uint64_t first = p->p_vaddr & ~(PAGE_SIZE - 1ULL);
   uint64_t end = p->p_vaddr + p->p_memsz;
-  if (end > UINT64_MAX - (PAGE_SIZE - 1ULL)) return -1;
+  if (end > UINT64_MAX - (PAGE_SIZE - 1ULL)) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
   uint64_t rounded_end = (end + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
   if (rounded_end < end || first < ELF_USER_ADDRESS_MIN ||
-      rounded_end > ELF_USER_ADDRESS_LIMIT) return -1;
+      rounded_end > ELF_USER_ADDRESS_LIMIT) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
   for (uint64_t va = first; va < rounded_end; va += PAGE_SIZE) {
    void* frame = pmm_alloc_user_page();
-   if (!frame) return -1;
+   if (!frame) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
    uint64_t copy_start = va > p->p_vaddr ? va : p->p_vaddr;
    uint64_t file_end = p->p_vaddr + p->p_filesz;
    uint64_t page_end = va + PAGE_SIZE;
@@ -135,6 +157,7 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
    if (!(p->p_flags & PF_X)) flags |= VMM_FLAG_NO_EXECUTE;
    if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame, flags) != 0) {
     pmm_free_user_page(frame);
+    elf_rollback_mappings(pml4_phys,h,ph);
     return -1;
    }
   }
@@ -144,7 +167,7 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
  uint64_t stack_bottom = ELF_STACK_BOTTOM;
  for (uint64_t va = stack_bottom; va < ELF_STACK_TOP; va += PAGE_SIZE) {
   void* frame = pmm_alloc_user_page();
-  if (!frame) return -1;
+  if (!frame) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
   if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame,
                         VMM_FLAG_PRESENT | VMM_FLAG_USER |
                         VMM_FLAG_WRITABLE | VMM_FLAG_NO_EXECUTE) != 0) {
@@ -157,7 +180,7 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
  uint64_t initial_stack[6] = {0, 0, 0, 0, 0, 0};
  uint64_t initial_rsp = ELF_STACK_TOP - sizeof(initial_stack);
  if (vmm_copy_to_user(pml4_phys, initial_rsp, initial_stack,
-                      sizeof(initial_stack)) != 0) return -1;
+                      sizeof(initial_stack)) != 0) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
  *entry_out = entry;
  *stack_top_out = initial_rsp;
  return 0;
