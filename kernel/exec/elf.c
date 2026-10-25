@@ -13,7 +13,7 @@ static int is_power_of_two(uint64_t value) {
  return value && (value & (value - 1ULL)) == 0;
 }
 void elf_init(void) {
- klog(LOG_INFO, "ELF64 validation initialized; executable process loading remains unavailable");
+ klog(LOG_INFO, "ELF64 validation and address-space loader initialized");
 }
 int elf_validate_header(const elf64_header_t* h) {
  if (!h) return 0;
