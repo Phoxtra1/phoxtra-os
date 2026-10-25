@@ -6,6 +6,8 @@
 #define ELF_USER_ADDRESS_MIN 0x0000000100000000ULL
 #define ELF_STACK_TOP 0x00007FFFFFF00000ULL
 #define ELF_STACK_PAGES 8ULL
+#define ELF_STACK_BOTTOM (ELF_STACK_TOP - ELF_STACK_PAGES * PAGE_SIZE)
+#define ELF_MAX_IMAGE_PAGES 16384ULL
 static int range_fits(uint64_t offset, uint64_t length, uint64_t total) {
  return offset <= total && length <= total - offset;
 }
@@ -40,6 +42,7 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
  }
  const elf64_phdr_t* ph = (const elf64_phdr_t*)(buffer + h->e_phoff);
  uint32_t loads = 0; int entry_executable = 0;
+ uint64_t total_pages = ELF_STACK_PAGES;
  for (uint16_t i = 0; i < h->e_phnum; ++i) {
   const elf64_phdr_t* p = &ph[i];
   if (p->p_type == PT_DYNAMIC || p->p_type == PT_INTERP) {
@@ -63,6 +66,16 @@ int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out
    klog(LOG_WARNING, "ELF validation rejected invalid PT_LOAD alignment"); return 0;
   }
   uint64_t end = p->p_vaddr + p->p_memsz;
+  if (end > ELF_STACK_BOTTOM || end > UINT64_MAX - (PAGE_SIZE - 1ULL)) {
+   klog(LOG_WARNING, "ELF validation rejected a segment overlapping the user stack or overflowing page rounding"); return 0;
+  }
+  uint64_t first_page = p->p_vaddr & ~(PAGE_SIZE - 1ULL);
+  uint64_t rounded_end = (end + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
+  uint64_t pages = (rounded_end - first_page) / PAGE_SIZE;
+  if (pages > ELF_MAX_IMAGE_PAGES - total_pages) {
+   klog(LOG_WARNING, "ELF validation rejected an image exceeding the per-process page budget"); return 0;
+  }
+  total_pages += pages;
   for (uint16_t j = 0; j < i; ++j) {
    const elf64_phdr_t* q = &ph[j];
    if (q->p_type != PT_LOAD || !q->p_memsz ||
@@ -128,7 +141,7 @@ int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
  }
 
  /* A fixed, private eight-page stack; frames are zeroed by the PMM. */
- uint64_t stack_bottom = ELF_STACK_TOP - ELF_STACK_PAGES * PAGE_SIZE;
+ uint64_t stack_bottom = ELF_STACK_BOTTOM;
  for (uint64_t va = stack_bottom; va < ELF_STACK_TOP; va += PAGE_SIZE) {
   void* frame = pmm_alloc_user_page();
   if (!frame) return -1;
