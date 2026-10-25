@@ -63,6 +63,7 @@ static void idle_pcb_init(void) {
 
     uint64_t stack_top = ((uint64_t)idle_stack + sizeof(idle_stack)) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
+    *--sp = 0; /* synthetic return address: ABI entry RSP is 8 mod 16 */
     *--sp = (uint64_t)idle_task; /* ret target after callee-saved restores */
     *--sp = 0; /* r15 */
     *--sp = 0; /* r14 */
