@@ -49,6 +49,7 @@ typedef struct pcb {
     struct pcb* next;
 } pcb_t;
 
+void pcb_process_entry_trampoline(void);
 void pcb_user_entry_trampoline(void);
 pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t priority, uint32_t parent_pid);
 int pcb_destroy(pcb_t* pcb);
