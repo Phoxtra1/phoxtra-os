@@ -27,6 +27,7 @@ concurrency:
 jobs:
   build-kernel-and-iso:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -44,9 +45,11 @@ jobs:
             exit 1
           fi
       - name: Install kernel and ISO build dependencies
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
+          APT_OPTIONS=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${APT_OPTIONS[@]}" update
+          sudo apt-get "${APT_OPTIONS[@]}" install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
       - name: Audit storage write safety
         run: python3 scripts/check_storage_safety.py
       - name: Test kernel spinlock concurrency
