@@ -92,6 +92,7 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  size_t sent=0;
  while(sent<request_len){
   rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);
+  if(rc==MBEDTLS_ERR_SSL_WANT_READ||rc==MBEDTLS_ERR_SSL_WANT_WRITE)continue;
   if(rc<=0){
 #ifdef PHOXTRA_HTTPS_TEST_DIAGNOSTICS
    fprintf(stderr,"PHOXTRA_TLS_WRITE_ERROR=%d\\n",rc);
@@ -108,6 +109,7 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
    * a negative code; consume it and continue reading application data.
    */
   if(rc==MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)continue;
+  if(rc==MBEDTLS_ERR_SSL_WANT_READ||rc==MBEDTLS_ERR_SSL_WANT_WRITE)continue;
   if(rc==MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY){*response_length=received;result=PHOXTRA_HTTPS_OK;break;}
   if(rc<=0){
 #ifdef PHOXTRA_HTTPS_TEST_DIAGNOSTICS
