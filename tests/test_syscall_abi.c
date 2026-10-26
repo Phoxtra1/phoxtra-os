@@ -123,15 +123,14 @@ uint32_t dns_resolve_hostname(netdev_t* dev, const char* hostname) {
 
 int phoxtra_hw_random(uint8_t* output, size_t length) {
     if (mock_random_failure || (!output && length)) return -1;
-    for (size_t i = 0; i < length; ++i) output[i] = (uint8_t)(0xA0u + (i & 0x0Fu));
+    for (size_t i=0;i<length;++i) output[i]=(uint8_t)(0xA0u+(i&0x0Fu));
     return 0;
 }
 int rtc_get_unix_time(uint64_t* output) {
     if (mock_rtc_failure || !output) return -1;
-    *output = 1700000000ULL;
+    *output=1700000000ULL;
     return 0;
 }
-
 static void reset_mock(void) {
     memset(&mock_process, 0, sizeof(mock_process));
     memset(mock_user_memory, 0, sizeof(mock_user_memory));
@@ -294,28 +293,20 @@ int main(void) {
 
 
     reset_mock();
-    init_user_regs(&regs, SYS_RANDOM); regs.rdi = TEST_USER_BASE + 16u; regs.rsi = 8u;
-    syscall_handler(&regs);
-    CHECK("SYS_RANDOM copies entropy into user memory", regs.rax == 8u &&
-          mock_user_memory[16] == 0xA0u && mock_user_memory[23] == 0xA7u);
-    init_user_regs(&regs, SYS_RANDOM); regs.rdi = TEST_USER_BASE + TEST_USER_MEMORY_SIZE + 1u; regs.rsi = 8u;
-    syscall_handler(&regs);
-    CHECK("SYS_RANDOM rejects inaccessible user memory", (int64_t)regs.rax == -14);
-    init_user_regs(&regs, SYS_RANDOM); regs.rdi = TEST_USER_BASE + 16u; regs.rsi = 257u;
-    syscall_handler(&regs);
-    CHECK("SYS_RANDOM rejects oversized requests", (int64_t)regs.rax == -22);
-    mock_random_failure = 1;
-    init_user_regs(&regs, SYS_RANDOM); regs.rdi = TEST_USER_BASE + 16u; regs.rsi = 8u;
-    syscall_handler(&regs);
-    CHECK("SYS_RANDOM fails closed without hardware entropy", (int64_t)regs.rax == -38);
-
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM copies entropy into user memory",regs.rax==8u&&mock_user_memory[16]==0xA0u&&mock_user_memory[23]==0xA7u);
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+TEST_USER_MEMORY_SIZE+1u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM rejects inaccessible user memory",(int64_t)regs.rax==-14);
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=257u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM rejects oversized requests",(int64_t)regs.rax==-22);
+    mock_random_failure=1;
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM fails closed when entropy is unavailable",(int64_t)regs.rax==-38);
     reset_mock();
-    init_user_regs(&regs, SYS_TIME); syscall_handler(&regs);
-    CHECK("SYS_TIME returns RTC Unix seconds", regs.rax == 1700000000ULL);
-    mock_rtc_failure = 1;
-    init_user_regs(&regs, SYS_TIME); syscall_handler(&regs);
-    CHECK("SYS_TIME fails closed when RTC is invalid", (int64_t)regs.rax == -5);
-
+    init_user_regs(&regs,SYS_TIME);syscall_handler(&regs);
+    CHECK("SYS_TIME returns RTC Unix seconds",regs.rax==1700000000ULL);
+    mock_rtc_failure=1;init_user_regs(&regs,SYS_TIME);syscall_handler(&regs);
+    CHECK("SYS_TIME fails closed when RTC is invalid",(int64_t)regs.rax==-5);
     puts("Syscall ABI tests passed.");
     return 0;
 }

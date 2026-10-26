@@ -246,10 +246,7 @@ static void sys_random_user(struct registers* regs) {
         return;
     }
     uint64_t requested = regs->rsi;
-    if (requested > USER_RANDOM_MAX) {
-        regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
-        return;
-    }
+    if (requested > USER_RANDOM_MAX) { regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID; return; }
     if (!requested) { regs->rax = 0; return; }
     if (!regs->rdi) { regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT; return; }
     uint8_t bytes[USER_RANDOM_MAX];
@@ -258,8 +255,7 @@ static void sys_random_user(struct registers* regs) {
         regs->rax = (uint64_t)(int64_t)SYS_ERROR_NOSYS;
         return;
     }
-    if (vmm_copy_to_user(current->page_directory, regs->rdi,
-                         bytes, (size_t)requested) != 0) {
+    if (vmm_copy_to_user(current->page_directory, regs->rdi, bytes, (size_t)requested) != 0) {
         for (uint32_t i = 0; i < USER_RANDOM_MAX; ++i) bytes[i] = 0;
         regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT;
         return;
