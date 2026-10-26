@@ -84,12 +84,14 @@ void* memcpy(void* dest, const void* src, size_t n) {
 
 int puts(const char* str) {
     if (!str) return -1;
-    int64_t result = phoxtra_syscall1(PHOXTRA_SYS_PRINT, (uint64_t)str);
-    if (result < 0) return (int)result;
-    if (write(1, "\n", 1) < 0) return -1;
-    return (int)(result + 1);
+    size_t length = strlen(str);
+    if (length > 1023u) return -22;
+    int result = write(1, str, length);
+    if (result < 0) return result;
+    int newline = write(1, "\n", 1);
+    if (newline < 0) return newline;
+    return result + newline;
 }
-
 int write(int fd, const void* buf, size_t count) {
     if (!buf && count) return -14;
     if (count > 0xFFFFFFFFu) return -22;
