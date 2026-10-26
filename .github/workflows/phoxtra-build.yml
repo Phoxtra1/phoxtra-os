@@ -250,9 +250,21 @@ jobs:
                   i += 1
               tokens.append(data[start:i])
           magic, width, height, maxval = tokens
-          while i < len(data) and data[i] in b' \t\r\n':
-              i += 1
           assert magic == b'P6' and int(maxval) == 255, 'unexpected screenshot format'
+
+          def binary_payload_offset(blob, offset):
+              # Consume the P6 header separator only. RGB bytes are arbitrary
+              # binary data and can themselves equal ASCII whitespace bytes.
+              assert offset < len(blob) and blob[offset] in b' \t\r\n', 'missing PPM header separator'
+              return offset + 2 if blob[offset:offset + 2] == b'\r\n' else offset + 1
+
+          # Regression: ensure whitespace-valued bytes at the beginning of a
+          # binary PPM payload are not swallowed as part of the header.
+          probe = b'P6\n1 1\n255\n' + bytes((0x0A, 0x0D, 0x20))
+          probe_start = probe.index(b'255') + 3
+          assert probe[binary_payload_offset(probe, probe_start):] == bytes((0x0A, 0x0D, 0x20)), 'PPM parser consumed whitespace-valued pixels'
+
+          i = binary_payload_offset(data, i)
           pixels = data[i:]
           assert len(pixels) >= int(width) * int(height) * 3, 'incomplete screenshot'
           sample = pixels[:int(width) * int(height) * 3]
