@@ -88,6 +88,11 @@ static syscall_fn_t syscall_table[] = {
 void syscall_handler(struct registers* regs) {
     if (!regs) return;
     uint64_t num = regs->rax;
+    if (num == SYS_GETPID) klog(LOG_INFO, "Regression trace: SYS_GETPID entered");
+    else if (num == SYS_YIELD) klog(LOG_INFO, "Regression trace: SYS_YIELD entered");
+    else if (num == SYS_SLEEP) klog(LOG_INFO, "Regression trace: SYS_SLEEP entered");
+    else if (num == SYS_PRINT) klog(LOG_INFO, "Regression trace: SYS_PRINT entered");
+    else if (num == SYS_EXIT) klog(LOG_INFO, "Regression trace: SYS_EXIT entered");
     if ((regs->cs & 3u) != 3u) {
         regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
         return;
