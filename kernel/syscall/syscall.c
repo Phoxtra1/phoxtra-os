@@ -51,6 +51,7 @@ static void sys_yield(struct registers* regs) {
     }
     regs->rax = 0;
     scheduler_yield();
+    klog(LOG_INFO, "Regression trace: SYS_YIELD resumed");
 }
 
 static void sys_sleep(struct registers* regs) {
