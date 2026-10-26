@@ -47,6 +47,7 @@ add_library(phoxtra_https_client STATIC userland/net/https_client.c userland/net
 add_dependencies(phoxtra_https_client phoxtra_ca_bundle)
 target_include_directories(phoxtra_https_client PUBLIC userland/net PRIVATE "${PHOXTRA_CA_GENERATED_DIR}")
 target_compile_definitions(phoxtra_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
+target_compile_definitions(phoxtra_https_client PRIVATE PHOXTRA_HTTPS_TEST_DIAGNOSTICS=1)
 target_compile_options(phoxtra_https_client PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(phoxtra_https_client PUBLIC mbedtls mbedx509 tfpsacrypto)
 
