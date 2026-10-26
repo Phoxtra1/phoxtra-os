@@ -255,13 +255,19 @@ static int smoke_verify_private_images(pcb_t* process_a, pcb_t* process_b,
 }
 
 static void smoke_process_monitor(void) {
+    klog(LOG_INFO, "PHOXTRA_PROCESS_MONITOR_ENTERED");
     uint64_t start_tick = scheduler_get_uptime_ticks();
+    int timer_wake_logged = 0;
     while (process_lookup(smoke_pid_a) || process_lookup(smoke_pid_b)) {
         if (scheduler_get_uptime_ticks() - start_tick > SMOKE_TEST_TICK_LIMIT) {
             klog(LOG_ERROR, "PHOXTRA_PROCESS_CLEANUP_FAILED: timeout");
             return;
         }
         __asm__ volatile("sti; hlt" ::: "memory");
+        if (!timer_wake_logged) {
+            klog(LOG_INFO, "PHOXTRA_PROCESS_MONITOR_TIMER_WAKE");
+            timer_wake_logged = 1;
+        }
     }
 
     if (process_count() != smoke_baseline_process_count + 1u) {
