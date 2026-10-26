@@ -84,7 +84,7 @@ void console_put_char(char ch) {
 
 int sys_socket(int domain, int type, int protocol) {
     ++mock_socket_calls;
-    if (domain != AF_INET || type != SOCK_STREAM || protocol != IPPROTO_TCP) return -22;
+    if (domain != AF_INET || type != SOCK_STREAM || protocol != 6) return -22;
     return mock_socket_result;
 }
 int sys_connect(int sockfd, const sockaddr_in_t* remote) {
@@ -214,7 +214,7 @@ int main(void) {
 
     /* The browser/TLS process must use copied user buffers, never kernel pointers. */
     reset_mock();
-    init_user_regs(&regs, SYS_SOCKET); regs.rdi = AF_INET; regs.rsi = SOCK_STREAM; regs.rdx = IPPROTO_TCP;
+    init_user_regs(&regs, SYS_SOCKET); regs.rdi = AF_INET; regs.rsi = SOCK_STREAM; regs.rdx = 6u;
     syscall_handler(&regs);
     CHECK("SYS_SOCKET reaches the IPv4 stream socket API", (int64_t)regs.rax == 7 && mock_socket_calls == 1);
 
