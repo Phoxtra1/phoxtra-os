@@ -24,6 +24,7 @@ int phoxtra_send(int sockfd, const void* buffer, size_t length, int flags);
 int phoxtra_recv(int sockfd, void* buffer, size_t length, int flags);
 int phoxtra_close(int sockfd);
 int phoxtra_dns_resolve_ipv4(const char* hostname, uint32_t* address_out);
+int phoxtra_random_bytes(uint8_t* output, size_t length);
 
 static inline uint16_t phoxtra_htons(uint16_t value) {
     return (uint16_t)((value << 8) | (value >> 8));

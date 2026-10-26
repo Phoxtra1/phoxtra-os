@@ -39,6 +39,8 @@ static uint32_t mock_sent_length;
 static int mock_sent_fd, mock_sent_flags;
 static int mock_received_fd, mock_received_flags;
 static uint32_t mock_dns_result;
+static int mock_random_failure;
+static int mock_rtc_failure;
 static char mock_dns_name[254];
 static netdev_t mock_netdev;
 
@@ -118,6 +120,17 @@ uint32_t dns_resolve_hostname(netdev_t* dev, const char* hostname) {
     return strcmp(hostname, "example.com") == 0 ? mock_dns_result : 0;
 }
 
+
+int phoxtra_hw_random(uint8_t* output, size_t length) {
+    if (mock_random_failure || (!output && length)) return -1;
+    for (size_t i=0;i<length;++i) output[i]=(uint8_t)(0xA0u+(i&0x0Fu));
+    return 0;
+}
+int rtc_get_unix_time(uint64_t* output) {
+    if (mock_rtc_failure || !output) return -1;
+    *output=1700000000ULL;
+    return 0;
+}
 static void reset_mock(void) {
     memset(&mock_process, 0, sizeof(mock_process));
     memset(mock_user_memory, 0, sizeof(mock_user_memory));
@@ -140,6 +153,8 @@ static void reset_mock(void) {
     mock_sent_length = 0; mock_sent_fd = mock_sent_flags = 0;
     mock_received_fd = mock_received_flags = 0;
     mock_dns_result = 0x0C7100CBu;
+    mock_random_failure = 0;
+    mock_rtc_failure = 0;
 }
 
 #define CHECK(label, expression) do { \
@@ -276,6 +291,22 @@ int main(void) {
     init_user_regs(&regs, SYS_CLOSE); regs.rdi = 7u; syscall_handler(&regs);
     CHECK("SYS_CLOSE delegates descriptor cleanup", regs.rax == 0u && mock_close_calls == 1);
 
+
+    reset_mock();
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM copies entropy into user memory",regs.rax==8u&&mock_user_memory[16]==0xA0u&&mock_user_memory[23]==0xA7u);
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+TEST_USER_MEMORY_SIZE+1u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM rejects inaccessible user memory",(int64_t)regs.rax==-14);
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=257u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM rejects oversized requests",(int64_t)regs.rax==-22);
+    mock_random_failure=1;
+    init_user_regs(&regs,SYS_RANDOM);regs.rdi=TEST_USER_BASE+16u;regs.rsi=8u;syscall_handler(&regs);
+    CHECK("SYS_RANDOM fails closed when entropy is unavailable",(int64_t)regs.rax==-38);
+    reset_mock();
+    init_user_regs(&regs,SYS_TIME);syscall_handler(&regs);
+    CHECK("SYS_TIME returns RTC Unix seconds",regs.rax==1700000000ULL);
+    mock_rtc_failure=1;init_user_regs(&regs,SYS_TIME);syscall_handler(&regs);
+    CHECK("SYS_TIME fails closed when RTC is invalid",(int64_t)regs.rax==-5);
     puts("Syscall ABI tests passed.");
     return 0;
 }

@@ -16,6 +16,8 @@
 #define SYS_CLOSE       10
 #define SYS_DNS_RESOLVE 11
 #define SYS_WRITE       12
+#define SYS_RANDOM      13
+#define SYS_TIME        14
 
 #ifdef __cplusplus
 extern "C" {
