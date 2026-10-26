@@ -3,6 +3,7 @@
 #include "../scheduler/scheduler.h"
 #include "../syscall/syscall.h"
 #include "../memory/vmm.h"
+#include "../memory/pmm.h"
 #include "../log/logger.h"
 #include <stdint.h>
 #include <stddef.h>
