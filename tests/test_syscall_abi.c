@@ -143,8 +143,8 @@ static void reset_mock(void) {
 }
 
 #define CHECK(label, expression) do { \
-    if (!(expression)) { fprintf(stderr, "FAIL: %s\\n", label); return 1; } \
-    printf("PASS: %s\\n", label); \
+    if (!(expression)) { fprintf(stderr, "FAIL: %s\n", label); return 1; } \
+    printf("PASS: %s\n", label); \
 } while (0)
 
 static void init_user_regs(struct registers* regs, uint64_t number) {
