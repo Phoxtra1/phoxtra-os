@@ -2,6 +2,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#ifdef PHOXTRA_HTTPS_TEST_DIAGNOSTICS
+#include <stdio.h>
+#endif
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
 #include <psa/crypto.h>
@@ -87,7 +90,16 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  if(rc!=0){result=mbedtls_ssl_get_verify_result(&ssl)!=0?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;goto cleanup;}
  if(mbedtls_ssl_get_verify_result(&ssl)!=0){result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;}
  size_t sent=0;
- while(sent<request_len){rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);if(rc<=0){result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;}sent+=(size_t)rc;}
+ while(sent<request_len){
+  rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);
+  if(rc<=0){
+#ifdef PHOXTRA_HTTPS_TEST_DIAGNOSTICS
+   fprintf(stderr,"PHOXTRA_TLS_WRITE_ERROR=%d\\n",rc);
+#endif
+   result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;
+  }
+  sent+=(size_t)rc;
+ }
  for(;;){
   unsigned char chunk[TLS_READ_CHUNK];rc=mbedtls_ssl_read(&ssl,chunk,sizeof(chunk));
   /*
@@ -97,7 +109,12 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
    */
   if(rc==MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)continue;
   if(rc==MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY){*response_length=received;result=PHOXTRA_HTTPS_OK;break;}
-  if(rc<=0){result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;}
+  if(rc<=0){
+#ifdef PHOXTRA_HTTPS_TEST_DIAGNOSTICS
+   fprintf(stderr,"PHOXTRA_TLS_READ_ERROR=%d\\n",rc);
+#endif
+   result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;
+  }
   if((size_t)rc>response_capacity-received){result=PHOXTRA_HTTPS_ERR_RESPONSE_TOO_LARGE;goto cleanup;}
   memcpy(response_buffer+received,chunk,(size_t)rc);received+=(size_t)rc;
  }
