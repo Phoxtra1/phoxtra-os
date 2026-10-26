@@ -59,6 +59,7 @@ set(KERNEL_SOURCES
     storage/ext2.c
     storage/fat32.c
     security/sha256.c
+    security/random.c
     security/tpm2.c
     security/process_identity.c
     security/audit_logger.c
@@ -89,6 +90,7 @@ set(KERNEL_SOURCES
     ai/dipa_core.c
     services/phoxair.c
     services/platform.c
+    services/rtc.c
     services/hardware_probe.c
     security/verify.c
     services/entitlements.c

@@ -7,6 +7,8 @@
 #include "../net/socket.h"
 #include "../net/netdev.h"
 #include "../net/dns.h"
+#include "../security/random.h"
+#include "../services/rtc.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -14,6 +16,7 @@
 #define USER_HOST_MAX 254u
 #define USER_SOCKET_IO_MAX TCP_MSS
 #define USER_WRITE_MAX 1024u
+#define USER_RANDOM_MAX 256u
 #define SYS_ERROR_INVALID (-22)
 #define SYS_ERROR_FAULT   (-14)
 #define SYS_ERROR_BAD_FD  (-9)
@@ -235,6 +238,48 @@ static void sys_dns_resolve_user(struct registers* regs) {
     regs->rax = resolved;
 }
 
+
+static void sys_random_user(struct registers* regs) {
+    pcb_t* current = scheduler_current();
+    if (!user_call_valid(regs, current)) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    uint64_t requested = regs->rsi;
+    if (requested > USER_RANDOM_MAX) {
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    if (!requested) { regs->rax = 0; return; }
+    if (!regs->rdi) { regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT; return; }
+    uint8_t bytes[USER_RANDOM_MAX];
+    if (phoxtra_hw_random(bytes, (size_t)requested) != 0) {
+        for (uint32_t i = 0; i < USER_RANDOM_MAX; ++i) bytes[i] = 0;
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_NOSYS;
+        return;
+    }
+    if (vmm_copy_to_user(current->page_directory, regs->rdi,
+                         bytes, (size_t)requested) != 0) {
+        for (uint32_t i = 0; i < USER_RANDOM_MAX; ++i) bytes[i] = 0;
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT;
+        return;
+    }
+    for (uint32_t i = 0; i < USER_RANDOM_MAX; ++i) bytes[i] = 0;
+    regs->rax = requested;
+}
+static void sys_time_user(struct registers* regs) {
+    if (!user_call_valid(regs, scheduler_current())) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    uint64_t unix_seconds = 0;
+    if (rtc_get_unix_time(&unix_seconds) != 0 || !unix_seconds) {
+        regs->rax = (uint64_t)(int64_t)-5;
+        return;
+    }
+    regs->rax = unix_seconds;
+}
+
 typedef void (*syscall_fn_t)(struct registers*);
 static syscall_fn_t syscall_table[] = {
     (void*)0,
@@ -249,7 +294,9 @@ static syscall_fn_t syscall_table[] = {
     sys_recv_user,
     sys_close_user,
     sys_dns_resolve_user,
-    sys_write_user
+    sys_write_user,
+    sys_random_user,
+    sys_time_user
 };
 #define SYSCALL_TABLE_SIZE (sizeof(syscall_table) / sizeof(syscall_table[0]))
 
