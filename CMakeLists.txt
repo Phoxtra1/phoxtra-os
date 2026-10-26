@@ -48,7 +48,7 @@ add_dependencies(phoxtra_https_client phoxtra_ca_bundle)
 target_include_directories(phoxtra_https_client PUBLIC userland/net PRIVATE "${PHOXTRA_CA_GENERATED_DIR}")
 target_compile_definitions(phoxtra_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(phoxtra_https_client PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(phoxtra_https_client PUBLIC mbedtls mbedx509 mbedcrypto)
+target_link_libraries(phoxtra_https_client PUBLIC mbedtls mbedx509 tfpsacrypto)
 
 add_library(phoxtra_userlib OBJECT
     libc/src/libc.c libc/src/net.c libc/src/random.c libc/src/psa_rng.c
@@ -65,4 +65,4 @@ target_include_directories(test_https_client PRIVATE third_party/mbedtls/include
     third_party/mbedtls/tf-psa-crypto/include)
 target_compile_definitions(test_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(test_https_client PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(test_https_client PRIVATE phoxtra_https_client mbedtls mbedx509 mbedcrypto)
+target_link_libraries(test_https_client PRIVATE phoxtra_https_client mbedtls mbedx509 tfpsacrypto)
