@@ -117,9 +117,17 @@ void interrupt_handler(struct registers* regs) {
         // Hardware IRQ
         int irq = regs->int_no - 32;
         irq_handler_t handler = irq_handlers[irq];
-        if (handler != 0) {
-            handler(regs);
-        }
-        pic_send_eoi(irq);
+
+        /*
+         * IRQ0 may context-switch inside scheduler_tick(). A task switch
+         * suspends this interrupt frame, so an EOI sent after the callback
+         * would remain outstanding until the old task is scheduled again.
+         * A PIC IRQ still in service blocks subsequent timer ticks, preventing
+         * sleeping/yielded processes from being scheduled. Acknowledge the
+         * PIT before its callback is allowed to switch tasks.
+         */
+        if (irq == 0) pic_send_eoi((unsigned char)irq);
+        if (handler != 0) handler(regs);
+        if (irq != 0) pic_send_eoi((unsigned char)irq);
     }
 }
