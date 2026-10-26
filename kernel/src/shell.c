@@ -427,9 +427,12 @@ static void cmd_dns(const char* host) {
     console_write("Hostname: "); console_write(host); console_write("\n");
     netdev_t* dev = netdev_get_default();
     uint32_t resolved_ip = dns_resolve_hostname(dev, host);
-    if (!resolved_ip) console_write("DNS lookup failed or timed out; no usable A record was returned.\n\n");
-    else {
+    if (!resolved_ip) {
+        klog(LOG_WARNING, "PHOXTRA_DNS_QUERY_FAILED");
+        console_write("DNS lookup failed or timed out; no usable A record was returned.\n\n");
+    } else {
         char ip_str[16]; uint32_to_ip(resolved_ip, ip_str);
+        klog(LOG_INFO, "PHOXTRA_DNS_QUERY_OK");
         console_write("Address: "); console_write(ip_str); console_write("\n\n");
     }
 }
