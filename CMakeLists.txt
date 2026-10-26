@@ -56,7 +56,8 @@ add_library(phoxtra_userlib OBJECT
     userland/net/https_client.c userland/net/default_ca.c)
 add_dependencies(phoxtra_userlib phoxtra_ca_bundle)
 target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${PHOXTRA_CA_GENERATED_DIR}"
-    third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include)
+    third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
+    third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
 target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-builtin -Wall -Wextra -Werror)
 
