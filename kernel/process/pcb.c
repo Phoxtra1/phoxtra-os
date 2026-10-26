@@ -129,6 +129,7 @@ int pcb_destroy(pcb_t* pcb) {
 
 /* Start every fresh task with interrupts enabled and reap it if its entry returns. */
 void pcb_process_entry_trampoline(void) {
+    klog(LOG_INFO, "Kernel process entry trampoline entered");
     pcb_t* current = scheduler_current();
     if (!current || !current->rip) {
         for (;;) __asm__ volatile("cli; hlt");
