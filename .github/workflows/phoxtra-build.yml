@@ -85,6 +85,10 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
           /tmp/test_elf_validation
+      - name: Test syscall ABI and lifecycle handlers
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_syscall_abi.c kernel/syscall/syscall.c -o /tmp/test_syscall_abi
+          /tmp/test_syscall_abi
       - name: Configure
         run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON
       - name: Build kernel
@@ -138,12 +142,29 @@ jobs:
             sleep 0.25
           done
           sleep 8
-          for attempt in $(seq 1 40); do
-            grep -q 'PHOXTRA_USERMODE_SMOKE_OK' /tmp/phoxtra-serial.log && break
+          for attempt in $(seq 1 80); do
+            grep -Fq 'PHOXTRA_PROCESS_CLEANUP_OK' /tmp/phoxtra-serial.log && break
             sleep 0.25
           done
-          grep -q 'PHOXTRA_USERMODE_SMOKE_OK' /tmp/phoxtra-serial.log
-          grep -q 'User process exited via SYS_EXIT' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USERMODE_TESTS_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_ISOLATION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_MALFORMED_ELF_REJECTION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USERMODE_A_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USERMODE_B_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_CLEANUP_OK' /tmp/phoxtra-serial.log
+          [ "$(grep -c 'SYS_PRINT rejected inaccessible user pointer' /tmp/phoxtra-serial.log || true)" -ge 2 ]
+          [ "$(grep -c 'User process exited via SYS_EXIT' /tmp/phoxtra-serial.log || true)" -ge 2 ]
+          if grep -Fq 'PHOXTRA_USERMODE_TEST_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'A user process reported a syscall ABI / return-value regression.'
+            exit 1
+          fi
+          if grep -Fq 'PHOXTRA_PROCESS_ISOLATION_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_PROCESS_CLEANUP_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_MALFORMED_ELF_REJECTION_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_USERMODE_TEST_SETUP_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'A user-process integration assertion failed.'
+            exit 1
+          fi
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
           grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log

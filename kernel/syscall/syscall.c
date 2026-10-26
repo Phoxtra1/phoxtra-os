@@ -19,6 +19,7 @@ static void sys_print(struct registers* regs) {
     size_t i = 0;
     for (; i < USER_PRINT_MAX; ++i) {
         if (vmm_copy_from_user(current->page_directory, &message[i], regs->rdi + i, 1) != 0) {
+            klog(LOG_WARNING, "SYS_PRINT rejected inaccessible user pointer");
             regs->rax = (uint64_t)(int64_t)SYS_ERROR_FAULT;
             return;
         }
