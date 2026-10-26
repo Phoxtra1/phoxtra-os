@@ -229,6 +229,10 @@ void scheduler_yield(void) {
     gdt_set_kernel_stack(kernel_stack_top);
 
     /* Perform the actual register-level context switch */
+    if (next->user_mode)
+        klog(LOG_INFO, "Scheduler context switch target: Ring 3");
+    else
+        klog(LOG_INFO, "Scheduler context switch target: kernel task");
     context_switch(&old->rsp, next->rsp);
 }
 
