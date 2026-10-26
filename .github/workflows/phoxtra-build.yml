@@ -102,7 +102,7 @@ jobs:
       - name: Boot ISO and check desktop framebuffer
         shell: bash
         run: |
-          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-ahci-test.img
+          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-settings-screen.ppm /tmp/phoxtra-ahci-test.img
           truncate -s 64M /tmp/phoxtra-ahci-test.img
           python3 - <<'PY'
           import struct
@@ -183,6 +183,23 @@ jobs:
             sleep 0.25
           done
           [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
+          { printf 'sendkey p\n'; sleep 0.3; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Phoxtra Settings panel opened' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Phoxtra Settings panel opened' /tmp/phoxtra-serial.log
+          sleep 0.5
+          printf 'screendump /tmp/phoxtra-settings-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 0.5
+          test -s /tmp/phoxtra-settings-screen.ppm
+          { for key in 2 q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Phoxtra Settings panel closed' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Phoxtra Settings panel closed' /tmp/phoxtra-serial.log
+          [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 5 ]
           { for key in a w b q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 20); do
             grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
@@ -260,6 +277,7 @@ jobs:
           name: phoxtra-qemu-debug
           path: |
             /tmp/phoxtra-screen.ppm
+            /tmp/phoxtra-settings-screen.ppm
             /tmp/phoxtra-serial.log
           if-no-files-found: warn
 
