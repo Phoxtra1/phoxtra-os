@@ -215,6 +215,8 @@ void scheduler_yield(void) {
     /* Transition states */
     next->state     = PROCESS_STATE_RUNNING;
     current_process = next;
+    if (next->user_mode)
+        klog(LOG_INFO, "Scheduler dispatching Ring 3 user process");
 
     /* Idle uses the kernel root; process tasks use their private roots. */
     if (next->page_directory)
