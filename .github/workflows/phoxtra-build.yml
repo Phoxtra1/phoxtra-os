@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Validate optional draft-release request
         if: github.event_name == 'workflow_dispatch' && inputs.create_draft_release
         env:
@@ -49,7 +51,7 @@ jobs:
         run: |
           APT_OPTIONS=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
           sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs
+          sudo apt-get "${APT_OPTIONS[@]}" install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs openssl
       - name: Audit storage write safety
         run: python3 scripts/check_storage_safety.py
       - name: Test kernel spinlock concurrency
@@ -99,6 +101,10 @@ jobs:
           objdump -d /tmp/phoxtra_libc.o /tmp/phoxtra_user_net.o | grep -q 'int    $0x80'
       - name: Configure
         run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON
+      - name: Build and test verified HTTPS transport
+        run: |
+          cmake --build build --target test_https_client phoxtra_userlib -j2
+          tests/run_https_client_tests.sh build/test_https_client
       - name: Build kernel
         run: cmake --build build -j2
       - name: Build alternate product profiles
