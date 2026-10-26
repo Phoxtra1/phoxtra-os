@@ -90,6 +90,12 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  while(sent<request_len){rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);if(rc<=0){result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;}sent+=(size_t)rc;}
  for(;;){
   unsigned char chunk[TLS_READ_CHUNK];rc=mbedtls_ssl_read(&ssl,chunk,sizeof(chunk));
+  /*
+   * TLS 1.3 may deliver a post-handshake NewSessionTicket while the
+   * application is reading. Mbed TLS signals this informational event with
+   * a negative code; consume it and continue reading application data.
+   */
+  if(rc==MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)continue;
   if(rc==MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY){*response_length=received;result=PHOXTRA_HTTPS_OK;break;}
   if(rc<=0){result=PHOXTRA_HTTPS_ERR_IO;goto cleanup;}
   if((size_t)rc>response_capacity-received){result=PHOXTRA_HTTPS_ERR_RESPONSE_TOO_LARGE;goto cleanup;}
