@@ -92,6 +92,11 @@ jobs:
         run: |
           cc -std=gnu17 -Wall -Wextra -Werror tests/test_syscall_abi.c kernel/syscall/syscall.c -o /tmp/test_syscall_abi
           /tmp/test_syscall_abi
+      - name: Compile freestanding user-mode libc and network ABI
+        run: |
+          cc -std=c11 -m64 -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror -Ilibc/include -c libc/src/libc.c -o /tmp/phoxtra_libc.o
+          cc -std=c11 -m64 -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror -Ilibc/include -c libc/src/net.c -o /tmp/phoxtra_user_net.o
+          objdump -d /tmp/phoxtra_libc.o /tmp/phoxtra_user_net.o | grep -q 'int    $0x80'
       - name: Configure
         run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON
       - name: Build kernel
