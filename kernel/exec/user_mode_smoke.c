@@ -244,10 +244,11 @@ static int smoke_verify_private_images(pcb_t* process_a, pcb_t* process_b,
         !message_length) return 0;
 
     uint8_t marker_a = 0, marker_b = 0;
+    /* The distinguishing A/B byte is at offset 17 in each message. */
     if (vmm_copy_from_user(process_a->page_directory, &marker_a,
-                           message_address + message_length - 1u, 1) != 0 ||
+                           message_address + 17u, 1) != 0 ||
         vmm_copy_from_user(process_b->page_directory, &marker_b,
-                           message_address + message_length - 1u, 1) != 0)
+                           message_address + 17u, 1) != 0)
         return 0;
     return marker_a == 'A' && marker_b == 'B' && marker_a != marker_b;
 }
