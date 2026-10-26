@@ -142,6 +142,7 @@ void pcb_process_entry_trampoline(void) {
 
 /* Initial kernel context for an ELF process; iretq enters Ring 3 and never returns. */
 void pcb_user_entry_trampoline(void) {
+    klog(LOG_INFO, "Ring 3 process trampoline entered");
     pcb_t* current = scheduler_current();
     if (!current || !current->user_mode || !current->user_entry || !current->user_stack) {
         if (current) current->state = PROCESS_STATE_TERMINATED;
@@ -149,6 +150,7 @@ void pcb_user_entry_trampoline(void) {
         for (;;) __asm__ volatile("cli; hlt");
     }
     gdt_set_kernel_stack((uint64_t)(uintptr_t)current->stack_base + current->stack_size);
+    klog(LOG_INFO, "Entering Ring 3 via IRETQ");
     switch_to_user_mode(current->user_entry, current->user_stack);
     current->state = PROCESS_STATE_TERMINATED;
     scheduler_yield();
