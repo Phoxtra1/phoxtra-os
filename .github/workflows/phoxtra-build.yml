@@ -184,7 +184,7 @@ jobs:
           done
           grep -Fq 'PHOXTRA_NETWORK_DHCP_OK' /tmp/phoxtra-serial.log
           # Exercise a real DNS A lookup through the guest network path before GUI startup.
-          { for key in d n s spc e x a m p l e dot c o m ret; do printf 'sendkey %s\\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { for key in d n s spc e x a m p l e dot c o m ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log && break
             sleep 0.25
