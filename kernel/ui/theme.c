@@ -58,6 +58,10 @@ void theme_set(uint32_t theme_id) {
     klog(LOG_INFO, "Phoxtra Desktop Theme Changed");
 }
 
+uint32_t theme_get_current_id(void) {
+    return active_theme_index;
+}
+
 theme_palette_t* theme_get_current(void) {
     return &themes[active_theme_index];
 }
