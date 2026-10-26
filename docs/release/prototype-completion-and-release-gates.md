@@ -15,7 +15,7 @@ A milestone is complete only when the evidence below exists. Each line must be m
 - [ ] Storage-safety audit passes.
 - [ ] Network implementation-integrity audit and ARP/IPv4/UDP/DHCP/DNS/TCP packet-validation tests pass; this evidence is separate from physical NIC acceptance.
 - [ ] QEMU reaches the shell and desktop event loop.
-- [ ] Theme switching, Application Center, Workspace catalogue access, mouse/file-manager interaction, RAM-backed file/folder creation, and screenshot sanity checks pass.
+- [ ] Theme switching and the native Settings panel (open, render, close, and theme selection), Application Center, Workspace catalogue access, mouse/file-manager interaction, RAM-backed file/folder creation, and screenshot sanity checks pass.
 - [ ] Hardware readiness report is exercised; its output clearly distinguishes PCI inventory from real driver support.
 - [ ] ISO SHA-256 file is generated and can be verified against the downloaded ISO.
 - [ ] CI results and artifact commit are recorded in the completion log.
@@ -23,7 +23,8 @@ A milestone is complete only when the evidence below exists. Each line must be m
 
 ## Gate B — Prototype behavior and scope accuracy
 
-- [ ] Native panels marked available open the interface actually implemented.
+- [ ] Native panels marked available open the interface actually implemented, including Settings with theme choices and read-only readiness information.
+- [ ] Settings does not present unfinished resolution, network, account, sound, power, or update controls as functional.
 - [ ] Planned external applications are labelled as planned/pending.
 - [ ] Amineva Workspace integration status is explicit: the current catalogue entry is not a working suite.
 - [ ] The volatile RAM demo, read-only AHCI/SATA restrictions, supported ext2 subset, and unsupported filesystem features are clearly disclosed.

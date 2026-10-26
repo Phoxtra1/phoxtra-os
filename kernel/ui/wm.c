@@ -17,6 +17,7 @@ static window_t* sec_win = 0;
 static window_t* mon_win = 0;
 static window_t* fm_win = 0;
 static window_t* app_win = 0;
+static window_t* settings_win = 0;
 static window_t* focused_win = 0;
 static uint8_t app_view_detail = 0;
 static uint32_t app_selected_index = 0;
@@ -41,6 +42,8 @@ void wm_init(void) {
     sec_win = compositor_create_window("SYSTEM STATUS", 170, 374, 832, 310, 0x00020617);
     app_win = compositor_create_window("APPLICATION CENTER", 150, 64, 800, 610, 0x00020617);
     if (app_win) app_win->active = 0;
+    settings_win = compositor_create_window("SETTINGS", 138, 54, 846, 630, 0x00020617);
+    if (settings_win) settings_win->active = 0;
     focused_win = term_win;
     (void)mon_win;
 }
@@ -71,6 +74,65 @@ static void wm_draw_window_contents(void) {
         font_draw_string("Input: detected keyboard and PS/2 pointer", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
         font_draw_string("Press A for Phoxtra and Amineva application entries.", sec_win->x + 16, sec_win->y + 122, 0x0094A3B8, 0);
     }
+}
+
+static void wm_draw_settings(void) {
+    if (!settings_win || !settings_win->active || settings_win->minimized) return;
+
+    theme_palette_t* palette = theme_get_current();
+    uint32_t current = theme_get_current_id();
+    uint32_t left_x = settings_win->x + 24u;
+    uint32_t content_y = settings_win->y + 48u;
+    uint32_t info_x = settings_win->x + 410u;
+    static const char* const names[3] = {
+        "MIDNIGHT GOLD", "CYBER SAPPHIRE", "EMERALD DARK"
+    };
+
+    font_draw_string_bold("PERSONALIZATION", left_x, content_y, palette->accent_primary, 0);
+    font_draw_string("Choose a desktop theme:", left_x, content_y + 24u, palette->text_color, 0);
+    for (uint32_t i = 0; i < 3u; ++i) {
+        uint32_t row_y = settings_win->y + 112u + i * 54u;
+        uint32_t row_color = (i == current) ? palette->titlebar_bg : palette->window_bg;
+        platform_display_fill_rect(left_x, row_y, 360u, 42u, row_color);
+        platform_display_draw_rect(left_x, row_y, 360u, 42u,
+                                   (i == current) ? palette->accent_primary : 0x00334155u);
+        font_draw_string_bold(names[i], left_x + 12u, row_y + 13u, palette->text_color, 0);
+        font_draw_string((i == current) ? "CURRENT" : "CLICK TO APPLY",
+                         left_x + 214u, row_y + 13u,
+                         (i == current) ? palette->accent_primary : palette->accent_secondary, 0);
+    }
+
+    font_draw_string_bold("DEVICE STATUS", info_x, content_y, palette->accent_primary, 0);
+    font_draw_string(platform_display_is_available() ? "Framebuffer: available" : "Framebuffer: unavailable",
+                     info_x, content_y + 28u, palette->text_color, 0);
+    font_draw_string("Display profile: 1024 x 768", info_x, content_y + 54u, palette->text_color, 0);
+    font_draw_string(platform_input_has_keyboard() ? "Keyboard: detected" : "Keyboard: unavailable",
+                     info_x, content_y + 80u, palette->text_color, 0);
+    font_draw_string(platform_input_has_pointer() ? "Pointer path: detected" : "Pointer path: unavailable",
+                     info_x, content_y + 106u, palette->text_color, 0);
+
+    font_draw_string_bold("STORAGE AND SAFETY", info_x, content_y + 160u, palette->accent_primary, 0);
+    font_draw_string("Demo files: volatile RAM; lost at reboot.",
+                     info_x, content_y + 188u, palette->text_color, 0);
+    font_draw_string("Physical disk access is read-only.",
+                     info_x, content_y + 214u, palette->text_color, 0);
+    font_draw_string("Installer and formatting are disabled.",
+                     info_x, content_y + 240u, palette->text_color, 0);
+
+    font_draw_string_bold("SETTINGS AVAILABLE IN THIS BUILD",
+                          left_x, content_y + 278u, palette->accent_primary, 0);
+    font_draw_string("Desktop theme selection is configurable.",
+                     left_x, content_y + 306u, palette->text_color, 0);
+    font_draw_string("Display resolution, network, accounts, sound,",
+                     left_x, content_y + 332u, palette->text_color, 0);
+    font_draw_string("power controls and software updates are not",
+                     left_x, content_y + 358u, palette->text_color, 0);
+    font_draw_string("implemented in this prototype.",
+                     left_x, content_y + 384u, palette->text_color, 0);
+    font_draw_string("Press 1 / 2 / 3 to switch themes, or click a row.",
+                     left_x, content_y + 422u, palette->accent_secondary, 0);
+    font_draw_string("P opens Settings; Q closes this panel.",
+                     left_x, content_y + 448u, palette->accent_secondary, 0);
 }
 
 static void wm_open_application_center(uint32_t selected_index, uint8_t detail) {
@@ -185,6 +247,7 @@ static void wm_render_desktop(void) {
     wm_draw_window_contents();
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
     wm_draw_application_center();
+    wm_draw_settings();
     wm_draw_pointer();
     platform_display_present();
 }
@@ -195,6 +258,19 @@ static void wm_restore_window(window_t* win) {
     win->minimized = 0;
     compositor_raise_window(win);
     focused_win = win;
+}
+
+static void wm_open_settings(void) {
+    if (!settings_win) return;
+    if (app_win) {
+        app_win->active = 0;
+        app_view_detail = 0;
+    }
+    settings_win->active = 1;
+    settings_win->minimized = 0;
+    compositor_raise_window(settings_win);
+    focused_win = settings_win;
+    klog(LOG_INFO, "Phoxtra Settings panel opened");
 }
 
 static void wm_handle_dock_click(uint32_t x) {
@@ -208,6 +284,8 @@ static void wm_handle_dock_click(uint32_t x) {
         wm_restore_window(sec_win);
     } else if (x < 430) {
         wm_open_application_center(0u, 0u);
+    } else if (x < 520) {
+        wm_open_settings();
     }
 }
 
@@ -291,9 +369,24 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
                     app_win->active = 0; wm_restore_window(term_win);
                 } else if (app->id && app->id[0] == 'f' && app->id[1] == 'i') {
                     app_win->active = 0; file_manager_open_window("/home/user"); fm_win = file_manager_get_window(); wm_restore_window(fm_win);
+                } else if (app->id && app->id[0] == 's' && app->id[1] == 'e') {
+                    app_win->active = 0; wm_open_settings();
                 } else if (app->id && app->id[0] == 's' && app->id[1] == 'y') {
                     app_win->active = 0; wm_restore_window(sec_win);
                 } else wm_open_application_center(index, 1u);
+            }
+        }
+        return;
+    }
+
+    if (win == settings_win) {
+        uint32_t row_x = settings_win->x + 24u;
+        for (uint32_t i = 0; i < 3u; ++i) {
+            uint32_t row_y = settings_win->y + 112u + i * 54u;
+            if (x >= row_x && x < row_x + 360u &&
+                y >= row_y && y < row_y + 42u) {
+                theme_set(i);
+                return;
             }
         }
         return;
@@ -337,6 +430,7 @@ static void wm_handle_key(char key) {
         return;
     }
     if (key == 'a' || key == 'A') { wm_open_application_center(0u, 0u); return; }
+    if (key == 'p' || key == 'P') { wm_open_settings(); return; }
     if (key == 'w' || key == 'W') {
         for (uint32_t i = 0; i < platform_app_count(); ++i) {
             const platform_app_info_t* app = 0;
@@ -354,6 +448,12 @@ static void wm_handle_key(char key) {
         uint32_t pages = (platform_app_count() + APP_CENTER_PAGE_SIZE - 1u) / APP_CENTER_PAGE_SIZE;
         if (key == '[' && app_page > 0) --app_page;
         if (key == ']' && app_page + 1u < pages) ++app_page;
+        return;
+    }
+    if ((key == 'q' || key == 'Q') && settings_win && settings_win->active) {
+        settings_win->active = 0;
+        klog(LOG_INFO, "Phoxtra Settings panel closed");
+        wm_restore_window(term_win);
         return;
     }
     if ((key == 'q' || key == 'Q') && app_win && app_win->active) {

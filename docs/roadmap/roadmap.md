@@ -90,8 +90,11 @@ This phase introduces the primary unique selling points of Phoxtra OS—Identity
 ### Phase 5: Operating System Services & User Experience
 The objective of this phase is to build the visual and interactive layers for end-users and developers.
 
+**Current status:** A limited native Settings panel is implemented. It supports desktop-theme selection and read-only display/input/storage readiness reporting. System-wide configuration, persistent user preferences, and general resolution, network, account, sound, power, and update controls remain planned.
+
 1. **System Config & Boot Options**
    - Populate `config/*.yml` and parser inside the bootloader/kernel to configure startup policies, security parameters, and screen resolutions.
+   - Expand the native Settings panel only as the underlying configuration APIs and device services become implemented and tested.
 
 2. **OdeAI Agent & Diagnostics Integration**
    - Build a lightweight native assistant running as a user-space daemon to parse logs, run active diagnostic tests, and offer system administration advice.

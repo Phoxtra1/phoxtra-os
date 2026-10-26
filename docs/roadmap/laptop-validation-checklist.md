@@ -59,6 +59,10 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 - [ ] Taskbar logo and PHOXTRA typography are clear and correctly placed.
 - [ ] Press `1`, `2`, and `3` to test Midnight Gold, Cyber Sapphire, and Emerald Dark themes.
 - [ ] Theme changes update the desktop, windows, taskbar, and relevant accents without visual corruption.
+- [ ] Press `P` or use the Settings dock entry to open the Settings panel.
+- [ ] Settings shows the current theme, changes theme by clicking a theme row, and can be closed with `Q`.
+- [ ] Settings accurately labels device readiness as observational, RAM demo files as volatile, physical storage as read-only, and the installer as disabled.
+- [ ] Confirm unfinished resolution, network, account, sound, power, and update controls are labelled unavailable rather than appearing functional.
 - [ ] File manager opens and renders its directory listing.
 - [ ] Folder navigation and returning to a parent directory work.
 - [ ] File selection and file opening/preview behaviour work where implemented.
@@ -67,7 +71,13 @@ For each item, record **Pass**, **Fail**, **Blocked**, or **Not supported**, plu
 - [ ] Taskbar/dock actions restore the expected window.
 - [ ] No overlapping, clipped, or stale UI remains after interactions.
 
-## 5. Application environment and integrated workspace
+## 5. Settings and application environment
+
+- [ ] Open Settings from the dock and from the Application Center.
+- [ ] Verify the selected theme indicator follows changes made by the Settings panel and keyboard shortcuts.
+- [ ] Confirm unsupported Settings categories remain clearly identified as not implemented.
+
+## 6. Application environment and integrated workspace
 
 - [ ] Press `A` to open the Application Center and verify it renders without covering or corrupting the desktop permanently.
 - [ ] Confirm native entries for Shell Console, Files, and System Status open the expected existing panels.

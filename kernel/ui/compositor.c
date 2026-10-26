@@ -108,6 +108,7 @@ void compositor_render_frame(void) {
     font_draw_string("TERMINAL", 150, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("SECURITY", 240, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("NETWORK",  330, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
+    font_draw_string("SETTINGS", 430, FB_HEIGHT - 32, palette->accent_primary, 0x00000000);
 
     font_draw_string("PHOXTRA OS", FB_WIDTH - 120, FB_HEIGHT - 32, 0x00F8FAFC, 0x00000000);
 

@@ -22,8 +22,8 @@ A successful CI run proves that those automated checks passed for the tested bui
 - x86_64 bootable ISO using GRUB/Multiboot2.
 - Graphical framebuffer desktop and window/compositor services.
 - Keyboard input and a PS/2 mouse path used by the QEMU interaction tests.
-- Built-in Shell Console, Files, and System Status catalogue panels.
-- Theme switching, Application Center, and a read-only `hardware` diagnostic report.
+- Built-in Shell Console, Files, System Status, and Settings panels; Settings supports desktop-theme selection and read-only readiness information.
+- Theme switching from the desktop and Settings panel, Application Center, and a read-only `hardware` diagnostic report.
 - A shared platform service interface and a catalogue that distinguishes available native panels from planned integrations.
 - Experimental Intel 82540EM/E1000 packet transmission/reception, ARP validation, inbound IPv4 header validation, and ICMP echo replies. The host-side unit tests cover protocol validation; real NIC/laptop networking is not yet physically validated.
 - Bounded UDP receive demultiplexing with length/checksum validation, DHCP Discover/Offer/Request/ACK lease acquisition, and DNS A-query/response parsing with bounded compression/CNAME handling.
@@ -41,6 +41,7 @@ These are known scope limitations, not features to assume are present:
 - The on-disk ext2 implementation is a limited read-only subset. It rejects journaled filesystems, indexed directories, and unsupported feature combinations; there is no ext2 write path. The FAT32 component remains an in-memory demo adapter, not an on-disk FAT32 driver.
 - The 32 MiB RAM test disk used for desktop demonstrations is volatile. Files in RAM-backed demo folders are lost at reboot.
 - **The installer is disabled.** Do not install or format a laptop's internal drive with this prototype.
+- Settings are limited to three desktop themes and read-only display/input/storage readiness information. Display resolution, network configuration, accounts, sound, power management, and software-update controls are not implemented.
 - Amineva Global products and Amnewsworld entries in the Application Center are catalogue entries. Only the listed native panels are currently marked available; external apps are not yet launchable from Phoxtra.
 - **Amineva Workspace is not yet integrated as a functioning suite.** Docs, Sheets, Slides, Forms, Drive, account sign-in, cross-application file access, and offline operation must not be considered available from the OS until their real service/runtime connections are implemented and tested.
 - The network layer remains experimental. TCP receive discards out-of-order data rather than reassembling it; congestion control, full-window/multiple-segment sending, robust TIME_WAIT/recovery, and broad standards interoperability remain incomplete. DHCP lease acquisition, T1 renewal, T2 rebinding, and expiry clearing are implemented with automated timer tests, but remain unvalidated on a physical NIC; DNS falls back to bounded TCP reads for validated truncated UDP replies but remains limited to A records and a bounded response size; IPv4 fragmentation/reassembly is rejected. HTTPS/TLS, certificate validation, a general-purpose browser, and a fully validated end-user web-app path are not delivered. Physical NIC/laptop interoperability has not yet passed acceptance.
