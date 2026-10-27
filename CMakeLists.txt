@@ -26,6 +26,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(PHOXTRA_MBEDTLS_USER_CONFIG "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
 set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h"
     CACHE FILEPATH "Phoxtra Mbed TLS platform configuration" FORCE)
+add_compile_definitions(MBEDTLS_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
 add_compile_definitions(TF_PSA_CRYPTO_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h")
 set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable Mbed TLS sample programs" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "Disable upstream Mbed TLS tests in OS build" FORCE)
