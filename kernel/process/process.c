@@ -18,6 +18,10 @@ void process_init(void) {
 }
 
 pcb_t* process_create(const char* name, void (*entry)(void), uint32_t priority) {
+    if (!name || !name[0] || !entry) {
+        klog(LOG_ERROR, "Process Manager: rejected invalid process name or entry point");
+        return (void*)0;
+    }
     if (active_count >= MAX_PROCESSES) {
         klog(LOG_ERROR, "Process Manager: process table full");
         return (void*)0;
@@ -44,7 +48,7 @@ pcb_t* process_create(const char* name, void (*entry)(void), uint32_t priority) 
 
 pcb_t* process_create_user_from_elf(const char* name, const uint8_t* image,
                                     uint64_t image_size, uint32_t priority) {
-    if (!name || !image || !image_size || active_count >= MAX_PROCESSES) return (void*)0;
+    if (!name || !name[0] || !image || !image_size || active_count >= MAX_PROCESSES) return (void*)0;
     pcb_t* pcb = pcb_create(next_pid++, name, pcb_user_entry_trampoline, priority, 0);
     if (!pcb) return (void*)0;
 
