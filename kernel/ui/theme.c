@@ -68,21 +68,9 @@ theme_palette_t* theme_get_current(void) {
 
 void icon_draw_folder(uint32_t x, uint32_t y, const char* label) {
     theme_palette_t* pal = theme_get_current();
-    static const uint32_t folder_colors[] = {
-        0x00FACC15, /* Phoxtra gold */
-        0x008B5CF6, /* purple */
-        0x003B82F6, /* blue */
-        0x000D9488, /* teal */
-        0x00F97316  /* orange */
-    };
-    uint32_t hash = 0;
-    if (label) {
-        for (uint32_t i = 0; label[i]; ++i)
-            hash = (hash * 31u) ^ (uint8_t)label[i];
-    }
-    uint32_t color = folder_colors[hash % (sizeof(folder_colors) / sizeof(folder_colors[0]))];
+    uint32_t color = pal->folder_color;
 
-    /* Folder tab and body use the same label-derived color, including purple. */
+    /* Use the active theme's folder color so theme changes are visible in icons. */
     fb_fill_rect(x + 4, y, 20, 8, color);
     fb_fill_rect(x, y + 6, 44, 34, color);
     fb_draw_rect(x, y + 6, 44, 34, 0x003B3150);
