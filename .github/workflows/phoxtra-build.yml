@@ -202,7 +202,10 @@ jobs:
           # Exercise a real DNS A lookup through the guest network path before GUI startup.
           { for key in d n s spc e x a m p l e dot c o m ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
-            grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log
+            grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log
           # Real TCP handshake and request/response through QEMU's E1000 and guest socket stack.
           { for key in t c p c h e c k ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
@@ -221,10 +224,6 @@ jobs:
             echo 'End-to-end TCP validation failed.'
             exit 1
           fi
- && break
-            sleep 0.25
-          done
-          grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
           grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
