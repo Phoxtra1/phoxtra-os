@@ -116,15 +116,15 @@ static void wm_draw_settings(void) {
                                      : "Carlito font: unavailable",
                      info_x, content_y + 154u, palette->text_color, 0);
 
-    font_draw_string_bold("NETWORK STATUS", info_x, content_y + 232u, palette->accent_primary, 0);
+    font_draw_string_bold("NETWORK STATUS", info_x, content_y + 184u, palette->accent_primary, 0);
     netdev_t* network = netdev_get_default();
     if (!network) {
-        font_draw_string("Adapter: unavailable", info_x, content_y + 256u, palette->text_color, 0);
+        font_draw_string("Adapter: unavailable", info_x, content_y + 208u, palette->text_color, 0);
         font_draw_string("No supported driver registered.", info_x, content_y + 232u, palette->text_color, 0);
     } else {
-        font_draw_string(network->name, info_x, content_y + 256u, palette->text_color, 0);
+        font_draw_string(network->name, info_x, content_y + 208u, palette->text_color, 0);
         font_draw_string((network->flags & 0x01u) ? "Link: UP" : "Link: DOWN",
-                         info_x + 72u, content_y + 256u, palette->text_color, 0);
+                         info_x + 72u, content_y + 208u, palette->text_color, 0);
         if (network->ip_addr) {
             char ipv4[16];
             uint32_to_ip(network->ip_addr, ipv4);
@@ -152,7 +152,7 @@ static void wm_draw_settings(void) {
                      info_x, content_y + 362u, palette->text_color, 0);
 
     font_draw_string_bold("SETTINGS AVAILABLE IN THIS BUILD",
-                          left_x, content_y + 310u, palette->accent_primary, 0);
+                          left_x, content_y + 278u, palette->accent_primary, 0);
     font_draw_string("Desktop theme selection is configurable.",
                      left_x, content_y + 306u, palette->text_color, 0);
     font_draw_string("Network status is visible; configuration UI,",
