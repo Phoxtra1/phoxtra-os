@@ -65,7 +65,7 @@ write_fn = "ahci_write_sectors"
 start = ramdisk.find("int " + write_fn + "(")
 end = ramdisk.find("\n}", start) if start >= 0 else -1
 body = ramdisk[start:end] if start >= 0 and end > start else ""
-if not body or not re.search(r"return\\s+-1\\s*;", body):
+if not body or not re.search(r"return\s+-1\s*;", body):
     errors.append("ahci_write_sectors must fail closed; storage writes are not implemented")
 
 for label, source in (("Ext2", ext2), ("FAT32", fat32)):
@@ -93,11 +93,11 @@ for required in ("ahci_read_sectors", "ahci_write_sectors", "RAM test disk",
                  "physical AHCI/NVMe I/O is not implemented"):
     if required not in ahci:
         errors.append(f"RAM storage backend missing required read-only safety path: {required}")
-if not re.search(r"dev\\s*!=\\s*&ahci_sata_dev", ahci):
+if not re.search(r"dev\s*!=\s*&ahci_sata_dev", ahci):
     errors.append("RAM test disk reads must be restricted to the registered simulated device")
 if "dev->total_sectors - lba" not in ahci:
     errors.append("RAM test disk reads must reject out-of-range sector requests")
-ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1].split("\\nint ahci_read_sectors", 1)[0]
+ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1].split("\nint ahci_read_sectors", 1)[0]
 if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
     errors.append("RAM test backend must not claim to implement physical AHCI")
 
