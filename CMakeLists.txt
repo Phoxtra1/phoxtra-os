@@ -61,9 +61,18 @@ target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${
     third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
     third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
 target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
-target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-builtin -Wall -Wextra -Werror)
+target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror)
 
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # This is a freestanding Ring 3 static executable, not a hosted application.
+    # Compile upstream TLS archives with compatible flags so host hardening
+    # defaults do not inject stack-canary calls or PIE GOTPCREL relocations.
+    foreach(_phoxtra_tls_target mbedtls mbedx509 tfpsacrypto)
+        if(TARGET ${_phoxtra_tls_target})
+            set_property(TARGET ${_phoxtra_tls_target} PROPERTY POSITION_INDEPENDENT_CODE OFF)
+            target_compile_options(${_phoxtra_tls_target} PRIVATE -fno-pie -fno-stack-protector)
+        endif()
+    endforeach()
     set(PHOXTRA_GUEST_HTTPS_DIR "${CMAKE_BINARY_DIR}/guest-https")
     set(PHOXTRA_GUEST_HTTPS_CA_HEADER "${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_test_ca.h")
     set(PHOXTRA_GUEST_HTTPS_CERT "${PHOXTRA_GUEST_HTTPS_DIR}/server.pem")
@@ -88,7 +97,7 @@ if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     target_compile_options(phoxtra_guest_https_elf PRIVATE
         -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror)
     target_link_options(phoxtra_guest_https_elf PRIVATE
-        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined
+        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined -Wl,--no-relax
         -Wl,-T,${CMAKE_SOURCE_DIR}/userland/linker.ld)
     target_link_libraries(phoxtra_guest_https_elf PRIVATE
         "-Wl,--start-group" mbedtls mbedx509 tfpsacrypto "-Wl,--end-group")

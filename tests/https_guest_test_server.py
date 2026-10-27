@@ -41,9 +41,9 @@ def main() -> int:
             tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
                         + b"Content-Length: " + str(len(body)).encode("ascii")
                         + b"\r\nConnection: close\r\n\r\n" + body)
-            # Initiate TLS close_notify without waiting for the guest's reciprocal alert.
-            tls._sslobj.shutdown()
-            tls.close()
+            # Send close_notify, then accept the client's reciprocal close_notify.
+            raw = tls.unwrap()
+            raw.close()
         except (ssl.SSLError, OSError, RuntimeError, TimeoutError) as exc:
             print(f"HTTPS guest test server error: {exc}", file=sys.stderr, flush=True)
             tls.close()
