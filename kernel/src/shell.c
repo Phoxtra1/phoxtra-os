@@ -37,6 +37,7 @@
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
 #include "../services/platform.h"
+#include "../services/hardware_probe.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 #include "../release/production.h"
@@ -178,7 +179,8 @@ static void cmd_help(void) {
     console_write("  release    - Display Phoxtra OS v1.0.0 Commercial Production Launch & LTS\n");
     console_write("  userland   - Audit Ring 3 Userland Isolation & Memory Transition Engine\n");
     console_write("  pci        - Scan PCI Express Bus for Hardware Controllers & Peripherals\n");
-    console_write("  installer  - Launch Phoxtra OS Bare-Metal Installation Wizard\n");
+    console_write("  hardware   - Show read-only hardware readiness report\n");
+    console_write("  installer  - Report installer availability (disk writes remain disabled)\n");
     console_write("  theme      - Switch Desktop Theme (phoxtra-blue, cyber-sapphire, emerald)\n");
     console_write("  fm         - Launch Phoxtra Graphical File Manager Window\n");
     console_write("  store      - Launch Phoxtra App Store & Software Package Manager\n");
@@ -627,15 +629,41 @@ static void cmd_pci(void) {
     console_write("\n");
 }
 
+static void cmd_hardware(void) {
+    phoxtra_hardware_report_t report;
+    if (phoxtra_hardware_probe_collect(&report) != PLATFORM_OK) {
+        console_write("Hardware report not available: read-only inventory failed.\n");
+        return;
+    }
+
+    console_write("\n=== READ-ONLY HARDWARE READINESS REPORT ===\n");
+    console_write("Architecture       : "); console_write(report.architecture); console_write("\n");
+    console_write("Boot protocol      : "); console_write(report.boot_protocol); console_write("\n");
+    console_write("Product profile    : "); console_write(report.product_profile); console_write("\n");
+    console_write("PCI devices        : "); print_dec(report.pci_devices); console_write("\n");
+    console_write("PCI storage class  : "); print_dec(report.pci_storage_controllers); console_write("\n");
+    console_write("PCI display class  : "); print_dec(report.pci_display_controllers); console_write("\n");
+    console_write("PCI network class  : "); print_dec(report.pci_network_controllers); console_write("\n");
+    console_write("PCI USB class      : "); print_dec(report.pci_usb_controllers); console_write("\n");
+    console_write("Block devices      : "); print_dec(report.block_devices); console_write("\n");
+    console_write("Simulated devices  : "); print_dec(report.simulated_block_devices); console_write("\n");
+    console_write("Physical drivers   : "); print_dec(report.registered_non_simulated_block_devices); console_write("\n");
+    console_write("Display            : ");
+    if (report.display_available) {
+        print_dec(report.display_width); console_write("x"); print_dec(report.display_height);
+        console_write(" @ "); print_dec(report.display_bits_per_pixel); console_write(" bpp\n");
+    } else {
+        console_write("unavailable\n");
+    }
+    console_write("Keyboard API       : "); console_write(report.keyboard_api_available ? "available\n" : "unavailable\n");
+    console_write("Pointer API        : "); console_write(report.pointer_available ? "available\n" : "unavailable\n");
+    console_write("Persistent VFS     : "); console_write(report.persistent_vfs_available ? "available\n" : "unavailable\n");
+    console_write("\nThis report is read-only; it does not install or write to disks.\n\n");
+}
+
 static void cmd_installer(void) {
-    console_write("\n=== PHOXTRA BARE-METAL INSTALLATION WIZARD ===\n");
-    console_write("Launching Phoxtra OS Installer Wizard...\n");
-    installer_start();
-    console_write("[STEP 1/4] Phoxtra Identity Brand Welcome ...... READY\n");
-    console_write("[STEP 2/4] Target NVMe/SATA Disk Selection ..... OK\n");
-    console_write("[STEP 3/4] GPT/MBR Partition Table Format ....... READY\n");
-    console_write("[STEP 4/4] System Core Copy & Bootloader ....... READY\n");
-    console_write("Installer launched in GUI Window Manager (phoxtra-wm).\n\n");
+    console_write("Installer not available: persistent disk installation and partition formatting are disabled.\n");
+    console_write("No disk writes were performed. Use a future validated installer build when available.\n");
 }
 
 static void cmd_theme(const char* arg) {
@@ -953,6 +981,7 @@ void shell_start(void) {
                 else if (kstrcmp(input, "release")    == 0 || kstrcmp(input, "lts") == 0) cmd_release();
                 else if (kstrcmp(input, "userland")   == 0 || kstrcmp(input, "user") == 0) cmd_userland();
                 else if (kstrcmp(input, "pci")        == 0 || kstrcmp(input, "lspci") == 0) cmd_pci();
+                else if (kstrcmp(input, "hardware") == 0) cmd_hardware();
                 else if (kstrcmp(input, "installer")  == 0 || kstrcmp(input, "install") == 0) cmd_installer();
                 else if (input[0]=='t' && input[1]=='h' && input[2]=='e' && input[3]=='m' && input[4]=='e') {
                     const char* p = input + 5;

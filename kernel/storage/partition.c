@@ -3,9 +3,13 @@
 #include "../log/logger.h"
 
 static int partition_read_sectors(block_device_t* dev, uint64_t lba, uint32_t count, uint8_t* buffer) {
-    if (!dev || !dev->priv_data) return -1;
+    if (!dev || !dev->priv_data || !buffer || count == 0u) return -1;
     partition_device_t* part = (partition_device_t*)dev->priv_data;
-    if (lba + count > part->sector_count) return -1;
+    if (!part->master_dev || !part->master_dev->read_sectors ||
+        lba >= part->sector_count || count > part->sector_count - lba) return -1;
+    if (part->start_lba > part->master_dev->total_sectors ||
+        lba > part->master_dev->total_sectors - part->start_lba ||
+        count > part->master_dev->total_sectors - (part->start_lba + lba)) return -1;
 
     return part->master_dev->read_sectors(part->master_dev, part->start_lba + lba, count, buffer);
 }
@@ -17,6 +21,19 @@ static int partition_write_sectors(block_device_t* dev, uint64_t lba, uint32_t c
     (void)count;
     (void)buffer;
     return -1;
+}
+
+#define MBR_BOOT_ACTIVE 0x80u
+
+static int ranges_overlap(uint64_t a_start, uint64_t a_count,
+                          uint64_t b_start, uint64_t b_count) {
+    if (a_count == 0u || b_count == 0u) return 0;
+    if (a_start <= b_start) return (b_start - a_start) < a_count;
+    return (a_start - b_start) < b_count;
+}
+
+static int is_extended_partition(uint8_t sys_id) {
+    return sys_id == 0x05u || sys_id == 0x0Fu || sys_id == 0x85u;
 }
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
@@ -79,7 +96,7 @@ int partition_parse(block_device_t* master) {
             klog(LOG_WARNING, "GPT detected; enumeration is not implemented; disk unchanged");
             return -2;
         }
-        klog(LOG_WARNING, "No supported partition table; disk left unchanged");
+        klog(LOG_WARNING, "No supported partition table; device left unchanged");
         return -1;
     }
 
@@ -95,18 +112,43 @@ int partition_parse(block_device_t* master) {
         }
     }
 
-    klog(LOG_INFO, "Valid MBR detected; scanning existing primary partitions");
+    klog(LOG_INFO, "valid MBR signature detected; scanning existing primary partitions");
     int valid_entries = 0;
-    for (int i = 0; i < 4; ++i) {
-        const uint8_t sys_id = mbr->entries[i].sys_id;
-        const uint64_t start = mbr->entries[i].start_lba;
-        const uint64_t count = mbr->entries[i].total_sectors;
-        if (sys_id == 0 || count == 0) continue;
+    uint64_t accepted_start[4] = {0, 0, 0, 0};
+    uint64_t accepted_count[4] = {0, 0, 0, 0};
 
-        /* Validate bounds before publishing a partition device. */
-        if (start == 0 || start >= master->total_sectors ||
+    for (int i = 0; i < 4; ++i) {
+        const mbr_partition_entry_t* entry = &mbr->entries[i];
+        const uint8_t sys_id = entry->sys_id;
+        const uint64_t start = entry->start_lba;
+        const uint64_t count = entry->total_sectors;
+
+        if (entry->boot_indicator != 0u && entry->boot_indicator != MBR_BOOT_ACTIVE) {
+            klog(LOG_WARNING, "Partition discovery: invalid MBR boot indicator; entry skipped");
+            continue;
+        }
+        if (sys_id == 0u || count == 0u) continue;
+        if (is_extended_partition(sys_id)) {
+            klog(LOG_WARNING, "Partition discovery: extended partition skipped; chains are unsupported");
+            continue;
+        }
+
+        /* Validate bounds before comparing ranges or publishing a partition device. */
+        if (start == 0u || start >= master->total_sectors ||
             count > master->total_sectors - start) {
             klog(LOG_WARNING, "Partition discovery: skipped out-of-range MBR entry");
+            continue;
+        }
+
+        int overlaps = 0;
+        for (int previous = 0; previous < valid_entries; ++previous) {
+            if (ranges_overlap(start, count, accepted_start[previous], accepted_count[previous])) {
+                overlaps = 1;
+                break;
+            }
+        }
+        if (overlaps) {
+            klog(LOG_WARNING, "Partition discovery: overlapping MBR entry skipped");
             continue;
         }
 
@@ -118,11 +160,13 @@ int partition_parse(block_device_t* master) {
         pname[len++] = (char)('1' + i);
         pname[len] = '\0';
         create_partition_subdev(master, pname, start, count, sys_id);
+        accepted_start[valid_entries] = start;
+        accepted_count[valid_entries] = count;
         ++valid_entries;
     }
 
     if (valid_entries == 0) {
-        klog(LOG_INFO, "MBR has no valid primary partitions; disk left unchanged");
+        klog(LOG_INFO, "MBR has no valid primary partitions; device left unchanged");
     }
     return 0;
 }
