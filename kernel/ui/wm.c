@@ -111,43 +111,48 @@ static void wm_draw_settings(void) {
     font_draw_string(platform_input_has_pointer() ? "Pointer path: detected" : "Pointer path: unavailable",
                      info_x, content_y + 106u, palette->text_color, 0);
 
-    font_draw_string_bold("NETWORK STATUS", info_x, content_y + 136u, palette->accent_primary, 0);
+    font_draw_string_bold("FONT STATUS", info_x, content_y + 132u, palette->accent_primary, 0);
+    font_draw_string(font_is_ready() ? "Carlito / Calibri-compatible: ready"
+                                     : "Carlito font: unavailable",
+                     info_x, content_y + 154u, palette->text_color, 0);
+
+    font_draw_string_bold("NETWORK STATUS", info_x, content_y + 232u, palette->accent_primary, 0);
     netdev_t* network = netdev_get_default();
     if (!network) {
-        font_draw_string("Adapter: unavailable", info_x, content_y + 160u, palette->text_color, 0);
-        font_draw_string("No supported driver registered.", info_x, content_y + 184u, palette->text_color, 0);
+        font_draw_string("Adapter: unavailable", info_x, content_y + 256u, palette->text_color, 0);
+        font_draw_string("No supported driver registered.", info_x, content_y + 232u, palette->text_color, 0);
     } else {
-        font_draw_string(network->name, info_x, content_y + 160u, palette->text_color, 0);
+        font_draw_string(network->name, info_x, content_y + 256u, palette->text_color, 0);
         font_draw_string((network->flags & 0x01u) ? "Link: UP" : "Link: DOWN",
-                         info_x + 72u, content_y + 160u, palette->text_color, 0);
+                         info_x + 72u, content_y + 256u, palette->text_color, 0);
         if (network->ip_addr) {
             char ipv4[16];
             uint32_to_ip(network->ip_addr, ipv4);
-            font_draw_string("IPv4:", info_x, content_y + 184u, palette->text_color, 0);
-            font_draw_string(ipv4, info_x + 48u, content_y + 184u, palette->text_color, 0);
+            font_draw_string("IPv4:", info_x, content_y + 232u, palette->text_color, 0);
+            font_draw_string(ipv4, info_x + 48u, content_y + 232u, palette->text_color, 0);
         } else {
-            font_draw_string("IPv4: not configured", info_x, content_y + 184u, palette->text_color, 0);
+            font_draw_string("IPv4: not configured", info_x, content_y + 232u, palette->text_color, 0);
         }
         if (network->dns_server) {
             char dns_ip[16];
             uint32_to_ip(network->dns_server, dns_ip);
-            font_draw_string("DNS:", info_x, content_y + 208u, palette->text_color, 0);
-            font_draw_string(dns_ip, info_x + 40u, content_y + 208u, palette->text_color, 0);
+            font_draw_string("DNS:", info_x, content_y + 256u, palette->text_color, 0);
+            font_draw_string(dns_ip, info_x + 40u, content_y + 256u, palette->text_color, 0);
         } else {
-            font_draw_string("DNS: not configured", info_x, content_y + 208u, palette->text_color, 0);
+            font_draw_string("DNS: not configured", info_x, content_y + 256u, palette->text_color, 0);
         }
     }
 
-    font_draw_string_bold("STORAGE AND SAFETY", info_x, content_y + 250u, palette->accent_primary, 0);
+    font_draw_string_bold("STORAGE AND SAFETY", info_x, content_y + 282u, palette->accent_primary, 0);
     font_draw_string("Demo files: volatile RAM; lost at reboot.",
-                     info_x, content_y + 278u, palette->text_color, 0);
+                     info_x, content_y + 310u, palette->text_color, 0);
     font_draw_string("Physical disk access is read-only.",
-                     info_x, content_y + 304u, palette->text_color, 0);
+                     info_x, content_y + 336u, palette->text_color, 0);
     font_draw_string("Installer and formatting are disabled.",
-                     info_x, content_y + 330u, palette->text_color, 0);
+                     info_x, content_y + 362u, palette->text_color, 0);
 
     font_draw_string_bold("SETTINGS AVAILABLE IN THIS BUILD",
-                          left_x, content_y + 278u, palette->accent_primary, 0);
+                          left_x, content_y + 310u, palette->accent_primary, 0);
     font_draw_string("Desktop theme selection is configurable.",
                      left_x, content_y + 306u, palette->text_color, 0);
     font_draw_string("Network status is visible; configuration UI,",

@@ -34,6 +34,8 @@ static uint32_t decode_base64(const char* src, uint8_t* dst, uint32_t capacity) 
     return written;
 }
 
+int font_is_ready(void) { return font_ready; }
+
 void font_init(void) {
     uint32_t decoded = decode_base64(phoxtra_carlito_regular_b64,
                                      &glyph_data[0][0], sizeof(glyph_data));
