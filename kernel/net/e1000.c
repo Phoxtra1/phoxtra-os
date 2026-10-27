@@ -139,7 +139,7 @@ static int e1000_read_eeprom_word(uint8_t address, uint16_t* output) {
     for (uint32_t poll = 0; poll < E1000_POLL_LIMIT; ++poll) {
         uint32_t result = e1000_read_reg(E1000_REG_EERD);
         if (result == 0xFFFFFFFFu) return -1;
-        if (result & 0x10u) {
+        if (result & 0x02u) {
             *output = (uint16_t)(result >> 16);
             return 0;
         }
