@@ -57,11 +57,16 @@ static void create_partition_subdev(block_device_t* master, const char* name, ui
     part->block_dev.total_sectors = count;
     part->block_dev.sector_size   = master->sector_size;
     part->block_dev.flags         = BLOCKDEV_FLAG_PARTITION | BLOCKDEV_FLAG_READONLY;
+    if (master->flags & BLOCKDEV_FLAG_SIMULATED)
+        part->block_dev.flags |= BLOCKDEV_FLAG_SIMULATED;
     part->block_dev.read_sectors  = partition_read_sectors;
     part->block_dev.write_sectors = partition_write_sectors;
     part->block_dev.priv_data     = part;
 
-    blockdev_register(&part->block_dev);
+    if (blockdev_register(&part->block_dev) != 0) {
+        kfree(part);
+        return;
+    }
 }
 
 static int partition_has_valid_gpt_header(block_device_t* master) {
