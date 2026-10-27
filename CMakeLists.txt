@@ -15,6 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(PHOXTRA_BUILD_TESTS "Build tests" ON)
 option(PHOXTRA_BUILD_DOCS "Build documentation" OFF)
+option(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE "Embed a guest-mode HTTPS integration probe for QEMU CI" OFF)
 
 add_subdirectory(kernel)
 add_subdirectory(boot)
@@ -61,6 +62,50 @@ target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${
     third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
 target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-builtin -Wall -Wextra -Werror)
+
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    set(PHOXTRA_GUEST_HTTPS_DIR "\${CMAKE_BINARY_DIR}/guest-https")
+    set(PHOXTRA_GUEST_HTTPS_CA_HEADER "\${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_test_ca.h")
+    set(PHOXTRA_GUEST_HTTPS_CERT "\${PHOXTRA_GUEST_HTTPS_DIR}/server.pem")
+    set(PHOXTRA_GUEST_HTTPS_KEY "\${PHOXTRA_GUEST_HTTPS_DIR}/server.key")
+    add_custom_command(
+        OUTPUT "\${PHOXTRA_GUEST_HTTPS_CA_HEADER}" "\${PHOXTRA_GUEST_HTTPS_CERT}" "\${PHOXTRA_GUEST_HTTPS_KEY}"
+        COMMAND "\${Python3_EXECUTABLE}" "\${CMAKE_SOURCE_DIR}/tests/prepare_guest_https_fixture.py" "\${PHOXTRA_GUEST_HTTPS_DIR}"
+        DEPENDS "\${CMAKE_SOURCE_DIR}/tests/prepare_guest_https_fixture.py"
+        VERBATIM
+    )
+    add_custom_target(phoxtra_guest_https_fixture
+        DEPENDS "\${PHOXTRA_GUEST_HTTPS_CA_HEADER}" "\${PHOXTRA_GUEST_HTTPS_CERT}" "\${PHOXTRA_GUEST_HTTPS_KEY}")
+    target_compile_definitions(phoxtra_userlib PRIVATE PHOXTRA_HTTPS_PORT=44243)
+    add_executable(phoxtra_guest_https_elf
+        userland/net/https_guest_entry.S userland/net/https_guest_smoke.c
+        $<TARGET_OBJECTS:phoxtra_userlib>)
+    add_dependencies(phoxtra_guest_https_elf phoxtra_guest_https_fixture phoxtra_ca_bundle)
+    target_include_directories(phoxtra_guest_https_elf PRIVATE
+        libc/include userland/net "\${PHOXTRA_CA_GENERATED_DIR}"
+        third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
+        third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
+    target_compile_options(phoxtra_guest_https_elf PRIVATE
+        -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror)
+    target_link_options(phoxtra_guest_https_elf PRIVATE
+        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined
+        -Wl,-T,\${CMAKE_SOURCE_DIR}/userland/linker.ld)
+    target_link_libraries(phoxtra_guest_https_elf PRIVATE
+        "-Wl,--start-group" mbedtls mbedx509 tfpsacrypto "-Wl,--end-group")
+    set(PHOXTRA_GUEST_HTTPS_IMAGE_HEADER "\${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_https_elf.h")
+    add_custom_command(
+        OUTPUT "\${PHOXTRA_GUEST_HTTPS_IMAGE_HEADER}"
+        COMMAND "\${Python3_EXECUTABLE}" "\${CMAKE_SOURCE_DIR}/scripts/embed_binary.py"
+                "$<TARGET_FILE:phoxtra_guest_https_elf>" "\${PHOXTRA_GUEST_HTTPS_IMAGE_HEADER}" phoxtra_guest_https_elf
+        DEPENDS phoxtra_guest_https_elf "\${CMAKE_SOURCE_DIR}/scripts/embed_binary.py"
+        VERBATIM)
+    add_custom_target(phoxtra_guest_https_image DEPENDS "\${PHOXTRA_GUEST_HTTPS_IMAGE_HEADER}")
+    target_sources(phoxtra-kernel PRIVATE kernel/exec/guest_https_image.c)
+    target_include_directories(phoxtra-kernel PRIVATE "\${PHOXTRA_CA_GENERATED_DIR}")
+    target_compile_definitions(phoxtra-kernel PRIVATE PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE=1)
+    add_dependencies(phoxtra-kernel phoxtra_guest_https_image)
+endif()
+
 
 add_executable(test_https_client tests/test_https_client.c)
 target_include_directories(test_https_client PRIVATE third_party/mbedtls/include

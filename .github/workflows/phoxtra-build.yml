@@ -100,10 +100,10 @@ jobs:
           cc -std=c11 -m64 -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror -Ilibc/include -c libc/src/net.c -o /tmp/phoxtra_user_net.o
           objdump -d /tmp/phoxtra_libc.o /tmp/phoxtra_user_net.o | grep -q 'int    $0x80'
       - name: Configure
-        run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON
+        run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON -DPHOXTRA_ENABLE_GUEST_HTTPS_SMOKE=ON
       - name: Build and test verified HTTPS transport
         run: |
-          cmake --build build --target test_https_client phoxtra_userlib -j2
+          cmake --build build --target test_https_client phoxtra_userlib phoxtra_guest_https_elf phoxtra_guest_https_fixture -j2
           tests/run_https_client_tests.sh build/test_https_client
       - name: Build kernel
         run: cmake --build build -j2
@@ -124,6 +124,15 @@ jobs:
           truncate -s 64M /tmp/phoxtra-ahci-test.img
           TCP_GUEST_PORT=4242
           TCP_HOST_PORT=44242
+          HTTPS_HOST_PORT=44243
+          python3 tests/https_guest_test_server.py --cert build/guest-https/server.pem --key build/guest-https/server.key --port "$HTTPS_HOST_PORT" > /tmp/phoxtra-https-test-server.log 2>&1 &
+          HTTPS_SERVER_PID=$!
+          for attempt in $(seq 1 40); do
+            grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log && break
+            kill -0 "$HTTPS_SERVER_PID" 2>/dev/null || { cat /tmp/phoxtra-https-test-server.log; exit 1; }
+            sleep 0.25
+          done
+          grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log
           python3 - <<'PY'
           import struct
           from pathlib import Path
@@ -151,7 +160,7 @@ jobs:
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
           QEMU_PID=$!
-          cleanup() { kill "$QEMU_PID" 2>/dev/null || true; }
+          cleanup() { kill "$QEMU_PID" "$HTTPS_SERVER_PID" 2>/dev/null || true; }
           trap cleanup EXIT
           for attempt in $(seq 1 40); do
             [ -S /tmp/qemu-monitor.sock ] && break
@@ -224,6 +233,21 @@ jobs:
             echo 'End-to-end TCP validation failed.'
             exit 1
           fi
+          # Require a guest user process to complete verified TLS and an HTTP exchange.
+          for attempt in $(seq 1 120); do
+            grep -Fq 'PHOXTRA_GUEST_HTTPS_OK' /tmp/phoxtra-serial.log && break
+            grep -E -q 'PHOXTRA_GUEST_HTTPS_(SETUP_FAILED|CONNECT_FAILED|CERTIFICATE_FAILED|TLS_FAILED|IO_OR_SETUP_FAILED|RESPONSE_FAILED)' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_PROCESS_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_STARTED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_OK' /tmp/phoxtra-serial.log
+          if grep -E 'PHOXTRA_GUEST_HTTPS_(SETUP_FAILED|CONNECT_FAILED|CERTIFICATE_FAILED|TLS_FAILED|IO_OR_SETUP_FAILED|RESPONSE_FAILED)' /tmp/phoxtra-serial.log; then
+            echo 'Guest-side HTTPS integration failed.'
+            cat /tmp/phoxtra-https-test-server.log
+            exit 1
+          fi
+          wait "$HTTPS_SERVER_PID"
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
           grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
