@@ -3,11 +3,15 @@
 #include "../log/logger.h"
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
-    int i;
-    for (i = 0; i < maxlen - 1 && src[i]; i++) {
-        dst[i] = src[i];
-    }
+    if (!dst || !src || maxlen <= 0) return;
+    int i = 0;
+    for (; i < maxlen - 1 && src[i]; ++i) dst[i] = src[i];
     dst[i] = '\0';
+}
+static int strings_equal(const char* a, const char* b) {
+    if (!a || !b) return 0;
+    while (*a && *b && *a == *b) { ++a; ++b; }
+    return *a == *b;
 }
 
 typedef struct {
@@ -17,70 +21,97 @@ typedef struct {
 } fat32_demo_file_t;
 
 static const char user_profile_text[] =
-    "[USER_PROFILE]\n"
-    "username = phoxtra_admin\n"
-    "role = system_operator\n"
+    "[DEMO_USER_PROFILE]\n"
+    "username = demo_user\n"
+    "role = example_operator\n"
     "home_directory = /home\n"
-    "identity_status = verified_secure\n";
+    "identity_status = demo_only_not_verified\n";
 
 static uint64_t fat32_file_read(vfs_node_t* node, uint64_t offset, uint64_t size, uint8_t* buffer) {
     if (!node || !node->ptr || !buffer) return 0;
     fat32_demo_file_t* file = (fat32_demo_file_t*)node->ptr;
+    if (!file->content || offset >= file->size || size == 0) return 0;
 
-    if (offset >= file->size) return 0;
+    /* Subtract only after offset is validated, avoiding offset + size overflow. */
     uint64_t bytes = size;
-    if (offset + bytes > file->size) bytes = file->size - offset;
-
+    if (bytes > file->size - offset) bytes = file->size - offset;
     const char* src = file->content + offset;
-    for (uint64_t i = 0; i < bytes; i++) {
-        buffer[i] = (uint8_t)src[i];
-    }
+    for (uint64_t i = 0; i < bytes; ++i) buffer[i] = (uint8_t)src[i];
     return bytes;
 }
 
 static vfs_node_t* fat32_dir_readdir(vfs_node_t* node, uint32_t index) {
     if (!node) return (void*)0;
     vfs_node_t* child = node->first_child;
-    uint32_t curr = 0;
-
-    while (child) {
-        if (curr == index) return child;
-        child = child->next_sibling;
-        curr++;
-    }
-    return (void*)0;
+    while (child && index) { child = child->next_sibling; --index; }
+    return child;
 }
 
 vfs_node_t* fat32_mount(block_device_t* dev, const char* mount_point) {
-    if (!dev) return (void*)0;
-
-    klog(LOG_INFO, "FAT32: Mounting volume to VFS target");
-
-    vfs_node_t* dir = vfs_create_node(mount_point + 1, VFS_DIRECTORY);
-    if (!dir) return (void*)0;
-    dir->readdir = fat32_dir_readdir;
-
-    fat32_demo_file_t* f1 = (fat32_demo_file_t*)kmalloc(sizeof(fat32_demo_file_t));
-    kstrncpy(f1->name, "user.txt", sizeof(f1->name));
-    f1->content = user_profile_text;
-    f1->size    = sizeof(user_profile_text) - 1;
-
-    vfs_node_t* n1 = vfs_create_node("user.txt", VFS_FILE);
-    if (n1) {
-        n1->size = f1->size;
-        n1->read = fat32_file_read;
-        n1->ptr  = f1;
-
-        dir->first_child = n1;
-        n1->parent       = dir;
+    if (!dev || !(dev->flags & BLOCKDEV_FLAG_SIMULATED) ||
+        !strings_equal(mount_point, "/home")) {
+        klog(LOG_WARNING, "FAT32 demo adapter: rejected invalid device or mount target");
+        return (void*)0;
     }
 
-    vfs_mount(mount_point, dir);
+    vfs_node_t* dir = vfs_lookup(mount_point);
+    int mount_new_directory = 0;
+    if (dir) {
+        if (dir->flags != VFS_DIRECTORY) {
+            klog(LOG_WARNING, "FAT32 demo adapter: existing mount target is not a directory");
+            return (void*)0;
+        }
+    } else {
+        dir = vfs_create_node("home", VFS_DIRECTORY);
+        if (!dir) return (void*)0;
+        dir->readdir = fat32_dir_readdir;
+        mount_new_directory = 1;
+    }
+
+    fat32_demo_file_t* file = (fat32_demo_file_t*)kmalloc(sizeof(*file));
+    if (!file) {
+        if (mount_new_directory) kfree(dir);
+        klog(LOG_ERROR, "FAT32 demo adapter: file metadata allocation failed");
+        return (void*)0;
+    }
+    kstrncpy(file->name, "user.txt", (int)sizeof(file->name));
+    file->content = user_profile_text;
+    file->size = sizeof(user_profile_text) - 1u;
+
+    vfs_node_t* node;
+    if (mount_new_directory) {
+        node = vfs_create_node("user.txt", VFS_FILE);
+        if (node) {
+            node->parent = dir;
+            dir->first_child = node;
+        }
+    } else {
+        node = vfs_create_child(dir, "user.txt", VFS_FILE);
+    }
+    if (!node) {
+        kfree(file);
+        if (mount_new_directory) kfree(dir);
+        klog(LOG_WARNING, "FAT32 demo adapter: could not create profile entry (duplicate name or allocation failure)");
+        return (void*)0;
+    }
+
+    node->size = file->size;
+    node->read = fat32_file_read;
+    node->ptr = file;
+    if (mount_new_directory && vfs_mount(mount_point, dir) != 0) {
+        kfree(node);
+        kfree(file);
+        kfree(dir);
+        klog(LOG_WARNING, "FAT32 demo adapter: VFS mount failed");
+        return (void*)0;
+    }
+
+    klog(LOG_INFO, "FAT32 demo adapter added in-memory sample content; on-disk FAT32 parsing is not implemented");
     return dir;
 }
 
 void fat32_init(void) {
-    klog(LOG_INFO, "FAT32 Filesystem Driver Subsystem Initialized");
-    block_device_t* p3 = blockdev_get("sata0p3");
-    if (p3) fat32_mount(p3, "/home");
+    klog(LOG_INFO, "FAT32 demo adapter initialized; on-disk FAT32 parsing is not implemented");
+    block_device_t* p3 = blockdev_get("ramdisk0p3");
+    if (p3) (void)fat32_mount(p3, "/home");
 }

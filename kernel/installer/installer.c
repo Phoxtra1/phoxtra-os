@@ -1,17 +1,11 @@
 #include "installer.h"
-#include "../ui/compositor.h"
-#include "../ui/font.h"
-#include "../ui/theme.h"
-#include "../drivers/framebuffer.h"
-#include "../drivers/pci.h"
 #include "../log/logger.h"
 
-static window_t* inst_win = 0;
 static installer_step_t current_step = INSTALLER_WELCOME;
 
 void installer_init(void) {
     current_step = INSTALLER_WELCOME;
-    klog(LOG_INFO, "Initializing Phoxtra Bare-Metal OS Installer Wizard...");
+    klog(LOG_INFO, "Installer disabled: physical disk installation and partition formatting are not implemented");
 }
 
 void installer_start(void) {

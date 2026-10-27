@@ -24,6 +24,9 @@ void idt_init(void) {
         idt_set_gate(i, (uint64_t)isr_stub_table[i], 0x08, 0x8E);
     }
 
+    /* Permit Ring 3 to invoke the dedicated software-syscall vector. */
+    idt_set_gate(0x80, (uint64_t)isr_stub_table[0x80], 0x08, 0xEE);
+
     // Load the IDT using the assembly loader
     idt_load(&idt_p);
 }

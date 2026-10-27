@@ -102,7 +102,7 @@ int platform_storage_create_directory(platform_fs_node_t* parent, const char* na
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents);
 int platform_storage_get_info(platform_storage_info_t* info);
 
-/* Application registry is metadata only: registered does not imply an OS process launcher exists. */
+/* The catalogue records identity and routing separately. Metadata is not a launcher. */
 typedef enum {
     PLATFORM_APP_EMBEDDED_PANEL = 1,
     PLATFORM_APP_PLANNED_APPLICATION = 2
@@ -113,12 +113,32 @@ typedef enum {
     PLATFORM_APP_PLANNED = 2
 } platform_app_state_t;
 
+typedef enum {
+    PLATFORM_PUBLISHER_PHOXTRA = 1,
+    PLATFORM_PUBLISHER_AMINEVA_GLOBAL = 2,
+    PLATFORM_PUBLISHER_AMNEWSWORLD = 3,
+    PLATFORM_PUBLISHER_THIRD_PARTY = 4
+} platform_app_publisher_t;
+
+typedef enum {
+    PLATFORM_LAUNCH_NONE = 0,
+    PLATFORM_LAUNCH_INTERNAL_PANEL = 1,
+    PLATFORM_LAUNCH_CONFIGURED_URL = 2,
+    PLATFORM_LAUNCH_PENDING = 3,
+    PLATFORM_LAUNCH_CATALOGUE = 4
+} platform_app_launch_kind_t;
+
 typedef struct platform_app_info {
     const char* id;
     const char* name;
+    const char* publisher;
     const char* category;
+    const char* application_type;
     const char* description;
+    const char* launch_destination; /* NULL until a real route/URL is configured. */
+    uint32_t publisher_id;
     uint32_t kind;
+    uint32_t launch_kind;
     uint32_t state;
 } platform_app_info_t;
 

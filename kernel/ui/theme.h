@@ -27,6 +27,7 @@ extern "C" {
 
 void theme_init(void);
 void theme_set(uint32_t theme_id);
+uint32_t theme_get_current_id(void);
 theme_palette_t* theme_get_current(void);
 uint32_t theme_get_current_index(void);
 void theme_set_wallpaper(uint32_t wallpaper_id);

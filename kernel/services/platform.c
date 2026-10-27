@@ -8,7 +8,7 @@
 #include "../security/capability.h"
 #include "../log/logger.h"
 
-#define PLATFORM_APP_COUNT 5u
+#define PLATFORM_APP_COUNT 14u
 
 static uint8_t initialized;
 static uint32_t status_flags;
@@ -32,11 +32,23 @@ static const platform_product_profile_t active_profile = {
 #endif
 
 static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
-    { "terminal", "Shell Console", "System", "Kernel shell command interface; desktop terminal emulator is not yet implemented", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
-    { "file-manager", "Files", "Productivity", "VFS file and folder browser", PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_APP_AVAILABLE },
-    { "settings", "Settings", "System", "Future unified device and desktop settings", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
-    { "amineva-workspace", "Amineva Workspace", "Productivity", "Foundation entry for Docs, Sheets, Slides and collaboration tools", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED },
-    { "app-center", "App Center", "Software", "Future signed package discovery and installation", PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_APP_PLANNED }
+    /* Phoxtra OS native panels and first-party system applications. */
+    { "terminal", "Shell Console", "Phoxtra", "System", "Native panel", "Kernel shell access; desktop terminal emulation is not yet implemented", "panel:terminal", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "file-manager", "Files", "Phoxtra", "Files and storage", "Native panel", "Browse the current RAM-backed filesystem", "panel:file-manager", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "system-status", "System Status", "Phoxtra", "System tools", "Native panel", "View current OS, input and storage status", "panel:system-status", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "settings", "Settings", "Phoxtra", "System tools", "Native panel", "Change the desktop theme and inspect read-only device readiness", "panel:settings", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "phoxtra-diagnostics", "Phoxtra Diagnostics", "Phoxtra", "System tools", "Planned native application", "System diagnostics application; full interactive panel planned", NULL, PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    /* Amineva Global products. */
+    { "agroclimate", "AgroClimate", "Amineva Global", "Agriculture and climate intelligence", "External service", "Agriculture and climate intelligence product; integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "adesua", "Adesua", "Amineva Global", "Learning and practical intelligence", "External service", "Practical and formula intelligence learning platform; integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "datalens", "DataLens", "Amineva Global", "IT services and data management", "External service", "IT services and data-management product; integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "inventra", "Inventra", "Amineva Global", "Inventory management", "External service", "Inventory management product; integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "sikasem", "Sikasem", "Amineva Global", "Financial operations", "External service", "Financial operating system product; integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "amineva-workspace", "Amineva Workspace", "Amineva Global", "Productivity suite", "Integrated productivity suite", "Docs, Sheets, Slides, Forms and Drive; desktop integration pending", NULL, PLATFORM_PUBLISHER_AMINEVA_GLOBAL, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    /* Independent publisher: Amnewsworld is not an Amineva Global product. */
+    { "amnewsworld-news", "Amnewsworld News", "Amnewsworld", "News and publishing", "External service", "Independent news portal; launch hand-off is not configured", NULL, PLATFORM_PUBLISHER_AMNEWSWORLD, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "amnewsworld-radio", "Amnewsworld Radio and Media", "Amnewsworld", "Radio and media production", "External service", "Independent web radio and media-production services; launch hand-off is not configured", NULL, PLATFORM_PUBLISHER_AMNEWSWORLD, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
+    { "app-marketplace", "App Marketplace", "Third-party developers", "Apps and extensions", "Planned marketplace", "Discover applications from Phoxtra and independent developers; install flow not implemented", NULL, PLATFORM_PUBLISHER_THIRD_PARTY, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_CATALOGUE, PLATFORM_APP_PLANNED }
 };
 
 static int text_equal(const char* a, const char* b) {

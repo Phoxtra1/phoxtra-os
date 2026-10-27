@@ -3,19 +3,33 @@
 #include "../include/string.h"
 #include "../include/unistd.h"
 
-/* Syscall gateway wrapper helper */
+/* Keep the user ABI aligned with the kernel's validated int 0x80 entry path. */
+#define PHOXTRA_SYS_PRINT 1u
+#define PHOXTRA_SYS_EXIT  2u
+#define PHOXTRA_SYS_GETPID 5u
+#define PHOXTRA_SYS_WRITE 12u
+
 static inline int64_t phoxtra_syscall1(uint64_t sys_num, uint64_t arg1) {
-    int64_t ret;
-    asm volatile(
-        "mov %1, %%rax\n"
-        "mov %2, %%rdi\n"
-        "syscall\n"
-        "mov %%rax, %0\n"
-        : "=r"(ret)
-        : "r"(sys_num), "r"(arg1)
-        : "rax", "rdi", "rcx", "r11", "memory"
-    );
-    return ret;
+    register uint64_t rax __asm__("rax") = sys_num;
+    register uint64_t rdi __asm__("rdi") = arg1;
+    __asm__ volatile ("int $0x80"
+        : "+a"(rax)
+        : "D"(rdi)
+        : "memory", "cc");
+    return (int64_t)rax;
+}
+
+static inline int64_t phoxtra_syscall3(uint64_t sys_num, uint64_t arg1,
+                                       uint64_t arg2, uint64_t arg3) {
+    register uint64_t rax __asm__("rax") = sys_num;
+    register uint64_t rdi __asm__("rdi") = arg1;
+    register uint64_t rsi __asm__("rsi") = arg2;
+    register uint64_t rdx __asm__("rdx") = arg3;
+    __asm__ volatile ("int $0x80"
+        : "+a"(rax)
+        : "D"(rdi), "S"(rsi), "d"(rdx)
+        : "memory", "cc");
+    return (int64_t)rax;
 }
 
 size_t strlen(const char* s) {
@@ -68,20 +82,74 @@ void* memcpy(void* dest, const void* src, size_t n) {
     return dest;
 }
 
-int puts(const char* str) {
-    if (!str) return -1;
-    return (int)phoxtra_syscall1(1, (uint64_t)str);
+
+int memcmp(const void* lhs, const void* rhs, size_t n) {
+    const unsigned char* a = (const unsigned char*)lhs;
+    const unsigned char* b = (const unsigned char*)rhs;
+    for (size_t i = 0; i < n; ++i) {
+        if (a[i] != b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return 0;
 }
 
+void* memmove(void* dest, const void* src, size_t n) {
+    if (dest == src || !n) return dest;
+    unsigned char* d = (unsigned char*)dest;
+    const unsigned char* s = (const unsigned char*)src;
+    uintptr_t da = (uintptr_t)d, sa = (uintptr_t)s;
+    if (da < sa || da - sa >= n) {
+        for (size_t i = 0; i < n; ++i) d[i] = s[i];
+    } else {
+        for (size_t i = n; i > 0; --i) d[i - 1u] = s[i - 1u];
+    }
+    return dest;
+}
+
+
+char* strchr(const char* s, int c) {
+    if (!s) return NULL;
+    const unsigned char target = (unsigned char)c;
+    while ((unsigned char)*s != target) {
+        if (*s == '\0') return NULL;
+        ++s;
+    }
+    return (char*)s;
+}
+
+char* strstr(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return NULL;
+    if (!*needle) return (char*)haystack;
+    for (const char* start = haystack; *start; ++start) {
+        const char* h = start;
+        const char* n = needle;
+        while (*h && *n && *h == *n) { ++h; ++n; }
+        if (!*n) return (char*)start;
+    }
+    return NULL;
+}
+
+int puts(const char* str) {
+    if (!str) return -1;
+    size_t length = strlen(str);
+    if (length > 1023u) return -22;
+    int result = write(1, str, length);
+    if (result < 0) return result;
+    int newline = write(1, "\n", 1);
+    if (newline < 0) return newline;
+    return result + newline;
+}
 int write(int fd, const void* buf, size_t count) {
-    return (int)phoxtra_syscall1(1, (uint64_t)buf);
+    if (!buf && count) return -14;
+    if (count > 0xFFFFFFFFu) return -22;
+    return (int)phoxtra_syscall3(PHOXTRA_SYS_WRITE, (uint64_t)fd,
+                                 (uint64_t)buf, (uint64_t)count);
 }
 
 int getpid(void) {
-    return (int)phoxtra_syscall1(39, 0);
+    return (int)phoxtra_syscall1(PHOXTRA_SYS_GETPID, 0);
 }
 
 void exit(int status) {
-    phoxtra_syscall1(60, (uint64_t)status);
-    while(1);
+    phoxtra_syscall1(PHOXTRA_SYS_EXIT, (uint64_t)status);
+    while (1) { }
 }

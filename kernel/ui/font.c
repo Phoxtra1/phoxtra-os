@@ -31,6 +31,8 @@ static uint32_t decode_base64(const char* src, uint8_t* dst, uint32_t capacity) 
     return written;
 }
 
+int font_is_ready(void) { return font_ready; }
+
 void font_init(void) {
     uint32_t decoded = decode_base64(phoxtra_carlito_aa_b64,
                                      &glyph_data[0][0], sizeof(glyph_data));
@@ -87,7 +89,6 @@ static void draw_char_style(char c, uint32_t x, uint32_t y,
 void font_draw_char(char c, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_char_style(c, x, y, fg, bg, 0);
 }
-
 void font_draw_char_bold(char c, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_char_style(c, x, y, fg, bg, 1);
 }

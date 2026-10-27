@@ -1,62 +1,40 @@
 #ifndef PHOXTRA_ELF_H
 #define PHOXTRA_ELF_H
-
 #include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define ELF_MAGIC 0x464C457F /* \x7fELF */
-
+#define ELF_MAGIC 0x464C457F
 #define ELF_CLASS_64 2
 #define ELF_DATA_LSB 1
 #define ELF_ARCH_X86_64 0x3E
-
-#define PT_NULL    0
-#define PT_LOAD    1
+#define ELF_TYPE_EXEC 2
+#define ELF_VERSION_CURRENT 1
+#define PT_NULL 0
+#define PT_LOAD 1
 #define PT_DYNAMIC 2
-#define PT_INTERP  3
-#define PT_NOTE    4
-
+#define PT_INTERP 3
+#define PT_NOTE 4
 #define PF_X 0x1
 #define PF_W 0x2
 #define PF_R 0x4
-
 typedef struct elf64_header {
-    uint8_t  e_ident[16];
-    uint16_t e_type;
-    uint16_t e_machine;
-    uint32_t e_version;
-    uint64_t e_entry;
-    uint64_t e_phoff;
-    uint64_t e_shoff;
-    uint32_t e_flags;
-    uint16_t e_ehsize;
-    uint16_t e_phentsize;
-    uint16_t e_phnum;
-    uint16_t e_shentsize;
-    uint16_t e_shnum;
-    uint16_t e_shstrndx;
+ uint8_t e_ident[16]; uint16_t e_type; uint16_t e_machine; uint32_t e_version;
+ uint64_t e_entry; uint64_t e_phoff; uint64_t e_shoff; uint32_t e_flags;
+ uint16_t e_ehsize; uint16_t e_phentsize; uint16_t e_phnum; uint16_t e_shentsize;
+ uint16_t e_shnum; uint16_t e_shstrndx;
 } __attribute__((packed)) elf64_header_t;
-
 typedef struct elf64_phdr {
-    uint32_t p_type;
-    uint32_t p_flags;
-    uint64_t p_offset;
-    uint64_t p_vaddr;
-    uint64_t p_paddr;
-    uint64_t p_filesz;
-    uint64_t p_memsz;
-    uint64_t p_align;
+ uint32_t p_type; uint32_t p_flags; uint64_t p_offset; uint64_t p_vaddr;
+ uint64_t p_paddr; uint64_t p_filesz; uint64_t p_memsz; uint64_t p_align;
 } __attribute__((packed)) elf64_phdr_t;
-
 void elf_init(void);
 int elf_validate_header(const elf64_header_t* header);
+int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out);
+/* Legacy validation-only API; returns -2 because no target address space is supplied. */
 int elf_load_binary(const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out);
-
+int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out, uint64_t* user_stack_top_out);
 #ifdef __cplusplus
 }
 #endif
-
 #endif

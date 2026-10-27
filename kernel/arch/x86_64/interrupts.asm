@@ -27,12 +27,17 @@ common_stub:
     push r14
     push r15
 
-    ; System V AMD64 ABI passes the first parameter in rdi.
-    ; Point it to the saved registers on the stack.
+    ; The saved frame begins at the current stack pointer.
     mov rdi, rsp
 
-    ; Call the high-level dispatcher
+    ; Keep the original frame pointer in a callee-saved register. Align the
+    ; stack for the System V AMD64 ABI before calling C code, and clear DF
+    ; because C code must not inherit a direction flag from interrupted code.
+    mov rbx, rsp
+    and rsp, -16
+    cld
     call interrupt_handler
+    mov rsp, rbx
 
     ; Restore all registers from stack
     pop r15

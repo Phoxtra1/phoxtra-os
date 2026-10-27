@@ -1,72 +1,196 @@
 #include "elf.h"
-#include "../memory/heap.h"
-#include "../memory/vmm.h"
 #include "../log/logger.h"
-
+#include "../memory/pmm.h"
+#include "../memory/vmm.h"
+#define ELF_USER_ADDRESS_LIMIT 0x0000800000000000ULL
+#define ELF_USER_ADDRESS_MIN 0x0000000100000000ULL
+#define ELF_STACK_TOP 0x00007FFFFFF00000ULL
+#define ELF_STACK_PAGES 8ULL
+#define ELF_STACK_BOTTOM (ELF_STACK_TOP - ELF_STACK_PAGES * PAGE_SIZE)
+#define ELF_MAX_IMAGE_PAGES 16384ULL
+static int range_fits(uint64_t offset, uint64_t length, uint64_t total) {
+ return offset <= total && length <= total - offset;
+}
+static int is_power_of_two(uint64_t value) {
+ return value && (value & (value - 1ULL)) == 0;
+}
 void elf_init(void) {
-    klog(LOG_INFO, "Initializing ELF64 Executable Binary Loader Subsystem...");
+ klog(LOG_INFO, "ELF64 validation and address-space loader initialized");
+}
+int elf_validate_header(const elf64_header_t* h) {
+ if (!h) return 0;
+ if (h->e_ident[0] != 0x7F || h->e_ident[1] != 'E' ||
+     h->e_ident[2] != 'L' || h->e_ident[3] != 'F') return 0;
+ if (h->e_ident[4] != ELF_CLASS_64 || h->e_ident[5] != ELF_DATA_LSB ||
+     h->e_ident[6] != ELF_VERSION_CURRENT) return 0;
+ if (h->e_type != ELF_TYPE_EXEC || h->e_machine != ELF_ARCH_X86_64 ||
+     h->e_version != ELF_VERSION_CURRENT) return 0;
+ if (h->e_ehsize != sizeof(elf64_header_t) ||
+     h->e_phentsize != sizeof(elf64_phdr_t) || h->e_phnum == 0) return 0;
+ return 1;
+}
+int elf_validate_image(const uint8_t* buffer, uint64_t size, uint64_t* entry_out) {
+ if (entry_out) *entry_out = 0;
+ if (!buffer || size < sizeof(elf64_header_t) || !entry_out) return 0;
+ const elf64_header_t* h = (const elf64_header_t*)buffer;
+ if (!elf_validate_header(h)) {
+  klog(LOG_WARNING, "ELF validation rejected unsupported or malformed header"); return 0;
+ }
+ uint64_t table_bytes = (uint64_t)h->e_phnum * (uint64_t)h->e_phentsize;
+ if (!range_fits(h->e_phoff, table_bytes, size)) {
+  klog(LOG_WARNING, "ELF validation rejected out-of-bounds program-header table"); return 0;
+ }
+ const elf64_phdr_t* ph = (const elf64_phdr_t*)(buffer + h->e_phoff);
+ uint32_t loads = 0; int entry_executable = 0;
+ uint64_t total_pages = ELF_STACK_PAGES;
+ for (uint16_t i = 0; i < h->e_phnum; ++i) {
+  const elf64_phdr_t* p = &ph[i];
+  if (p->p_type == PT_DYNAMIC || p->p_type == PT_INTERP) {
+   klog(LOG_WARNING, "ELF validation rejects dynamic/interpreted images; only static ET_EXEC is supported"); return 0;
+  }
+  if (p->p_type != PT_LOAD) continue;
+  if (!p->p_memsz || p->p_filesz > p->p_memsz ||
+      !range_fits(p->p_offset, p->p_filesz, size)) {
+   klog(LOG_WARNING, "ELF validation rejected invalid PT_LOAD file/memory range"); return 0;
+  }
+  if (p->p_vaddr < ELF_USER_ADDRESS_MIN || p->p_vaddr >= ELF_USER_ADDRESS_LIMIT ||
+      p->p_memsz > ELF_USER_ADDRESS_LIMIT - p->p_vaddr) {
+   klog(LOG_WARNING, "ELF validation rejected non-user or overflowing virtual range"); return 0;
+  }
+  if ((p->p_flags & ~(PF_R|PF_W|PF_X)) != 0 ||
+      ((p->p_flags & (PF_W|PF_X)) == (PF_W|PF_X))) {
+   klog(LOG_WARNING, "ELF validation rejects unknown segment flags or writable-executable segments"); return 0;
+  }
+  if (p->p_align > 1 && (!is_power_of_two(p->p_align) ||
+      (p->p_offset & (p->p_align - 1ULL)) != (p->p_vaddr & (p->p_align - 1ULL)))) {
+   klog(LOG_WARNING, "ELF validation rejected invalid PT_LOAD alignment"); return 0;
+  }
+  uint64_t end = p->p_vaddr + p->p_memsz;
+  if (end > ELF_STACK_BOTTOM || end > UINT64_MAX - (PAGE_SIZE - 1ULL)) {
+   klog(LOG_WARNING, "ELF validation rejected a segment overlapping the user stack or overflowing page rounding"); return 0;
+  }
+  uint64_t first_page = p->p_vaddr & ~(PAGE_SIZE - 1ULL);
+  uint64_t rounded_end = (end + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
+  uint64_t pages = (rounded_end - first_page) / PAGE_SIZE;
+  if (pages > ELF_MAX_IMAGE_PAGES - total_pages) {
+   klog(LOG_WARNING, "ELF validation rejected an image exceeding the per-process page budget"); return 0;
+  }
+  total_pages += pages;
+  for (uint16_t j = 0; j < i; ++j) {
+   const elf64_phdr_t* q = &ph[j];
+   if (q->p_type != PT_LOAD || !q->p_memsz ||
+       q->p_vaddr >= ELF_USER_ADDRESS_LIMIT ||
+       q->p_memsz > ELF_USER_ADDRESS_LIMIT - q->p_vaddr) continue;
+   uint64_t qend = q->p_vaddr + q->p_memsz;
+   uint64_t qfirst_page = q->p_vaddr & ~(PAGE_SIZE - 1ULL);
+   uint64_t qrounded_end = qend <= UINT64_MAX-(PAGE_SIZE-1ULL)
+       ? (qend+PAGE_SIZE-1ULL)&~(PAGE_SIZE-1ULL) : UINT64_MAX;
+   if ((p->p_vaddr < qend && q->p_vaddr < end) ||
+       (first_page < qrounded_end && qfirst_page < rounded_end)) {
+    klog(LOG_WARNING, "ELF validation rejected overlapping PT_LOAD byte ranges or pages"); return 0;
+   }
+  }
+  if ((p->p_flags & PF_X) && h->e_entry >= p->p_vaddr && h->e_entry < end)
+   entry_executable = 1;
+  ++loads;
+ }
+ if (!loads || !entry_executable) {
+  klog(LOG_WARNING, "ELF validation rejected image without loadable code at entry point"); return 0;
+ }
+ *entry_out = h->e_entry;
+ return 1;
+}
+static void elf_rollback_mappings(uint64_t pml4_phys,
+                                    const elf64_header_t* h,
+                                    const elf64_phdr_t* ph) {
+ for (uint16_t i=0; i<h->e_phnum; ++i) {
+  const elf64_phdr_t* p=&ph[i];
+  if (p->p_type!=PT_LOAD || !p->p_memsz ||
+      p->p_vaddr>=ELF_USER_ADDRESS_LIMIT ||
+      p->p_memsz>ELF_USER_ADDRESS_LIMIT-p->p_vaddr) continue;
+  uint64_t first=p->p_vaddr & ~(PAGE_SIZE-1ULL);
+  uint64_t end=p->p_vaddr+p->p_memsz;
+  uint64_t rounded_end=(end+PAGE_SIZE-1ULL)&~(PAGE_SIZE-1ULL);
+  for(uint64_t va=first;va<rounded_end;va+=PAGE_SIZE)
+   (void)vmm_unmap_user_page(pml4_phys,va);
+ }
+ for(uint64_t va=ELF_STACK_BOTTOM;va<ELF_STACK_TOP;va+=PAGE_SIZE)
+  (void)vmm_unmap_user_page(pml4_phys,va);
 }
 
-int elf_validate_header(const elf64_header_t* header) {
-    if (!header) return 0;
+int elf_load_into_address_space(uint64_t pml4_phys, const uint8_t* buffer,
+                                 uint64_t size, uint64_t* entry_out,
+                                 uint64_t* stack_top_out) {
+ uint64_t entry = 0;
+ if (entry_out) *entry_out = 0;
+ if (stack_top_out) *stack_top_out = 0;
+ if (!pml4_phys || !entry_out || !stack_top_out ||
+     !elf_validate_image(buffer, size, &entry)) return -1;
 
-    // Check \x7fELF Magic Bytes
-    if (header->e_ident[0] != 0x7F ||
-        header->e_ident[1] != 'E'  ||
-        header->e_ident[2] != 'L'  ||
-        header->e_ident[3] != 'F') {
-        klog(LOG_ERROR, "ELF Load Error: Invalid ELF magic signature");
-        return 0;
-    }
+ const elf64_header_t* h = (const elf64_header_t*)buffer;
+ const elf64_phdr_t* ph = (const elf64_phdr_t*)(buffer + h->e_phoff);
+ for (uint16_t i = 0; i < h->e_phnum; ++i) {
+  const elf64_phdr_t* p = &ph[i];
+  if (p->p_type != PT_LOAD) continue;
+  uint64_t first = p->p_vaddr & ~(PAGE_SIZE - 1ULL);
+  uint64_t end = p->p_vaddr + p->p_memsz;
+  if (end > UINT64_MAX - (PAGE_SIZE - 1ULL)) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
+  uint64_t rounded_end = (end + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
+  if (rounded_end < end || first < ELF_USER_ADDRESS_MIN ||
+      rounded_end > ELF_USER_ADDRESS_LIMIT) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
+  for (uint64_t va = first; va < rounded_end; va += PAGE_SIZE) {
+   void* frame = pmm_alloc_user_page();
+   if (!frame) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
+   uint64_t copy_start = va > p->p_vaddr ? va : p->p_vaddr;
+   uint64_t file_end = p->p_vaddr + p->p_filesz;
+   uint64_t page_end = va + PAGE_SIZE;
+   uint64_t copy_end = page_end < file_end ? page_end : file_end;
+   if (copy_end > copy_start) {
+    uint64_t source_offset = p->p_offset + (copy_start - p->p_vaddr);
+    uint64_t dest_offset = copy_start - va;
+    uint8_t* dst = (uint8_t*)frame + dest_offset;
+    const uint8_t* src = buffer + source_offset;
+    for (uint64_t n = 0; n < copy_end - copy_start; ++n) dst[n] = src[n];
+   }
+   uint32_t flags = VMM_FLAG_PRESENT | VMM_FLAG_USER;
+   if (p->p_flags & PF_W) flags |= VMM_FLAG_WRITABLE;
+   if (!(p->p_flags & PF_X)) flags |= VMM_FLAG_NO_EXECUTE;
+   if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame, flags) != 0) {
+    pmm_free_user_page(frame);
+    elf_rollback_mappings(pml4_phys,h,ph);
+    return -1;
+   }
+  }
+ }
 
-    if (header->e_ident[4] != ELF_CLASS_64) {
-        klog(LOG_ERROR, "ELF Load Error: Architecture is not 64-bit ELF64");
-        return 0;
-    }
-
-    if (header->e_machine != ELF_ARCH_X86_64) {
-        klog(LOG_ERROR, "ELF Load Error: Machine arch is not x86_64");
-        return 0;
-    }
-
-    return 1; // Valid ELF64 Header
+ /* A fixed, private eight-page stack; frames are zeroed by the PMM. */
+ uint64_t stack_bottom = ELF_STACK_BOTTOM;
+ for (uint64_t va = stack_bottom; va < ELF_STACK_TOP; va += PAGE_SIZE) {
+  void* frame = pmm_alloc_user_page();
+  if (!frame) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
+  if (vmm_map_user_page(pml4_phys, va, (uint64_t)(uintptr_t)frame,
+                        VMM_FLAG_PRESENT | VMM_FLAG_USER |
+                        VMM_FLAG_WRITABLE | VMM_FLAG_NO_EXECUTE) != 0) {
+   pmm_free_user_page(frame);
+   elf_rollback_mappings(pml4_phys,h,ph);
+   return -1;
+  }
+ }
+ /* Provide a minimal ABI-compatible initial stack: argc=0, argv terminator,
+    envp terminator, AT_NULL pair, and one alignment word. */
+ uint64_t initial_stack[6] = {0, 0, 0, 0, 0, 0};
+ uint64_t initial_rsp = ELF_STACK_TOP - sizeof(initial_stack);
+ if (vmm_copy_to_user(pml4_phys, initial_rsp, initial_stack,
+                      sizeof(initial_stack)) != 0) { elf_rollback_mappings(pml4_phys,h,ph); return -1; }
+ *entry_out = entry;
+ *stack_top_out = initial_rsp;
+ return 0;
 }
 
-int elf_load_binary(const uint8_t* buffer, uint64_t size, uint64_t* entry_point_out) {
-    if (!buffer || size < sizeof(elf64_header_t) || !entry_point_out) return -1;
-
-    const elf64_header_t* header = (const elf64_header_t*)buffer;
-    if (!elf_validate_header(header)) return -1;
-
-    klog(LOG_INFO, "ELF64 Binary Validated. Parsing Program Headers (Phdr)...");
-
-    const elf64_phdr_t* phdrs = (const elf64_phdr_t*)(buffer + header->e_phoff);
-    uint32_t loaded_segments = 0;
-
-    for (uint16_t i = 0; i < header->e_phnum; i++) {
-        const elf64_phdr_t* phdr = &phdrs[i];
-
-        if (phdr->p_type == PT_LOAD) {
-            klog(LOG_INFO, "ELF Segment PT_LOAD: Virtual Addr mapped");
-
-            // Allocate and zero-fill segment memory
-            uint8_t* segment_mem = (uint8_t*)kmalloc(phdr->p_memsz);
-            if (!segment_mem) continue;
-
-            for (uint64_t b = 0; b < phdr->p_memsz; b++) segment_mem[b] = 0;
-
-            // Copy file payload into segment
-            if (phdr->p_filesz > 0) {
-                for (uint64_t f = 0; f < phdr->p_filesz; f++) {
-                    segment_mem[f] = buffer[phdr->p_offset + f];
-                }
-            }
-
-            loaded_segments++;
-        }
-    }
-
-    *entry_point_out = header->e_entry;
-    klog(LOG_INFO, "ELF64 Load Complete. Entry point extracted");
-    return 0;
+int elf_load_binary(const uint8_t* buffer, uint64_t size, uint64_t* entry_out) {
+ uint64_t validated_entry = 0;
+ if (entry_out) *entry_out = 0;
+ if (!elf_validate_image(buffer, size, &validated_entry)) return -1;
+ klog(LOG_WARNING, "ELF image validated only: use elf_load_into_address_space");
+ return -2;
 }

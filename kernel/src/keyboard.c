@@ -1,4 +1,5 @@
 #include "keyboard.h"
+#include "../net/netdev.h"
 #include "irq.h"
 
 #define KBD_BUFFER_SIZE 256
@@ -140,6 +141,7 @@ int keyboard_control_pressed(void) { return control_active; }
 char keyboard_get_char(void) {
     char c;
     while (!keyboard_poll_char(&c)) {
+        net_poll();
         asm volatile("sti; hlt" ::: "memory");
     }
     return c;

@@ -43,6 +43,7 @@ extern "C" {
 #include "../net/dhcp.h"
 #include "../net/dns.h"
 #include "../exec/elf.h"
+void user_mode_smoke_init(void);
 #include "../exec/ld_so.h"
 #include "../drivers/framebuffer.h"
 #include "../ui/font.h"
@@ -56,6 +57,7 @@ extern "C" {
 #include "../ai/dipa_core.h"
 #include "../services/phoxair.h"
 #include "../services/platform.h"
+#include "../services/hardware_probe.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
 #include "../ai/dipa_nl.h"
@@ -209,7 +211,11 @@ void system_init()
     partition_init();
     ext2_init();
     fat32_init();
+    phoxtra_hardware_probe_log();
 
     klog(LOG_KERNEL, "All subsystems initialized");
+#ifdef PHOXTRA_ENABLE_USERMODE_SMOKE
+    user_mode_smoke_init();
+#endif
 }
 

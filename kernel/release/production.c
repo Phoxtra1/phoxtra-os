@@ -1,23 +1,15 @@
 #include "production.h"
 #include "../log/logger.h"
-
 void production_init(void) {
-    klog(LOG_INFO, "Initializing Phoxtra OS v1.0.0 Commercial Release Engine...");
+    klog(LOG_WARNING, "Phoxtra OS is an experimental prototype; no commercial release or LTS support is active");
 }
-
 const char* production_get_version(void) {
-    return "Phoxtra OS v1.0.0 Commercial Release (x86_64 Long Mode)";
+    return "Phoxtra OS experimental x86_64 prototype (pre-release)";
 }
-
 const char* production_get_lts_status(void) {
-    return "Enterprise LTS Branch 2026-2031 (5-Year Security SLA Active)";
+    return "Not an LTS release; no security SLA is active";
 }
-
 int production_run_baremetal_certification(void) {
-    klog(LOG_INFO, "Running Bare-Metal Hardware Certification Suite...");
-    klog(LOG_INFO, "[Hardware] Intel Core / AMD Ryzen Architecture ........ CERTIFIED");
-    klog(LOG_INFO, "[Security] Hardware TPM 2.0 SPI Root of Trust .......... CERTIFIED");
-    klog(LOG_INFO, "[Graphics] VBE / GOP 1024x768 Linear Framebuffer ....... CERTIFIED");
-    klog(LOG_INFO, "[Network ] Intel 82540EM Gigabit NIC & Socket Stack .... CERTIFIED");
-    return 1;
+    klog(LOG_WARNING, "Bare-metal certification is unavailable; physical hardware validation has not been recorded");
+    return 0;
 }

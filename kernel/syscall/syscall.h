@@ -3,12 +3,21 @@
 
 #include <stdint.h>
 
-/* System call numbers */
-#define SYS_PRINT   1
-#define SYS_EXIT    2
-#define SYS_YIELD   3
-#define SYS_SLEEP   4
-#define SYS_GETPID  5
+/* System call numbers: int 0x80, number in RAX and arguments in RDI/RSI/RDX/RCX. */
+#define SYS_PRINT       1
+#define SYS_EXIT        2
+#define SYS_YIELD       3
+#define SYS_SLEEP       4
+#define SYS_GETPID      5
+#define SYS_SOCKET      6
+#define SYS_CONNECT     7
+#define SYS_SEND        8
+#define SYS_RECV        9
+#define SYS_CLOSE       10
+#define SYS_DNS_RESOLVE 11
+#define SYS_WRITE       12
+#define SYS_RANDOM      13
+#define SYS_TIME        14
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,5 +31,4 @@ void syscall_handler(struct registers* regs);
 #ifdef __cplusplus
 }
 #endif
-
 #endif

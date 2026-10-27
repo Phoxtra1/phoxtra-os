@@ -2,6 +2,7 @@
 #include "../memory/heap.h"
 #include "../memory/pmm.h"
 #include "../memory/vmm.h"
+#include "../scheduler/scheduler.h"
 #include "../log/logger.h"
 #include "../security/process_identity.h"
 #include "../security/audit_logger.h"
@@ -9,6 +10,8 @@
 #include "../security/mac.h"
 
 #define KERNEL_STACK_SIZE (16 * 1024) // 16KB stack per process
+extern void switch_to_user_mode(uint64_t entry_point, uint64_t user_rsp);
+extern void gdt_set_kernel_stack(uint64_t rsp0);
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
     int i;
@@ -55,6 +58,12 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     pcb->stack_base     = stack;
     pcb->stack_size     = KERNEL_STACK_SIZE;
     pcb->page_directory = vmm_create_user_page_directory();
+    if (!pcb->page_directory) {
+        klog(LOG_ERROR, "PCB: Failed to create private process address space");
+        kfree(stack);
+        kfree(pcb);
+        return (void*)0;
+    }
     pcb->next           = (void*)0;
 
     kstrncpy(pcb->name, name, 32);
@@ -62,20 +71,14 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     pcb->rip = (uint64_t)entry;
 
 
-    // Set up initial stack frame for context_switch:
-    // context_switch() does: pop rbx, pop rbp, pop r12, pop r13, pop r14, pop r15, ret
-    // Stack layout (growing downward, RSP points to lowest slot = rbx):
-    //   [RSP+48] = entry   (ret target — jumped to after the 6 pops)
-    //   [RSP+40] = r15
-    //   [RSP+32] = r14
-    //   [RSP+24] = r13
-    //   [RSP+16] = r12
-    //   [RSP+8]  = rbp
-    //   [RSP+0]  = rbx  ← RSP points here
+    // Set up the initial context_switch frame. It restores six callee-saved
+    // registers, returns to pcb_process_entry_trampoline, and leaves a synthetic
+    // return address so the C entry obeys the SysV AMD64 stack alignment.
     uint64_t stack_top = ((uint64_t)stack + KERNEL_STACK_SIZE) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
 
-    *--sp = (uint64_t)entry; // ret target
+    *--sp = 0; // synthetic return address; keeps SysV entry alignment
+    *--sp = (uint64_t)pcb_process_entry_trampoline; // ret target
     *--sp = 0;               // r15
     *--sp = 0;               // r14
     *--sp = 0;               // r13
@@ -107,8 +110,50 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     return pcb;
 }
 
-void pcb_destroy(pcb_t* pcb) {
-    if (!pcb) return;
+int pcb_destroy(pcb_t* pcb) {
+    if (!pcb) return -1;
+    /*
+     * Address-space teardown refuses the active CR3. Never free a PCB or its
+     * stack if its page tables could still be in use; a scheduler-side reaper
+     * can reclaim such a process after switching away from it.
+     */
+    if (pcb->page_directory &&
+        vmm_destroy_user_page_directory(pcb->page_directory) != 0) {
+        return -1;
+    }
+    pcb->page_directory = 0;
     if (pcb->stack_base) kfree(pcb->stack_base);
     kfree(pcb);
+    return 0;
+}
+
+/* Start every fresh task with interrupts enabled and reap it if its entry returns. */
+void pcb_process_entry_trampoline(void) {
+    klog(LOG_INFO, "Kernel process entry trampoline entered");
+    pcb_t* current = scheduler_current();
+    if (!current || !current->rip) {
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+    __asm__ volatile("sti" ::: "memory");
+    ((void (*)(void))(uintptr_t)current->rip)();
+    current->state = PROCESS_STATE_TERMINATED;
+    scheduler_yield();
+    for (;;) __asm__ volatile("cli; hlt");
+}
+
+/* Initial kernel context for an ELF process; iretq enters Ring 3 and never returns. */
+void pcb_user_entry_trampoline(void) {
+    klog(LOG_INFO, "Ring 3 process trampoline entered");
+    pcb_t* current = scheduler_current();
+    if (!current || !current->user_mode || !current->user_entry || !current->user_stack) {
+        if (current) current->state = PROCESS_STATE_TERMINATED;
+        scheduler_yield();
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+    gdt_set_kernel_stack((uint64_t)(uintptr_t)current->stack_base + current->stack_size);
+    klog(LOG_INFO, "Entering Ring 3 via IRETQ");
+    switch_to_user_mode(current->user_entry, current->user_stack);
+    current->state = PROCESS_STATE_TERMINATED;
+    scheduler_yield();
+    for (;;) __asm__ volatile("cli; hlt");
 }

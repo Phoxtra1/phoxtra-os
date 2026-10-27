@@ -42,10 +42,10 @@ void boot_screen_display(void) {
     console_write("      Secure Identity Operating System\n");
     console_write("=================================================\n\n");
 
-    console_write(" [BOOT]                             [KERNEL RELEASE v1.0.0]\n");
+    console_write(" [BOOT]                             [BOOTABLE TEST BUILD]\n");
     console_write("  CPU .......... OK                  Memory ....... OK\n");
     console_write("  GDT .......... OK                  Scheduler .... OK\n");
-    console_write("  IDT .......... OK                  Storage ...... OK\n");
+    console_write("  IDT .......... OK                  Storage ...... RAM test only\n");
     console_write("  Timer ........ OK                  TPM 2.0 Engine OK\n");
     console_write("  Keyboard ..... OK                  Process ID ... OK\n");
     console_write("  TPM SPI ...... OK                  CAC & MAC .... OK\n");
@@ -56,7 +56,7 @@ void boot_screen_display(void) {
     console_write("  Developer SDK  OK                  Syscall Table  OK\n");
     console_write("  PCI Bus Scan   OK                  Enterprise LTS OK\n\n");
 
-    console_write("System Ready - Phoxtra OS v1.0.0 Commercial Launch\n\n");
+    console_write("Bootable test environment - disk installation is not implemented.\n\n");
 }
 
 void boot_screen_section_boot(void) {}

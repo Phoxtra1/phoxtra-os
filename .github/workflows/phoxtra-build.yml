@@ -2,23 +2,109 @@ name: Phoxtra OS build
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      create_draft_release:
+        description: "Create an UNPUBLISHED draft GitHub Release after every CI check passes"
+        required: true
+        type: boolean
+        default: false
+      release_tag:
+        description: "Unique version tag for the draft (example: v0.2.0-alpha.1); required only when draft release is enabled"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build-kernel-and-iso:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install kernel and ISO build dependencies
+        with:
+          submodules: recursive
+      - name: Validate optional draft-release request
+        if: github.event_name == 'workflow_dispatch' && inputs.create_draft_release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::A unique release_tag is required when draft release creation is enabled."
+            exit 1
+          fi
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$'; then
+            echo "::error::Use a version tag such as v0.2.0-alpha.1."
+            exit 1
+          fi
+      - name: Install kernel and ISO build dependencies
+        timeout-minutes: 8
+        run: |
+          APT_OPTIONS=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${APT_OPTIONS[@]}" update
+          sudo apt-get "${APT_OPTIONS[@]}" install -y build-essential cmake nasm grub-pc-bin grub-common xorriso mtools qemu-system-x86 socat python3 e2fsprogs openssl
+      - name: Audit storage write safety
+        run: python3 scripts/check_storage_safety.py
+      - name: Test kernel spinlock concurrency
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pthread tests/test_spinlock.c -o /tmp/test_spinlock
+          /tmp/test_spinlock
+      - name: Test private virtual address spaces
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror -DVMM_TESTING tests/test_vmm_address_space.c kernel/memory/vmm.c -o /tmp/test_vmm_address_space
+          /tmp/test_vmm_address_space
+      - name: Test partition and storage boundaries
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_partition_validation.c kernel/storage/partition.c kernel/storage/blockdev.c -o /tmp/test_partition_validation
+          /tmp/test_partition_validation
+      - name: Test read-only ext2 filesystem
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_ext2_readonly.c kernel/storage/ext2.c kernel/vfs/vfs.c kernel/storage/blockdev.c -o /tmp/test_ext2_readonly
+          /tmp/test_ext2_readonly
+      - name: Test safe storage journal and crash recovery
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_storage_journal.c kernel/storage/storage_journal.c kernel/storage/blockdev.c -o /tmp/test_storage_journal
+          /tmp/test_storage_journal
+      - name: Audit network implementation integrity
+        run: python3 scripts/check_network_integrity.py
+      - name: Audit prototype claim integrity
+        run: python3 scripts/check_prototype_claims.py
+      - name: Test ARP packet validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_arp_validation.c kernel/net/arp.c kernel/net/ethernet.c kernel/net/ipv4.c -o /tmp/test_arp_validation
+          /tmp/test_arp_validation
+      - name: Test IPv4 receive validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_ipv4_validation.c kernel/net/ipv4.c -o /tmp/test_ipv4_validation
+          /tmp/test_ipv4_validation
+      - name: Test ELF64 image validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_elf_validation.c kernel/exec/elf.c -o /tmp/test_elf_validation
+          /tmp/test_elf_validation
+      - name: Test syscall ABI and lifecycle handlers
+        run: |
+          cc -std=gnu17 -Wall -Wextra -Werror tests/test_syscall_abi.c kernel/syscall/syscall.c -o /tmp/test_syscall_abi
+          /tmp/test_syscall_abi
+      - name: Compile freestanding user-mode libc and network ABI
+        run: |
+          cc -std=c11 -m64 -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror -Ilibc/include -c libc/src/libc.c -o /tmp/phoxtra_libc.o
+          cc -std=c11 -m64 -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror -Ilibc/include -c libc/src/net.c -o /tmp/phoxtra_user_net.o
+          objdump -d /tmp/phoxtra_libc.o /tmp/phoxtra_user_net.o | grep -q 'int    $0x80'
       - name: Configure
-        run: cmake -B build -S .
+        run: cmake -B build -S . -DPHOXTRA_ENABLE_USERMODE_SMOKE=ON -DPHOXTRA_ENABLE_GUEST_HTTPS_SMOKE=ON
+      - name: Build and test verified HTTPS transport
+        run: |
+          cmake --build build --target test_https_client phoxtra_userlib phoxtra_guest_https_elf phoxtra_guest_https_fixture -j2
+          tests/run_https_client_tests.sh build/test_https_client
       - name: Build kernel
         run: cmake --build build -j2
       - name: Build alternate product profiles
@@ -34,46 +120,203 @@ jobs:
       - name: Boot ISO and check desktop framebuffer
         shell: bash
         run: |
-          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm
-          qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -display none \
+          rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-settings-screen.ppm /tmp/phoxtra-ahci-test.img
+          truncate -s 64M /tmp/phoxtra-ahci-test.img
+          TCP_GUEST_PORT=4242
+          TCP_HOST_PORT=44242
+          HTTPS_HOST_PORT=44243
+          python3 tests/https_guest_test_server.py --cert build/guest-https/server.pem --key build/guest-https/server.key --port "$HTTPS_HOST_PORT" > /tmp/phoxtra-https-test-server.log 2>&1 &
+          HTTPS_SERVER_PID=$!
+          for attempt in $(seq 1 40); do
+            grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log && break
+            kill -0 "$HTTPS_SERVER_PID" 2>/dev/null || { cat /tmp/phoxtra-https-test-server.log; exit 1; }
+            sleep 0.25
+          done
+          grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          image = Path('/tmp/phoxtra-ahci-test.img')
+          sector = bytearray(512)
+          # One valid read-only MBR partition wholly within this 64 MiB test image.
+          struct.pack_into('<B3sB3sII', sector, 446, 0, b'\x00\x02\x00', 0x83,
+                           b'\xFE\xFF\xFF', 2048, 120000)
+          sector[510:512] = b'\x55\xAA'
+          with image.open('r+b') as handle:
+              handle.write(sector)
+          PY
+          # Format the partition as ext2 with directory indexing disabled for the supported read-only subset.
+          truncate -s 61440000 /tmp/phoxtra-ext2-partition.img
+          mke2fs -q -t ext2 -F -O ^dir_index /tmp/phoxtra-ext2-partition.img
+          printf 'Phoxtra on-disk ext2 read-only integration test.\n' > /tmp/phoxtra-ext2-file.txt
+          debugfs -w -R 'write /tmp/phoxtra-ext2-file.txt phoxtraci' /tmp/phoxtra-ext2-partition.img >/dev/null 2>&1
+          dd if=/tmp/phoxtra-ext2-partition.img of=/tmp/phoxtra-ahci-test.img bs=512 seek=2048 conv=notrunc status=none
+          sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
+          # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
+          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
+            -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
+            -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
             -monitor unix:/tmp/qemu-monitor.sock,server,nowait \
             -no-reboot -no-shutdown &
           QEMU_PID=$!
-          cleanup() { kill "$QEMU_PID" 2>/dev/null || true; }
+          cleanup() { kill "$QEMU_PID" "$HTTPS_SERVER_PID" 2>/dev/null || true; }
           trap cleanup EXIT
           for attempt in $(seq 1 40); do
             [ -S /tmp/qemu-monitor.sock ] && break
             sleep 0.25
           done
           sleep 8
+          for attempt in $(seq 1 80); do
+            grep -Fq 'PHOXTRA_PROCESS_CLEANUP_OK' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_USERMODE_TESTS_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_ISOLATION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_CREATE_VALIDATION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USER_FAULT_TEST_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USER_PAGE_FAULT_ISOLATED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_MALFORMED_ELF_REJECTION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USERMODE_A_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USERMODE_B_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_CLEANUP_OK' /tmp/phoxtra-serial.log
+          [ "$(grep -c 'SYS_PRINT rejected inaccessible user pointer' /tmp/phoxtra-serial.log || true)" -ge 2 ]
+          [ "$(grep -c 'User process exited via SYS_EXIT' /tmp/phoxtra-serial.log || true)" -ge 2 ]
+          if grep -Fq 'PHOXTRA_USERMODE_TEST_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'A user process reported a syscall ABI / return-value regression.'
+            exit 1
+          fi
+          if grep -Fq 'PHOXTRA_PROCESS_ISOLATION_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_PROCESS_CLEANUP_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_MALFORMED_ELF_REJECTION_FAILED' /tmp/phoxtra-serial.log ||
+             grep -Fq 'PHOXTRA_USERMODE_TEST_SETUP_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'A user-process integration assertion failed.'
+            exit 1
+          fi
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
           grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
-          # Wait until shell_start has completed framebuffer console rendering.
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
             sleep 0.5
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
+          # QEMU's user-mode network should provide a DHCP lease to the E1000 guest.
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_NETWORK_DHCP_OK' /tmp/phoxtra-serial.log && break
+            grep -Fq 'PHOXTRA_NETWORK_DHCP_FAILED' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_NETWORK_DHCP_OK' /tmp/phoxtra-serial.log
+          # Exercise a real DNS A lookup through the guest network path before GUI startup.
+          { for key in d n s spc e x a m p l e dot c o m ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log
+          # Real TCP handshake and request/response through QEMU's E1000 and guest socket stack.
+          { for key in t c p c h e c k ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_TCP_E2E_LISTENER_READY' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_TCP_E2E_LISTENER_READY' /tmp/phoxtra-serial.log
+          python3 tests/qemu_tcp_probe.py "$TCP_HOST_PORT"
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_TCP_E2E_OK' /tmp/phoxtra-serial.log && break
+            grep -Fq 'PHOXTRA_TCP_E2E_FAILED' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_TCP_E2E_OK' /tmp/phoxtra-serial.log
+          if grep -Fq 'PHOXTRA_TCP_E2E_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'End-to-end TCP validation failed.'
+            exit 1
+          fi
+          # Require a guest user process to complete verified TLS and an HTTP exchange.
+          for attempt in $(seq 1 120); do
+            grep -Fq 'PHOXTRA_GUEST_HTTPS_OK' /tmp/phoxtra-serial.log && break
+            grep -E -q 'PHOXTRA_GUEST_HTTPS_(SETUP_FAILED|CONNECT_FAILED|CERTIFICATE_FAILED|TLS_FAILED|IO_OR_SETUP_FAILED|RESPONSE_FAILED)' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_PROCESS_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_STARTED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_GUEST_HTTPS_OK' /tmp/phoxtra-serial.log
+          if grep -E 'PHOXTRA_GUEST_HTTPS_(SETUP_FAILED|CONNECT_FAILED|CERTIFICATE_FAILED|TLS_FAILED|IO_OR_SETUP_FAILED|RESPONSE_FAILED)' /tmp/phoxtra-serial.log; then
+            echo 'Guest-side HTTPS integration failed.'
+            cat /tmp/phoxtra-https-test-server.log
+            exit 1
+          fi
+          wait "$HTTPS_SERVER_PID"
+          grep -Fq "HTTPS_SERVER_REQUEST_OK GET /" /tmp/phoxtra-https-test-server.log
+          grep -Fq "PHOXTRA_GUEST_HTTPS_OK" /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
+          grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
+          grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
+          grep -q 'PHOXTRA_HWPROBE_READY' /tmp/phoxtra-serial.log
+          grep -q 'e1000 hardware driver initialized' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled' /tmp/phoxtra-serial.log
+          grep -q 'AHCI: confirmed read-only sector I/O on SATA device' /tmp/phoxtra-serial.log
+          grep -q 'Hardware probe: non-simulated block devices are registered' /tmp/phoxtra-serial.log
+          grep -Fq 'Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled' /tmp/phoxtra-serial.log
+          grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
+          # Read a real file from the physical-partition path before entering the desktop.
+          { for key in c a t spc slash s a t a 0 p 1 slash p h o x t r a c i ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
             sleep 0.25
           done
           grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log
-          # Exercise a real PS/2 mouse click on the first folder in the file manager.
-          { printf 'mouse_move 40 -60\n'; sleep 0.2; printf 'mouse_move 40 -60\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { for key in 1 2 3 1; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ] && break
+            sleep 0.25
+          done
+          [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 4 ]
+          { printf 'sendkey p\n'; sleep 0.3; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Phoxtra Settings panel opened' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Phoxtra Settings panel opened' /tmp/phoxtra-serial.log
+          sleep 0.5
+          printf 'screendump /tmp/phoxtra-settings-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 0.5
+          test -s /tmp/phoxtra-settings-screen.ppm
+          { for key in 2 q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Phoxtra Settings panel closed' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Phoxtra Settings panel closed' /tmp/phoxtra-serial.log
+          [ "$(grep -c 'Phoxtra Desktop Theme Changed' /tmp/phoxtra-serial.log || true)" -ge 5 ]
+          { for key in a w b q; do printf 'sendkey %s\n' "$key"; sleep 0.3; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 20); do
+            grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
+          grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
+          # Cursor visual/trail comparison remains deferred; retain functional input checks.
+          { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          sleep 0.5
+          cat /tmp/phoxtra-serial.log
+          grep -q 'Desktop mouse click event received' /tmp/phoxtra-serial.log
+          grep -q 'File manager entry hit-test succeeded' /tmp/phoxtra-serial.log
           for attempt in $(seq 1 20); do
             grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log && break
             sleep 0.25
           done
           grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           grep -q 'File manager navigated to directory' /tmp/phoxtra-serial.log
-          # Also verify keyboard-driven folder and file creation.
           { for key in f n c; do printf 'sendkey %s\n' "$key"; sleep 0.35; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
@@ -81,7 +324,6 @@ jobs:
           grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log
           printf 'screendump /tmp/phoxtra-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
-          # Leave the desktop event loop so the test can confirm a clean return to the shell.
           printf 'sendkey esc\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'GUI compositor render completed' /tmp/phoxtra-serial.log && break
@@ -92,7 +334,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           data = Path('/tmp/phoxtra-screen.ppm').read_bytes()
-          # Parse the PPM header, allowing whitespace/comments before pixel data.
           i = 0
           tokens = []
           while len(tokens) < 4:
@@ -107,16 +348,27 @@ jobs:
                   i += 1
               tokens.append(data[start:i])
           magic, width, height, maxval = tokens
-          while i < len(data) and data[i] in b' \t\r\n':
-              i += 1
           assert magic == b'P6' and int(maxval) == 255, 'unexpected screenshot format'
+
+          def binary_payload_offset(blob, offset):
+              # Consume the P6 header separator only. RGB bytes are arbitrary
+              # binary data and can themselves equal ASCII whitespace bytes.
+              assert offset < len(blob) and blob[offset] in b' \t\r\n', 'missing PPM header separator'
+              return offset + 2 if blob[offset:offset + 2] == b'\r\n' else offset + 1
+
+          # Regression: ensure whitespace-valued bytes at the beginning of a
+          # binary PPM payload are not swallowed as part of the header.
+          probe = b'P6\n1 1\n255\n' + bytes((0x0A, 0x0D, 0x20))
+          probe_start = probe.index(b'255') + 3
+          assert probe[binary_payload_offset(probe, probe_start):] == bytes((0x0A, 0x0D, 0x20)), 'PPM parser consumed whitespace-valued pixels'
+
+          i = binary_payload_offset(data, i)
           pixels = data[i:]
           assert len(pixels) >= int(width) * int(height) * 3, 'incomplete screenshot'
           sample = pixels[:int(width) * int(height) * 3]
           colors = {sample[j:j+3] for j in range(0, len(sample), 3)}
           print(f'QEMU screenshot: {width}x{height}; sampled colors: {len(colors)}')
           assert len(colors) > 20, 'desktop gradient not detected; GUI may not have rendered'
-          # Phoxtra brand mark is rendered in the left dock launcher at x=16,y=728.
           logo_colors = set()
           w, h = int(width), int(height)
           for y in range(728, min(760, h)):
@@ -126,6 +378,7 @@ jobs:
           print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
           assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
+          sha256sum -c /tmp/phoxtra-ahci-test.before.sha256
 
       - name: Upload QEMU screenshot and serial diagnostics
         if: always()
@@ -134,5 +387,38 @@ jobs:
           name: phoxtra-qemu-debug
           path: |
             /tmp/phoxtra-screen.ppm
+            /tmp/phoxtra-settings-screen.ppm
             /tmp/phoxtra-serial.log
           if-no-files-found: warn
+
+      - name: Generate ISO checksum
+        if: success()
+        run: sha256sum build/phoxtra.iso > build/phoxtra.iso.sha256
+
+      - name: Publish validated Phoxtra OS ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoxtra-os-iso-${{ github.sha }}
+          path: |
+            build/phoxtra.iso
+            build/phoxtra.iso.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create unpublished draft release (manual opt-in only)
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.create_draft_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: Phoxtra OS ${{ inputs.release_tag }} (Draft)
+          draft: true
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            This is an unpublished draft for internal review. It is not approved for public distribution.
+
+            Phoxtra OS is an experimental x86_64 operating-system prototype. See the repository README and release gates for current limitations. The ISO does not provide persistent physical-disk support or an installer; do not install it to an internal disk. Physical-laptop validation is still required. This is not a mobile-phone build.
+          files: |
+            build/phoxtra.iso
+            build/phoxtra.iso.sha256
