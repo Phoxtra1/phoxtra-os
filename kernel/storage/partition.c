@@ -46,81 +46,87 @@ static void create_partition_subdev(block_device_t* master, const char* name, ui
     blockdev_register(&part->block_dev);
 }
 
-int partition_parse(block_device_t* master) {
-    if (!master || !master->read_sectors) return -1;
+static int partition_has_valid_gpt_header(block_device_t* master) {
+    if (!master || !master->read_sectors ||
+        master->sector_size != 512 || master->total_sectors < 2) {
+        return 0;
+    }
+    uint8_t sector[512] = {0};
+    if (master->read_sectors(master, 1, 1, sector) != 0) return 0;
+    const gpt_header_t* gpt = (const gpt_header_t*)sector;
+    return gpt->signature == 0x5452415020494645ULL;
+}
 
-    uint8_t sector_buf[512];
+int partition_parse(block_device_t* master) {
+    if (!master || !master->read_sectors || master->total_sectors == 0) {
+        return -1;
+    }
+    if (master->sector_size != 512) {
+        klog(LOG_WARNING, "Partition discovery: unsupported sector size; disk unchanged");
+        return -2;
+    }
+
+    uint8_t sector_buf[512] = {0};
     if (master->read_sectors(master, 0, 1, sector_buf) != 0) {
-        klog(LOG_ERROR, "Partition Parser: Failed to read LBA 0");
+        klog(LOG_ERROR, "Partition discovery: failed to read LBA 0");
         return -1;
     }
 
     mbr_sector_t* mbr = (mbr_sector_t*)sector_buf;
-
-    // Check MBR signature 0xAA55
-    if (mbr->signature == 0xAA55) {
-        klog(LOG_INFO, "Partition Parser: Valid MBR Header Detected");
-
-        int valid_entries = 0;
-        for (int i = 0; i < 4; i++) {
-            if (mbr->entries[i].sys_id != 0 && mbr->entries[i].total_sectors > 0) {
-                char pname[32];
-                pname[0] = '\0';
-                // Build partition name, e.g. sata0p1
-                kstrncpy(pname, master->name, 24);
-                int len = 0; while (pname[len]) len++;
-                pname[len++] = 'p';
-                pname[len++] = '1' + i;
-                pname[len]   = '\0';
-
-                create_partition_subdev(master, pname, mbr->entries[i].start_lba, mbr->entries[i].total_sectors, mbr->entries[i].sys_id);
-                valid_entries++;
-            }
+    if (mbr->signature != 0xAA55) {
+        if (partition_has_valid_gpt_header(master)) {
+            klog(LOG_WARNING, "GPT detected; enumeration is not implemented; disk unchanged");
+            return -2;
         }
-
-        if (valid_entries == 0) {
-            klog(LOG_INFO, "Partition Parser: Initializing default GPT/MBR partition map");
-            // Set up 3 standard partitions on master drive:
-            // p1: /boot (Ext2, 8MB = 16384 sectors)
-            // p2: /usr  (Ext2, 16MB = 32768 sectors)
-            // p3: /home (FAT32, 8MB = 16384 sectors)
-            char p1_name[32], p2_name[32], p3_name[32];
-            kstrncpy(p1_name, master->name, 24); kstrncpy(p2_name, master->name, 24); kstrncpy(p3_name, master->name, 24);
-            int l = 0; while (p1_name[l]) l++;
-            p1_name[l] = 'p'; p1_name[l+1] = '1'; p1_name[l+2] = '\0';
-            p2_name[l] = 'p'; p2_name[l+1] = '2'; p2_name[l+2] = '\0';
-            p3_name[l] = 'p'; p3_name[l+1] = '3'; p3_name[l+2] = '\0';
-
-            create_partition_subdev(master, p1_name, 2048, 16384, 0x83);  // Ext2 Linux
-            create_partition_subdev(master, p2_name, 18432, 32768, 0x83); // Ext2 Linux
-            create_partition_subdev(master, p3_name, 51200, 14336, 0x0C); // FAT32 LBA
-
-            // Write MBR back to sector 0
-            mbr->signature = 0xAA55;
-            mbr->entries[0].start_lba = 2048;  mbr->entries[0].total_sectors = 16384; mbr->entries[0].sys_id = 0x83;
-            mbr->entries[1].start_lba = 18432; mbr->entries[1].total_sectors = 32768; mbr->entries[1].sys_id = 0x83;
-            mbr->entries[2].start_lba = 51200; mbr->entries[2].total_sectors = 14336; mbr->entries[2].sys_id = 0x0C;
-            master->write_sectors(master, 0, 1, sector_buf);
-        }
-        return 0;
+        klog(LOG_WARNING, "No supported partition table; disk left unchanged");
+        return -1;
     }
 
-    klog(LOG_WARNING, "Partition Parser: MBR signature missing, initializing MBR");
-    mbr->signature = 0xAA55;
-    mbr->entries[0].start_lba = 2048;  mbr->entries[0].total_sectors = 16384; mbr->entries[0].sys_id = 0x83;
-    mbr->entries[1].start_lba = 18432; mbr->entries[1].total_sectors = 32768; mbr->entries[1].sys_id = 0x83;
-    mbr->entries[2].start_lba = 51200; mbr->entries[2].total_sectors = 14336; mbr->entries[2].sys_id = 0x0C;
-    master->write_sectors(master, 0, 1, sector_buf);
+    /* A protective MBR indicates GPT; never expose it as a normal volume. */
+    for (int i = 0; i < 4; ++i) {
+        if (mbr->entries[i].sys_id == 0xEE) {
+            if (partition_has_valid_gpt_header(master)) {
+                klog(LOG_WARNING, "GPT detected; GPT enumeration is not implemented; disk unchanged");
+            } else {
+                klog(LOG_WARNING, "Protective GPT entry detected; disk unchanged");
+            }
+            return -2;
+        }
+    }
 
-    create_partition_subdev(master, "sata0p1", 2048, 16384, 0x83);
-    create_partition_subdev(master, "sata0p2", 18432, 32768, 0x83);
-    create_partition_subdev(master, "sata0p3", 51200, 14336, 0x0C);
+    klog(LOG_INFO, "Valid MBR detected; scanning existing primary partitions");
+    int valid_entries = 0;
+    for (int i = 0; i < 4; ++i) {
+        const uint8_t sys_id = mbr->entries[i].sys_id;
+        const uint64_t start = mbr->entries[i].start_lba;
+        const uint64_t count = mbr->entries[i].total_sectors;
+        if (sys_id == 0 || count == 0) continue;
 
+        /* Validate bounds before publishing a partition device. */
+        if (start == 0 || start >= master->total_sectors ||
+            count > master->total_sectors - start) {
+            klog(LOG_WARNING, "Partition discovery: skipped out-of-range MBR entry");
+            continue;
+        }
+
+        char pname[32] = {0};
+        kstrncpy(pname, master->name, 24);
+        int len = 0;
+        while (pname[len] && len < (int)sizeof(pname) - 3) ++len;
+        pname[len++] = 'p';
+        pname[len++] = (char)('1' + i);
+        pname[len] = '\0';
+        create_partition_subdev(master, pname, start, count, sys_id);
+        ++valid_entries;
+    }
+
+    if (valid_entries == 0) {
+        klog(LOG_INFO, "MBR has no valid primary partitions; disk left unchanged");
+    }
     return 0;
 }
-
 void partition_init(void) {
-    klog(LOG_INFO, "Initializing MBR & GPT Partition Table Subsystem...");
+    klog(LOG_INFO, "Initializing read-only partition discovery (MBR; GPT detection only)");
     uint32_t count = blockdev_count();
     for (uint32_t i = 0; i < count; i++) {
         block_device_t* dev = blockdev_get_by_index(i);

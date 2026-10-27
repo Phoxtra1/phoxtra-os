@@ -26,6 +26,7 @@ int ld_so_load_library(const char* lib_path) {
 }
 
 uint64_t ld_so_resolve_symbol(const char* lib_name, const char* symbol_name) {
+    (void)lib_name;
     if (!symbol_name) return 0;
 
     klog(LOG_INFO, "ld.so: Resolving symbol binding...");

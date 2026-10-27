@@ -5,6 +5,11 @@
 #include "../log/logger.h"
 #include "phoxtra_logo.h"
 
+/* Reuse the source brand mark in splash and taskbar at a single colour. */
+void compositor_draw_phoxtra_mark(uint32_t x, uint32_t y, uint32_t size, uint32_t color) {
+    phoxtra_logo_draw(x, y, size, color);
+}
+
 #define MAX_WINDOWS 16
 static window_t window_list[MAX_WINDOWS];
 static uint32_t z_order[MAX_WINDOWS];
@@ -89,9 +94,17 @@ void compositor_render_frame(void) {
         fb_draw_rect(win->x, win->y, win->width, 32, 0x00475569);
 
         // Action Buttons (Close / Minimize / Maximize)
-        fb_fill_rect(win->x + 12, win->y + 10, 12, 12, 0x00EF4444); // Red Close
-        fb_fill_rect(win->x + 30, win->y + 10, 12, 12, 0x00F59E0B); // Yellow Min
-        fb_fill_rect(win->x + 48, win->y + 10, 12, 12, 0x0010B981); // Green Max
+        fb_fill_rect(win->x + 12, win->y + 10, 12, 12, 0x00B94A50); // Red Close
+        fb_fill_rect(win->x + 30, win->y + 10, 12, 12, 0x00C8A34A); // Yellow Min
+        fb_fill_rect(win->x + 48, win->y + 10, 12, 12, 0x00385F8C); // Green Max
+
+        /* Phoxtra controls: red close, gold minimize, deep-blue maximize. */
+        for (uint32_t k = 0; k < 5u; ++k) {
+            fb_put_pixel(win->x + 15u + k, win->y + 13u + k, 0x00FFFFFF);
+            fb_put_pixel(win->x + 19u - k, win->y + 13u + k, 0x00FFFFFF);
+        }
+        fb_fill_rect(win->x + 33u, win->y + 16u, 6u, 1u, 0x00FFFFFF);
+        fb_draw_rect(win->x + 51u, win->y + 13u, 6u, 6u, 0x00FFFFFF);
 
         // Window Title Text
         font_draw_string_bold(win->title, win->x + 70, win->y + 8, 0x00F8FAFC, 0x00000000);
@@ -102,10 +115,10 @@ void compositor_render_frame(void) {
     fb_draw_rect(0, FB_HEIGHT - 48, FB_WIDTH, 48, 0x00334155);
 
     // Taskbar Launcher Buttons & System Clock
-    fb_fill_rect(8, FB_HEIGHT - 48, 140, 48, 0x000F172A);
-    fb_draw_rect(8, FB_HEIGHT - 48, 140, 48, 0x0006B6D4);
-    phoxtra_logo_draw(12, FB_HEIGHT - 48, 48);
-    font_draw_string_bold("PHOXTRA", 64, FB_HEIGHT - 30, 0x0038BDF8, 0x00000000);
+    fb_fill_rect(8, FB_HEIGHT - 42, 126, 34, 0x000F172A);
+    fb_draw_rect(8, FB_HEIGHT - 42, 126, 34, 0x0006B6D4);
+    phoxtra_logo_draw(14, FB_HEIGHT - 37, 20, 0x00F8FAFC);
+    font_draw_string_bold("PHOXTRA", 39, FB_HEIGHT - 30, 0x00F8FAFC, 0x00000000);
 
     font_draw_string("TERMINAL", 150, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);
     font_draw_string("SECURITY", 240, FB_HEIGHT - 32, 0x0094A3B8, 0x00000000);

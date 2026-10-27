@@ -10,7 +10,7 @@ static e1000_rx_desc_t rx_descs[E1000_NUM_RX_DESC];
 static e1000_tx_desc_t tx_descs[E1000_NUM_TX_DESC];
 static uint8_t rx_buffers[E1000_NUM_RX_DESC][2048];
 static uint8_t tx_buffers[E1000_NUM_TX_DESC][2048];
-static uint32_t rx_cur = 0;
+static uint32_t __attribute__((unused)) rx_cur = 0;
 static uint32_t tx_cur = 0;
 static uint8_t e1000_initialized = 0;
 
@@ -74,6 +74,7 @@ int e1000_send_packet(netdev_t* dev, const uint8_t* buffer, uint32_t len) {
 }
 
 int e1000_receive_packet(netdev_t* dev, uint8_t* buffer, uint32_t max_len) {
+    (void)max_len;
     if (!dev || !buffer) return -1;
     // Ring polling mock interface
     return 0;

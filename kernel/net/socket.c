@@ -61,6 +61,7 @@ int sys_connect(int sockfd, const sockaddr_in_t* addr) {
 }
 
 int sys_listen(int sockfd, int backlog) {
+    (void)backlog;
     if (sockfd < 0 || sockfd >= MAX_SOCKETS) return -1;
     socket_entry_t* sock = &socket_table[sockfd];
     if (!sock->in_use) return -1;
@@ -71,6 +72,7 @@ int sys_listen(int sockfd, int backlog) {
 }
 
 int sys_send(int sockfd, const void* buf, uint32_t len, int flags) {
+    (void)flags;
     if (sockfd < 0 || sockfd >= MAX_SOCKETS || !buf) return -1;
     socket_entry_t* sock = &socket_table[sockfd];
     if (!sock->in_use) return -1;
@@ -85,6 +87,7 @@ int sys_send(int sockfd, const void* buf, uint32_t len, int flags) {
 }
 
 int sys_recv(int sockfd, void* buf, uint32_t len, int flags) {
+    (void)len; (void)flags;
     if (sockfd < 0 || sockfd >= MAX_SOCKETS || !buf) return -1;
     return 0;
 }

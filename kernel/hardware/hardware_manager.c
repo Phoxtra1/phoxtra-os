@@ -10,7 +10,7 @@ static int kstrcmp(const char* s1, const char* s2) {
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
-static void kstrncpy(char* dest, const char* src, uint32_t n) {
+static void __attribute__((unused)) kstrncpy(char* dest, const char* src, uint32_t n) {
     uint32_t i = 0;
     while (i < n - 1 && src[i] != '\0') {
         dest[i] = src[i];

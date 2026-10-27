@@ -29,6 +29,13 @@ static uint32_t context_menu_x = 0, context_menu_y = 0;
 #define DESKTOP_MENU_WIDTH 304u
 #define DESKTOP_MENU_HEIGHT 310u
 
+
+static void wm_create_new_folder(void);
+static void wm_create_new_file(void);
+static void wm_draw_context_menu(void);
+static int wm_handle_context_menu_click(uint32_t x, uint32_t y);
+static void wm_handle_right_click(uint32_t x, uint32_t y);
+
 void wm_init(void) {
     klog(LOG_INFO, "Initializing Phoxtra desktop window manager");
     theme_init();
@@ -45,7 +52,41 @@ void wm_init(void) {
 }
 
 void wm_start_desktop(void) {
-    klog(LOG_INFO, "Starting Phoxtra desktop at 1024x768");
+    klog(LOG_INFO, "Starting Phoxtra desktop splash animation");
+    const uint64_t start_ticks = timer_get_ticks();
+    uint64_t last_frame = ~(uint64_t)0;
+    const uint64_t duration_ticks = 260u; /* 2.6 seconds at the configured 100 Hz timer. */
+
+    while (1) {
+        uint64_t now = timer_get_ticks();
+        uint64_t elapsed = now - start_ticks;
+        if (elapsed >= duration_ticks) break;
+        uint64_t frame = elapsed / 4u;
+        if (frame != last_frame) {
+            uint32_t bg_start = 0x0009162Du, bg_end = 0x001D4E89u;
+            theme_get_wallpaper_colors(&bg_start, &bg_end);
+            fb_draw_gradient(0, 0, FB_WIDTH, FB_HEIGHT, bg_start, bg_end);
+
+            /* A restrained pulse keeps the brand mark monochrome and crisp. */
+            uint32_t size = 46u + (uint32_t)(frame % 7u);
+            uint32_t logo_x = (FB_WIDTH - size) / 2u;
+            uint32_t logo_y = 300u - size / 2u;
+            compositor_draw_phoxtra_mark(logo_x, logo_y, size, 0x00DCEBFFu);
+
+            font_draw_string_bold("PHOXTRA", FB_WIDTH / 2u - (7u * FONT_WIDTH) / 2u,
+                                  354u, 0x00F8FAFCu, 0);
+            font_draw_string("Preparing your desktop", FB_WIDTH / 2u - 100u,
+                             393u, 0x00CBD5E1u, 0);
+
+            fb_fill_rect(FB_WIDTH / 2u - 150u, 435u, 300u, 4u, 0x0030445Du);
+            uint32_t progress = (uint32_t)((elapsed * 300u) / duration_ticks);
+            if (progress > 300u) progress = 300u;
+            fb_fill_rect(FB_WIDTH / 2u - 150u, 435u, progress, 4u, 0x0038BDF8u);
+            platform_display_present();
+            last_frame = frame;
+        }
+        __asm__ volatile ("sti; hlt" ::: "memory");
+    }
 }
 
 static void wm_draw_desktop_icons(void) {
@@ -81,7 +122,7 @@ static void wm_draw_pointer(void) {
     static const char* const arrow[18] = {
         "X...........", "XX..........", "XWX.........", "XWWX........",
         "XWWWX.......", "XWWWWX......", "XWWWWWX.....", "XWWWWWWX....",
-        "XWWWWWWWX...", "XWWWWWWWWX..", "XWWWWXXXXX...", "XXWWX.......",
+        "XWWWWWWWX...", "XWWWWWWWWX..", "XWWWWXXXXX..", "XXWWX.......",
         ".XWWX.......", ".XWWX.......", "..XWWX......", "..XWWX......",
         "..XX........", "..X........."
     };
@@ -96,79 +137,65 @@ static void wm_draw_pointer(void) {
             uint32_t x = (uint32_t)px + col;
             uint32_t y = (uint32_t)py + row;
             if (x >= FB_WIDTH || y >= FB_HEIGHT) continue;
-            platform_display_put_pixel(x, y,
-                mark == 'W' ? 0x00FFFFFFu : 0x00030A16u);
+            fb_put_pixel(x, y, mark == 'W' ? 0x00FFFFFFu : 0x00030A16u);
         }
     }
 }
 
+
 static void wm_draw_context_menu(void) {
     if (!context_menu_open) return;
-    theme_palette_t* pal = theme_get_current();
-    uint32_t x = context_menu_x, y = context_menu_y;
-    fb_fill_rect(x, y, DESKTOP_MENU_WIDTH, DESKTOP_MENU_HEIGHT, 0x00101828);
-    fb_draw_rect(x, y, DESKTOP_MENU_WIDTH, DESKTOP_MENU_HEIGHT, pal->accent_secondary);
-    font_draw_string_bold("PHOXTRA DESKTOP", x + 12, y + 7, 0x00F8FAFC, 0);
-    fb_fill_rect(x + 8, y + 31, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
-    font_draw_string_bold("WALLPAPER", x + 12, y + 36, pal->accent_primary, 0);
 
-    for (uint32_t i = 0; i < theme_get_wallpaper_count(); ++i) {
-        uint32_t row_y = y + 59u + i * 25u;
-        if (theme_get_wallpaper_index() == i)
-            fb_fill_rect(x + 6, row_y - 2, DESKTOP_MENU_WIDTH - 12, 24, 0x0030445D);
-        char prefix[3] = { (char)('1' + i), ' ', '\0' };
-        font_draw_string(prefix, x + 12, row_y, 0x00BAE6FD, 0);
-        font_draw_string(theme_get_wallpaper_name(i), x + 34, row_y, pal->text_color, 0);
-    }
+    uint32_t menu_w = 176;
+    uint32_t menu_h = 76;
+    uint32_t x = context_menu_x;
+    uint32_t y = context_menu_y;
 
-    fb_fill_rect(x + 8, y + 163, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
-    font_draw_string_bold("COLOUR SCHEME", x + 12, y + 169, pal->accent_primary, 0);
-    static const char* const theme_names[3] = {
-        "1  Phoxtra Blue", "2  Cyber Sapphire", "3  Emerald Dark"
-    };
-    for (uint32_t i = 0; i < 3u; ++i) {
-        uint32_t row_y = y + 194u + i * 26u;
-        if (theme_get_current_index() == i)
-            fb_fill_rect(x + 6, row_y - 2, DESKTOP_MENU_WIDTH - 12, 24, 0x0030445D);
-        font_draw_string(theme_names[i], x + 12, row_y, pal->text_color, 0);
-    }
-    fb_fill_rect(x + 8, y + 274, DESKTOP_MENU_WIDTH - 16, 1, 0x00475569);
-    font_draw_string("Right-click desktop to reopen", x + 12, y + 282, 0x0094A3B8, 0);
+    if (x + menu_w > FB_WIDTH) x = FB_WIDTH - menu_w;
+    if (y + menu_h > FB_HEIGHT - 48) y = FB_HEIGHT - 48 - menu_h;
+
+    platform_display_fill_rect(x, y, menu_w, menu_h, 0x001E293B);
+    platform_display_fill_rect(x, y, menu_w, 2, 0x0038BDF8);
+    font_draw_string("New Folder", x + 12, y + 12, 0x00F8FAFC, 0x001E293B);
+    font_draw_string("New File",   x + 12, y + 34, 0x00F8FAFC, 0x001E293B);
+    font_draw_string("Close Menu", x + 12, y + 56, 0x0094A3B8, 0x001E293B);
 }
 
-/* Returns 1 when the click is consumed by the open menu. */
 static int wm_handle_context_menu_click(uint32_t x, uint32_t y) {
     if (!context_menu_open) return 0;
-    if (x < context_menu_x || x >= context_menu_x + DESKTOP_MENU_WIDTH ||
-        y < context_menu_y || y >= context_menu_y + DESKTOP_MENU_HEIGHT) {
+
+    uint32_t menu_x = context_menu_x;
+    uint32_t menu_y = context_menu_y;
+    const uint32_t menu_w = 176;
+    const uint32_t menu_h = 76;
+
+    if (menu_x + menu_w > FB_WIDTH) menu_x = FB_WIDTH - menu_w;
+    if (menu_y + menu_h > FB_HEIGHT - 48)
+        menu_y = FB_HEIGHT - 48 - menu_h;
+
+    if (x >= menu_x && x < menu_x + menu_w &&
+        y >= menu_y && y < menu_y + menu_h) {
+        uint32_t item = (y - menu_y) / 24;
         context_menu_open = 0;
-        return 0;
+
+        if (item == 0) wm_create_new_folder();
+        else if (item == 1) wm_create_new_file();
+        return 1;
     }
 
-    uint32_t rel_y = y - context_menu_y;
-    if (rel_y >= 59u && rel_y < 159u) {
-        uint32_t index = (rel_y - 59u) / 25u;
-        if (index < theme_get_wallpaper_count()) theme_set_wallpaper(index);
-    } else if (rel_y >= 194u && rel_y < 272u) {
-        uint32_t index = (rel_y - 194u) / 26u;
-        if (index < 3u) theme_set(index);
-    }
     context_menu_open = 0;
-    return 1;
+    return 0;
 }
 
 static void wm_handle_right_click(uint32_t x, uint32_t y) {
-    if (y >= FB_HEIGHT - 48u || compositor_window_at_point(x, y)) {
+    if (y >= FB_HEIGHT - 48) {
         context_menu_open = 0;
         return;
     }
-    context_menu_open = 1;
+
     context_menu_x = x;
     context_menu_y = y;
-    if (context_menu_x + DESKTOP_MENU_WIDTH > FB_WIDTH)
-        context_menu_x = FB_WIDTH - DESKTOP_MENU_WIDTH;
-    if (context_menu_y + DESKTOP_MENU_HEIGHT > FB_HEIGHT - 48u)
-        context_menu_y = FB_HEIGHT - 48u - DESKTOP_MENU_HEIGHT;
+    context_menu_open = 1;
 }
 
 static void wm_render_desktop(void) {
@@ -243,18 +270,18 @@ static void wm_handle_desktop_icon(uint32_t x, uint32_t y) {
 static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
     (void)y;
     uint32_t local_x = x - win->x;
-    if (local_x < 28) {
+    if (local_x >= 12 && local_x < 28) {
         win->active = 0;
         if (focused_win == win) focused_win = 0;
         drag_win = 0;
         return;
     }
-    if (local_x < 46) {
+    if (local_x >= 30 && local_x < 46) {
         win->minimized = 1;
         drag_win = 0;
         return;
     }
-    if (local_x < 64) {
+    if (local_x >= 48 && local_x < 64) {
         if (!win->maximized) {
             win->restore_x = win->x; win->restore_y = win->y;
             win->restore_width = win->width; win->restore_height = win->height;

@@ -39,6 +39,7 @@
 #include "../services/platform.h"
 #include "../security/verify.h"
 #include "../services/entitlements.h"
+#include "../release/production.h"
 
 /* External subsystem APIs */
 

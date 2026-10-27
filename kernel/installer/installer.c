@@ -16,17 +16,15 @@ void installer_init(void) {
 
 void installer_start(void) {
     current_step = INSTALLER_WELCOME;
-    inst_win = compositor_create_window("Phoxtra OS v1.0.0 Commercial Installer", 100, 80, 820, 560, 0x00020617);
+    inst_win = compositor_create_window("Phoxtra OS Installer (Preview)", 100, 80, 820, 560, 0x00020617);
     if (!inst_win) return;
 
-    klog(LOG_INFO, "Launched Phoxtra OS Installation Wizard");
+    klog(LOG_WARNING, "Installer preview only: disk selection, partitioning, formatting, file copy, and boot installation are not implemented");
 }
 
 void installer_next_step(void) {
-    if (current_step < INSTALLER_COMPLETE) {
-        current_step++;
-        klog(LOG_INFO, "Installer Advanced to Next Step");
-    }
+    /* Do not report installation progress until real disk operations exist. */
+    klog(LOG_WARNING, "Installer cannot advance: persistent disk installation is not implemented");
 }
 
 installer_step_t installer_get_step(void) {

@@ -1,4 +1,5 @@
 #include "ahci.h"
+#include "partition.h"
 #include "../memory/heap.h"
 #include "../log/logger.h"
 
@@ -42,8 +43,24 @@ int ahci_write_sectors(block_device_t* dev, uint64_t lba, uint32_t count, const 
     return 0;
 }
 
+/* Demo-only partition map for the heap-backed RAM disk below.
+ * This must never be used by a physical storage controller driver. */
+static void seed_demo_partition_table(void) {
+    if (!sata_disk_storage) return;
+    mbr_sector_t* mbr = (mbr_sector_t*)sata_disk_storage;
+    mbr->entries[0].sys_id = 0x83;
+    mbr->entries[0].start_lba = 2048;
+    mbr->entries[0].total_sectors = 16384;
+    mbr->entries[1].sys_id = 0x83;
+    mbr->entries[1].start_lba = 18432;
+    mbr->entries[1].total_sectors = 32768;
+    mbr->entries[2].sys_id = 0x0C;
+    mbr->entries[2].start_lba = 51200;
+    mbr->entries[2].total_sectors = 14336;
+    mbr->signature = 0xAA55;
+}
 void ahci_init(void) {
-    klog(LOG_INFO, "Probing AHCI SATA & NVMe Controllers...");
+    klog(LOG_WARNING, "Using RAM-backed storage simulator; physical AHCI/NVMe I/O is not implemented");
 
     sata_disk_storage = (uint8_t*)kmalloc(AHCI_DISK_SECTOR_COUNT * 512);
     if (!sata_disk_storage) {
@@ -55,6 +72,8 @@ void ahci_init(void) {
         sata_disk_storage[i] = 0;
     }
 
+    /* Demo metadata for RAM simulation only; not a disk-install operation. */
+    seed_demo_partition_table();
     kstrncpy(ahci_sata_dev.name, "sata0", sizeof(ahci_sata_dev.name));
     ahci_sata_dev.total_sectors = AHCI_DISK_SECTOR_COUNT;
     ahci_sata_dev.sector_size   = 512;
@@ -64,5 +83,5 @@ void ahci_init(void) {
     ahci_sata_dev.priv_data     = (void*)0;
 
     blockdev_register(&ahci_sata_dev);
-    klog(LOG_INFO, "AHCI SATA Controller: Attached device /dev/sata0 (32MB LBA)");
+    klog(LOG_INFO, "Simulated block device: /dev/sata0 (32 MiB RAM; not a physical disk)");
 }
