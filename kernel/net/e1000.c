@@ -14,6 +14,7 @@
 
 #define E1000_REG_CTRL   0x0000u
 #define E1000_REG_STATUS 0x0008u
+#define E1000_REG_EERD   0x0014u
 #define E1000_REG_IMC    0x00D8u
 #define E1000_REG_RCTL   0x0100u
 #define E1000_REG_TCTL   0x0400u
@@ -132,24 +133,61 @@ static int e1000_reset_controller(void) {
     return -1;
 }
 
+static int e1000_read_eeprom_word(uint8_t address, uint16_t* output) {
+    if (!output || address > 63u) return -1;
+    e1000_write_reg(E1000_REG_EERD, ((uint32_t)address << 8) | 1u);
+    for (uint32_t poll = 0; poll < E1000_POLL_LIMIT; ++poll) {
+        uint32_t result = e1000_read_reg(E1000_REG_EERD);
+        if (result == 0xFFFFFFFFu) return -1;
+        if (result & 0x10u) {
+            *output = (uint16_t)(result >> 16);
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int e1000_read_mac(uint8_t mac[ETH_ALEN]) {
     if (!mac) return -1;
-    uint32_t low = e1000_read_reg(E1000_REG_RAL0);
-    uint32_t high = e1000_read_reg(E1000_REG_RAH0);
-    if (low == 0xFFFFFFFFu || high == 0xFFFFFFFFu || !(high & 0x80000000u))
-        return -1;
-    mac[0] = (uint8_t)low;
-    mac[1] = (uint8_t)(low >> 8);
-    mac[2] = (uint8_t)(low >> 16);
-    mac[3] = (uint8_t)(low >> 24);
-    mac[4] = (uint8_t)high;
-    mac[5] = (uint8_t)(high >> 8);
+
+    /* Read the controller's assigned MAC from EEPROM rather than assuming QEMU's
+       default address; program RAL/RAH before enabling receive. */
+    uint16_t words[3];
+    int eeprom_ok = e1000_read_eeprom_word(0u, &words[0]) == 0 &&
+                    e1000_read_eeprom_word(1u, &words[1]) == 0 &&
+                    e1000_read_eeprom_word(2u, &words[2]) == 0;
+    if (eeprom_ok) {
+        mac[0] = (uint8_t)words[0];
+        mac[1] = (uint8_t)(words[0] >> 8);
+        mac[2] = (uint8_t)words[1];
+        mac[3] = (uint8_t)(words[1] >> 8);
+        mac[4] = (uint8_t)words[2];
+        mac[5] = (uint8_t)(words[2] >> 8);
+    } else {
+        uint32_t low = e1000_read_reg(E1000_REG_RAL0);
+        uint32_t high = e1000_read_reg(E1000_REG_RAH0);
+        if (low == 0xFFFFFFFFu || high == 0xFFFFFFFFu || !(high & 0x80000000u))
+            return -1;
+        mac[0] = (uint8_t)low;
+        mac[1] = (uint8_t)(low >> 8);
+        mac[2] = (uint8_t)(low >> 16);
+        mac[3] = (uint8_t)(low >> 24);
+        mac[4] = (uint8_t)high;
+        mac[5] = (uint8_t)(high >> 8);
+    }
+
     uint8_t any = 0, all_ff = 1;
     for (uint32_t i = 0; i < ETH_ALEN; ++i) {
         any |= mac[i];
         if (mac[i] != 0xFFu) all_ff = 0;
     }
     if (!any || all_ff || (mac[0] & 1u)) return -1;
+
+    uint32_t low = (uint32_t)mac[0] | ((uint32_t)mac[1] << 8) |
+                   ((uint32_t)mac[2] << 16) | ((uint32_t)mac[3] << 24);
+    uint32_t high = (uint32_t)mac[4] | ((uint32_t)mac[5] << 8) | 0x80000000u;
+    e1000_write_reg(E1000_REG_RAL0, low);
+    e1000_write_reg(E1000_REG_RAH0, high);
     return 0;
 }
 
