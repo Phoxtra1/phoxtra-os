@@ -162,6 +162,9 @@ jobs:
           done
           grep -Fq 'PHOXTRA_USERMODE_TESTS_QUEUED' /tmp/phoxtra-serial.log
           grep -Fq 'PHOXTRA_PROCESS_ISOLATION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_PROCESS_CREATE_VALIDATION_OK' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USER_FAULT_TEST_QUEUED' /tmp/phoxtra-serial.log
+          grep -Fq 'PHOXTRA_USER_PAGE_FAULT_ISOLATED' /tmp/phoxtra-serial.log
           grep -Fq 'PHOXTRA_MALFORMED_ELF_REJECTION_OK' /tmp/phoxtra-serial.log
           grep -Fq 'PHOXTRA_USERMODE_A_OK' /tmp/phoxtra-serial.log
           grep -Fq 'PHOXTRA_USERMODE_B_OK' /tmp/phoxtra-serial.log

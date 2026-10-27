@@ -18,8 +18,10 @@
 static uint8_t smoke_image_a[SMOKE_IMAGE_SIZE];
 static uint8_t smoke_image_b[SMOKE_IMAGE_SIZE];
 static uint8_t malformed_image[SMOKE_IMAGE_SIZE];
+static uint8_t smoke_fault_image[SMOKE_IMAGE_SIZE];
 static uint32_t smoke_pid_a;
 static uint32_t smoke_pid_b;
+static uint32_t smoke_pid_fault;
 static uint32_t smoke_baseline_process_count;
 
 typedef struct smoke_code_builder {
@@ -258,7 +260,8 @@ static void smoke_process_monitor(void) {
     klog(LOG_INFO, "PHOXTRA_PROCESS_MONITOR_ENTERED");
     uint64_t start_tick = scheduler_get_uptime_ticks();
     int timer_wake_logged = 0;
-    while (process_lookup(smoke_pid_a) || process_lookup(smoke_pid_b)) {
+    while (process_lookup(smoke_pid_a) || process_lookup(smoke_pid_b) ||
+           process_lookup(smoke_pid_fault)) {
         if (scheduler_get_uptime_ticks() - start_tick > SMOKE_TEST_TICK_LIMIT) {
             klog(LOG_ERROR, "PHOXTRA_PROCESS_CLEANUP_FAILED: timeout");
             return;
@@ -299,6 +302,32 @@ void user_mode_smoke_init(void) {
         return;
     }
 
+    /*
+     * Reuse the validated ELF container and replace only its entry instructions
+     * with a load from an unmapped canonical user address. This tests the real
+     * Ring 3 #PF handler, not just the checked copy_from_user path.
+     */
+    for (size_t i = 0; i < sizeof(smoke_fault_image); ++i)
+        smoke_fault_image[i] = smoke_image_a[i];
+    static const uint8_t fault_code[] = {
+        0x48, 0xB8,                         /* movabs rax, 0x0000000200000000 */
+        0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x48, 0x8B, 0x00,                   /* mov rax, [rax] -> user #PF */
+        0xEB, 0xFE                          /* loop if the supposedly unmapped page exists */
+    };
+    for (size_t i = 0; i < sizeof(fault_code); ++i)
+        smoke_fault_image[SMOKE_FILE_OFFSET + i] = fault_code[i];
+
+    uint32_t count_before_invalid_create = process_count();
+    if (process_create(NULL, smoke_process_monitor, 1) ||
+        process_create("", smoke_process_monitor, 1) ||
+        process_create("missing-entry", (void (*)(void))0, 1) ||
+        process_count() != count_before_invalid_create) {
+        klog(LOG_ERROR, "PHOXTRA_PROCESS_CREATE_VALIDATION_FAILED");
+        return;
+    }
+    klog(LOG_INFO, "PHOXTRA_PROCESS_CREATE_VALIDATION_OK");
+
     /* Malformed program headers must be rejected without registering a process. */
     for (size_t i = 0; i < sizeof(malformed_image); ++i) malformed_image[i] = smoke_image_a[i];
     ((elf64_header_t*)malformed_image)->e_phoff = UINT64_MAX - 4u;
@@ -330,6 +359,15 @@ void user_mode_smoke_init(void) {
         return;
     }
     klog(LOG_INFO, "PHOXTRA_PROCESS_ISOLATION_OK");
+
+    pcb_t* fault_process = process_create_user_from_elf(
+        "user-fault-isolation", smoke_fault_image, image_size_a, 1);
+    if (!fault_process) {
+        klog(LOG_ERROR, "PHOXTRA_USERMODE_TEST_SETUP_FAILED: fault process creation");
+        return;
+    }
+    smoke_pid_fault = fault_process->pid;
+    klog(LOG_INFO, "PHOXTRA_USER_FAULT_TEST_QUEUED");
 
     if (!process_create("usermode-test-monitor", smoke_process_monitor, 1)) {
         klog(LOG_ERROR, "PHOXTRA_USERMODE_TEST_SETUP_FAILED: monitor creation");

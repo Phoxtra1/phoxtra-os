@@ -217,6 +217,30 @@ int main(void) {
     if (vmm_copy_to_user(user_root, user_va1, replacement, sizeof(replacement)) != 0 ||
         memcmp((void*)(uintptr_t)frame1, replacement, sizeof(replacement)) != 0)
         fail("checked copy-to-user failed for a writable mapping");
+
+    uint64_t other_root = vmm_create_user_page_directory();
+    uint64_t other_frame = (uint64_t)(uintptr_t)pmm_alloc_user_page();
+    if (!other_root || !other_frame)
+        fail("second address space or its user frame could not be allocated");
+    if (vmm_map_user_page(other_root, user_va1, other_frame, VMM_FLAG_WRITABLE) != 0)
+        fail("second address space could not map the same virtual address");
+    memcpy((void*)(uintptr_t)other_frame, "other", sizeof("other"));
+    char isolated[sizeof("other")] = {0};
+    if (vmm_copy_from_user(user_root, copied, user_va1, sizeof(replacement)) != 0 ||
+        memcmp(copied, replacement, sizeof(replacement)) != 0)
+        fail("first address space changed before isolation check");
+    if (vmm_copy_from_user(other_root, isolated, user_va1, sizeof(isolated)) != 0 ||
+        memcmp(isolated, "other", sizeof(isolated)) != 0)
+        fail("same virtual address exposed another process's memory");
+    if (vmm_copy_to_user(user_root, user_va1, "first", sizeof("first")) != 0 ||
+        vmm_copy_from_user(other_root, isolated, user_va1, sizeof(isolated)) != 0 ||
+        memcmp(isolated, "other", sizeof(isolated)) != 0)
+        fail("writes in one address space affected another address space");
+    if (vmm_destroy_user_page_directory(other_root) != 0)
+        fail("second address space teardown failed");
+    if (vmm_copy_from_user(user_root, copied, user_va1, sizeof("first")) != 0 ||
+        memcmp(copied, "first", sizeof("first")) != 0)
+        fail("first address space was damaged by second-space teardown");
     if (vmm_copy_from_user(user_root, copied, user_va1 + 0x4000ULL, 1) == 0)
         fail("copy-from-user accepted an unmapped address");
     if (vmm_map_user_page(user_root, user_va1 + 0x3000ULL, kernel_frame, VMM_FLAG_WRITABLE) == 0)

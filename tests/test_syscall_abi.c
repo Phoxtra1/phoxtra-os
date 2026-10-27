@@ -43,8 +43,9 @@ static int mock_random_failure;
 static int mock_rtc_failure;
 static char mock_dns_name[254];
 static netdev_t mock_netdev;
+static int mock_no_current;
 
-pcb_t* scheduler_current(void) { return &mock_process; }
+pcb_t* scheduler_current(void) { return mock_no_current ? NULL : &mock_process; }
 uint64_t scheduler_get_uptime_ticks(void) { return mock_uptime_ticks; }
 void scheduler_yield(void) { ++mock_yield_calls; }
 void process_destroy(uint32_t pid) {
@@ -142,7 +143,9 @@ static void reset_mock(void) {
     memset(&mock_netdev, 0, sizeof(mock_netdev));
     mock_process.pid = 42;
     mock_process.page_directory = TEST_USER_ROOT;
+    mock_process.user_mode = 1;
     mock_process.state = PROCESS_STATE_RUNNING;
+    mock_no_current = 0;
     mock_uptime_ticks = 100;
     mock_yield_calls = mock_destroy_calls = mock_socket_calls = mock_connect_calls = 0;
     mock_send_calls = mock_recv_calls = mock_close_calls = mock_dns_calls = 0;
@@ -192,6 +195,26 @@ int main(void) {
     init_user_regs(&regs, SYS_GETPID); regs.cs = 0x08;
     syscall_handler(&regs);
     CHECK("syscalls reject a supervisor-originated register frame", (int64_t)regs.rax == -22);
+
+    reset_mock();
+    mock_process.user_mode = 0;
+    init_user_regs(&regs, SYS_GETPID);
+    syscall_handler(&regs);
+    CHECK("syscalls reject a Ring 3 frame without a user-mode process", (int64_t)regs.rax == -22);
+
+    reset_mock();
+    mock_process.page_directory = 0;
+    init_user_regs(&regs, SYS_YIELD);
+    syscall_handler(&regs);
+    CHECK("SYS_YIELD rejects a process without a private address space",
+          (int64_t)regs.rax == -22 && mock_yield_calls == 0);
+
+    reset_mock();
+    mock_no_current = 1;
+    init_user_regs(&regs, SYS_YIELD);
+    syscall_handler(&regs);
+    CHECK("SYS_YIELD rejects a missing current process",
+          (int64_t)regs.rax == -22 && mock_yield_calls == 0);
 
     reset_mock();
     init_user_regs(&regs, 0xFFFFu); syscall_handler(&regs);

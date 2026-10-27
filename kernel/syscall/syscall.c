@@ -25,7 +25,10 @@
 extern void console_put_char(char ch);
 
 static int user_call_valid(const struct registers* regs, const pcb_t* current) {
-    return regs && current && (regs->cs & 3u) == 3u;
+    return regs && current && (regs->cs & 3u) == 3u &&
+           current->user_mode && current->page_directory != 0 &&
+           current->state == PROCESS_STATE_RUNNING &&
+           current->pid != 0xFFFFFFFFu;
 }
 
 static void sys_print_user(struct registers* regs) {
@@ -93,7 +96,7 @@ static void sys_exit_user(struct registers* regs) {
 }
 
 static void sys_yield_user(struct registers* regs) {
-    if (!regs || (regs->cs & 3u) != 3u) {
+    if (!user_call_valid(regs, scheduler_current())) {
         if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
         return;
     }
@@ -299,13 +302,11 @@ static syscall_fn_t syscall_table[] = {
 void syscall_handler(struct registers* regs) {
     if (!regs) return;
     uint64_t num = regs->rax;
-    if (num >= SYS_GETPID && num <= SYS_PRINT) {
-        if (num == SYS_GETPID) klog(LOG_INFO, "Regression trace: SYS_GETPID entered");
-        else if (num == SYS_YIELD) klog(LOG_INFO, "Regression trace: SYS_YIELD entered");
-        else if (num == SYS_SLEEP) klog(LOG_INFO, "Regression trace: SYS_SLEEP entered");
-        else if (num == SYS_PRINT) klog(LOG_INFO, "Regression trace: SYS_PRINT entered");
-        else if (num == SYS_EXIT) klog(LOG_INFO, "Regression trace: SYS_EXIT entered");
-    }
+    if (num == SYS_GETPID) klog(LOG_INFO, "Regression trace: SYS_GETPID entered");
+    else if (num == SYS_YIELD) klog(LOG_INFO, "Regression trace: SYS_YIELD entered");
+    else if (num == SYS_SLEEP) klog(LOG_INFO, "Regression trace: SYS_SLEEP entered");
+    else if (num == SYS_PRINT) klog(LOG_INFO, "Regression trace: SYS_PRINT entered");
+    else if (num == SYS_EXIT) klog(LOG_INFO, "Regression trace: SYS_EXIT entered");
     if ((regs->cs & 3u) != 3u) {
         regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
         return;
