@@ -107,7 +107,7 @@ if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
         -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined -Wl,--no-relax -Wl,--gc-sections
         -Wl,-T,${CMAKE_SOURCE_DIR}/userland/linker.ld)
     target_link_libraries(phoxtra_guest_https_elf PRIVATE
-        " -Wl,--start-group" mbedtls mbedx509 tfpsacrypto gcc "-Wl,--end-group")
+        "-Wl,--start-group" mbedtls mbedx509 tfpsacrypto gcc "-Wl,--end-group")
     set(PHOXTRA_GUEST_HTTPS_IMAGE_HEADER "${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_https_elf.h")
     add_custom_command(
         OUTPUT "${PHOXTRA_GUEST_HTTPS_IMAGE_HEADER}"
