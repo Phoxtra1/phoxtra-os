@@ -113,41 +113,55 @@ int partition_parse(block_device_t* master) {
     }
 
     klog(LOG_INFO, "valid MBR signature detected; scanning existing primary partitions");
-    int valid_entries = 0;
-    uint64_t accepted_start[4] = {0, 0, 0, 0};
-    uint64_t accepted_count[4] = {0, 0, 0, 0};
+    uint8_t candidate_valid[4] = {0, 0, 0, 0};
+    uint8_t overlaps[4] = {0, 0, 0, 0};
+    uint64_t candidate_start[4] = {0, 0, 0, 0};
+    uint64_t candidate_count[4] = {0, 0, 0, 0};
 
+    /* Validate each MBR slot before considering its extent for registration. */
     for (int i = 0; i < 4; ++i) {
         const mbr_partition_entry_t* entry = &mbr->entries[i];
         const uint8_t sys_id = entry->sys_id;
-        const uint64_t start = entry->start_lba;
-        const uint64_t count = entry->total_sectors;
+        const uint64_t start_lba = entry->start_lba;
+        const uint64_t sector_count = entry->total_sectors;
 
         if (entry->boot_indicator != 0u && entry->boot_indicator != MBR_BOOT_ACTIVE) {
             klog(LOG_WARNING, "Partition discovery: invalid MBR boot indicator; entry skipped");
             continue;
         }
-        if (sys_id == 0u || count == 0u) continue;
+        if (sys_id == 0u || sector_count == 0u) continue;
         if (is_extended_partition(sys_id)) {
             klog(LOG_WARNING, "Partition discovery: extended partition skipped; chains are unsupported");
             continue;
         }
-
-        /* Validate bounds before comparing ranges or publishing a partition device. */
-        if (start == 0u || start >= master->total_sectors ||
-            count > master->total_sectors - start) {
+        if (start_lba == 0u || start_lba >= master->total_sectors ||
+            sector_count > master->total_sectors - start_lba) {
             klog(LOG_WARNING, "Partition discovery: skipped out-of-range MBR entry");
             continue;
         }
 
-        int overlaps = 0;
-        for (int previous = 0; previous < valid_entries; ++previous) {
-            if (ranges_overlap(start, count, accepted_start[previous], accepted_count[previous])) {
-                overlaps = 1;
-                break;
+        candidate_valid[i] = 1u;
+        candidate_start[i] = start_lba;
+        candidate_count[i] = sector_count;
+    }
+
+    /* Reject both sides of every overlap; never publish the first side by order. */
+    for (int i = 0; i < 4; ++i) {
+        if (!candidate_valid[i]) continue;
+        for (int j = i + 1; j < 4; ++j) {
+            if (candidate_valid[j] &&
+                ranges_overlap(candidate_start[i], candidate_count[i],
+                               candidate_start[j], candidate_count[j])) {
+                overlaps[i] = 1u;
+                overlaps[j] = 1u;
             }
         }
-        if (overlaps) {
+    }
+
+    int valid_entries = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (!candidate_valid[i]) continue;
+        if (overlaps[i]) {
             klog(LOG_WARNING, "Partition discovery: overlapping MBR entry skipped");
             continue;
         }
@@ -159,9 +173,8 @@ int partition_parse(block_device_t* master) {
         pname[len++] = 'p';
         pname[len++] = (char)('1' + i);
         pname[len] = '\0';
-        create_partition_subdev(master, pname, start, count, sys_id);
-        accepted_start[valid_entries] = start;
-        accepted_count[valid_entries] = count;
+        create_partition_subdev(master, pname, candidate_start[i],
+                                candidate_count[i], mbr->entries[i].sys_id);
         ++valid_entries;
     }
 
