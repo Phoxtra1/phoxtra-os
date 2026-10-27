@@ -1,4 +1,5 @@
 #include "../include/phoxtra/net.h"
+#include "../include/string.h"
 
 #define PHOXTRA_SYS_SOCKET      6u
 #define PHOXTRA_SYS_CONNECT     7u
