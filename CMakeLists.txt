@@ -28,13 +28,23 @@ set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_confi
     CACHE FILEPATH "Phoxtra Mbed TLS platform configuration" FORCE)
 set(TF_PSA_CRYPTO_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h"
     CACHE FILEPATH "Phoxtra TF-PSA-Crypto user configuration" FORCE)
+
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # Generate a matching TLS/PSA configuration instead of trying to undo host-only
+    # defaults in a user header after their source files have already been selected.
+    set(MBEDTLS_CONFIG_UNSET
+        "MBEDTLS_SELF_TEST;MBEDTLS_DEBUG_C;MBEDTLS_FS_IO;MBEDTLS_NET_C;MBEDTLS_TIMING_C;MBEDTLS_HAVE_TIME;MBEDTLS_HAVE_TIME_DATE"
+        CACHE STRING "Disable unsupported hosted Mbed TLS features" FORCE)
+else()
+    set(MBEDTLS_CONFIG_UNSET "" CACHE STRING "Disable unsupported hosted Mbed TLS features" FORCE)
+endif()
 set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable Mbed TLS sample programs" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "Disable upstream Mbed TLS tests in OS build" FORCE)
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static Mbed TLS libraries" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared Mbed TLS libraries" FORCE)
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     # Third-party TLS archives must match the freestanding guest ELF ABI.
-    add_compile_options(-fno-pie -fno-stack-protector)
+    add_compile_options(-fno-pie -fno-stack-protector -ffunction-sections -fdata-sections)
 endif()
 add_subdirectory(third_party/mbedtls EXCLUDE_FROM_ALL)
 
@@ -94,10 +104,10 @@ if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     target_compile_options(phoxtra_guest_https_elf PRIVATE
         -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror)
     target_link_options(phoxtra_guest_https_elf PRIVATE
-        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined -Wl,--no-relax
+        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined -Wl,--no-relax -Wl,--gc-sections
         -Wl,-T,${CMAKE_SOURCE_DIR}/userland/linker.ld)
     target_link_libraries(phoxtra_guest_https_elf PRIVATE
-        "-Wl,--start-group" mbedtls mbedx509 tfpsacrypto "-Wl,--end-group")
+        " -Wl,--start-group" mbedtls mbedx509 tfpsacrypto gcc "-Wl,--end-group")
     set(PHOXTRA_GUEST_HTTPS_IMAGE_HEADER "${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_https_elf.h")
     add_custom_command(
         OUTPUT "${PHOXTRA_GUEST_HTTPS_IMAGE_HEADER}"

@@ -105,6 +105,29 @@ void* memmove(void* dest, const void* src, size_t n) {
     return dest;
 }
 
+
+char* strchr(const char* s, int c) {
+    if (!s) return NULL;
+    const unsigned char target = (unsigned char)c;
+    while ((unsigned char)*s != target) {
+        if (*s == '\0') return NULL;
+        ++s;
+    }
+    return (char*)s;
+}
+
+char* strstr(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return NULL;
+    if (!*needle) return (char*)haystack;
+    for (const char* start = haystack; *start; ++start) {
+        const char* h = start;
+        const char* n = needle;
+        while (*h && *n && *h == *n) { ++h; ++n; }
+        if (!*n) return (char*)start;
+    }
+    return NULL;
+}
+
 int puts(const char* str) {
     if (!str) return -1;
     size_t length = strlen(str);
