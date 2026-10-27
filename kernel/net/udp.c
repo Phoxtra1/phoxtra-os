@@ -1,5 +1,6 @@
 #include "udp.h"
 #include "ipv4.h"
+#include "socket.h"
 #include "../log/logger.h"
 
 #define UDP_MAX_HANDLERS 16u
@@ -94,8 +95,12 @@ int udp_receive_packet(netdev_t* dev, uint32_t source_ip, uint32_t destination_i
                                         handlers[i].context);
         }
     }
-    /* A valid packet to an unbound UDP port is safely ignored. */
-    return 0;
+    /* Deliver to a bound datagram socket when no protocol handler owns the port. */
+    int socket_result = socket_udp_dispatch(dev, source_ip, source_port,
+                                             destination_port,
+                                             packet + sizeof(udp_header_t),
+                                             declared_length - (uint32_t)sizeof(udp_header_t));
+    return socket_result == -3 ? 0 : socket_result;
 }
 
 int udp_send_packet(netdev_t* dev, uint32_t dest_ip, uint16_t src_port,
