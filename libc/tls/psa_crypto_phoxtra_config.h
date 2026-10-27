@@ -8,4 +8,9 @@
  */
 #define MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG
 
+/* Phoxtra currently has no persistent PSA storage backend. Do not link the
+ * upstream file-backed ITS simulator into the freestanding guest image. */
+#undef MBEDTLS_PSA_ITS_FILE_C
+#undef MBEDTLS_PSA_CRYPTO_STORAGE_C
+
 #endif

@@ -32,7 +32,7 @@ int phoxtra_https_guest_smoke_main(void)
     guest_log("PHOXTRA_GUEST_HTTPS_STARTED");
     size_t response_length = 0;
     const int result = phoxtra_https_get("10.0.2.2", "/",
-        phoxtra_guest_test_ca_pem, sizeof(phoxtra_guest_test_ca_pem) - 1u,
+        phoxtra_guest_test_ca_pem, sizeof(phoxtra_guest_test_ca_pem),
         response_buffer, sizeof(response_buffer), &response_length);
     if (result == PHOXTRA_HTTPS_ERR_CONNECT) {
         guest_log("PHOXTRA_GUEST_HTTPS_CONNECT_FAILED"); return 1;

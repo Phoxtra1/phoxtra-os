@@ -248,6 +248,8 @@ jobs:
             exit 1
           fi
           wait "$HTTPS_SERVER_PID"
+          grep -Fq "HTTPS_SERVER_REQUEST_OK GET /" /tmp/phoxtra-https-test-server.log
+          grep -Fq "PHOXTRA_GUEST_HTTPS_OK" /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
           grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
           grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log

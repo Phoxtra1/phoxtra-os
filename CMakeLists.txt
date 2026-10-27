@@ -26,11 +26,16 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(PHOXTRA_MBEDTLS_USER_CONFIG "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
 set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h"
     CACHE FILEPATH "Phoxtra Mbed TLS platform configuration" FORCE)
+add_compile_definitions(MBEDTLS_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
 add_compile_definitions(TF_PSA_CRYPTO_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h")
 set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable Mbed TLS sample programs" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "Disable upstream Mbed TLS tests in OS build" FORCE)
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static Mbed TLS libraries" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared Mbed TLS libraries" FORCE)
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # Third-party TLS archives must match the freestanding guest ELF ABI.
+    add_compile_options(-fno-pie -fno-stack-protector)
+endif()
 add_subdirectory(third_party/mbedtls EXCLUDE_FROM_ALL)
 
 set(PHOXTRA_CA_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -61,7 +66,7 @@ target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${
     third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
     third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
 target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
-target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-builtin -Wall -Wextra -Werror)
+target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror)
 
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     set(PHOXTRA_GUEST_HTTPS_DIR "${CMAKE_BINARY_DIR}/guest-https")
@@ -88,7 +93,7 @@ if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     target_compile_options(phoxtra_guest_https_elf PRIVATE
         -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror)
     target_link_options(phoxtra_guest_https_elf PRIVATE
-        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined
+        -nostdlib -static -no-pie -Wl,--build-id=none -Wl,--no-undefined -Wl,--no-relax
         -Wl,-T,${CMAKE_SOURCE_DIR}/userland/linker.ld)
     target_link_libraries(phoxtra_guest_https_elf PRIVATE
         "-Wl,--start-group" mbedtls mbedx509 tfpsacrypto "-Wl,--end-group")
@@ -113,3 +118,8 @@ target_include_directories(test_https_client PRIVATE third_party/mbedtls/include
 target_compile_definitions(test_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(test_https_client PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_https_client PRIVATE phoxtra_https_client mbedtls mbedx509 tfpsacrypto)
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # Mbed TLS archives are built no-PIE for the freestanding guest ELF.
+    # Keep the host-side regression executable compatible with those archives.
+    target_link_options(test_https_client PRIVATE -no-pie)
+endif()
