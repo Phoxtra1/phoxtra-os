@@ -8,6 +8,15 @@
  */
 #define MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG
 
+/* The embedded client has no hosted debug or self-test output channel. */
+#undef MBEDTLS_SELF_TEST
+#undef MBEDTLS_DEBUG_C
+#undef MBEDTLS_FS_IO
+#undef MBEDTLS_NET_C
+#undef MBEDTLS_TIMING_C
+#undef MBEDTLS_HAVE_TIME
+#undef MBEDTLS_HAVE_TIME_DATE
+
 /* Phoxtra currently has no persistent PSA storage backend. Do not link the
  * upstream file-backed ITS simulator into the freestanding guest image. */
 #undef MBEDTLS_PSA_ITS_FILE_C

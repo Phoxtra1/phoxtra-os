@@ -26,8 +26,8 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(PHOXTRA_MBEDTLS_USER_CONFIG "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
 set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h"
     CACHE FILEPATH "Phoxtra Mbed TLS platform configuration" FORCE)
-add_compile_definitions(MBEDTLS_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/mbedtls_phoxtra_config.h")
-add_compile_definitions(TF_PSA_CRYPTO_USER_CONFIG_FILE="${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h")
+set(TF_PSA_CRYPTO_USER_CONFIG_FILE "${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h"
+    CACHE FILEPATH "Phoxtra TF-PSA-Crypto user configuration" FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable Mbed TLS sample programs" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "Disable upstream Mbed TLS tests in OS build" FORCE)
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static Mbed TLS libraries" FORCE)
@@ -52,7 +52,7 @@ add_custom_target(phoxtra_ca_bundle DEPENDS "${PHOXTRA_CA_GENERATED_DIR}/phoxtra
 add_library(phoxtra_https_client STATIC userland/net/https_client.c userland/net/default_ca.c)
 add_dependencies(phoxtra_https_client phoxtra_ca_bundle)
 target_include_directories(phoxtra_https_client PUBLIC userland/net PRIVATE "${PHOXTRA_CA_GENERATED_DIR}")
-target_compile_definitions(phoxtra_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
+target_compile_definitions(phoxtra_https_client PRIVATE "MBEDTLS_USER_CONFIG_FILE=\"${PHOXTRA_MBEDTLS_USER_CONFIG}\"")
 target_compile_definitions(phoxtra_https_client PRIVATE PHOXTRA_HTTPS_TEST_DIAGNOSTICS=1)
 target_compile_options(phoxtra_https_client PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(phoxtra_https_client PUBLIC mbedtls mbedx509 tfpsacrypto)
@@ -65,7 +65,8 @@ add_dependencies(phoxtra_userlib phoxtra_ca_bundle)
 target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${PHOXTRA_CA_GENERATED_DIR}"
     third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
     third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
-target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
+target_compile_definitions(phoxtra_userlib PRIVATE "MBEDTLS_USER_CONFIG_FILE=\"${PHOXTRA_MBEDTLS_USER_CONFIG}\"")
+target_compile_definitions(phoxtra_userlib PRIVATE "TF_PSA_CRYPTO_USER_CONFIG_FILE=\"${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h\"")
 target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror)
 
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
@@ -115,7 +116,7 @@ endif()
 add_executable(test_https_client tests/test_https_client.c)
 target_include_directories(test_https_client PRIVATE third_party/mbedtls/include
     third_party/mbedtls/tf-psa-crypto/include)
-target_compile_definitions(test_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
+target_compile_definitions(test_https_client PRIVATE "MBEDTLS_USER_CONFIG_FILE=\"${PHOXTRA_MBEDTLS_USER_CONFIG}\"")
 target_compile_options(test_https_client PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_https_client PRIVATE phoxtra_https_client mbedtls mbedx509 tfpsacrypto)
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
