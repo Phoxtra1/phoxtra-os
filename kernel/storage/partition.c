@@ -10,12 +10,14 @@ static int partition_read_sectors(block_device_t* dev, uint64_t lba, uint32_t co
     return part->master_dev->read_sectors(part->master_dev, part->start_lba + lba, count, buffer);
 }
 
-static int partition_write_sectors(block_device_t* dev, uint64_t lba, uint32_t count, const uint8_t* buffer) {
-    if (!dev || !dev->priv_data) return -1;
-    partition_device_t* part = (partition_device_t*)dev->priv_data;
-    if (lba + count > part->sector_count) return -1;
+static int partition_write_sectors(block_device_t* dev, uint64_t lba,
+                                   uint32_t count, const uint8_t* buffer) {
+    (void)dev;
+    (void)lba;
+    (void)count;
+    (void)buffer;
+    return -1;
 
-    return part->master_dev->write_sectors(part->master_dev, part->start_lba + lba, count, buffer);
 }
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
@@ -38,7 +40,7 @@ static void create_partition_subdev(block_device_t* master, const char* name, ui
     kstrncpy(part->block_dev.name, name, sizeof(part->block_dev.name));
     part->block_dev.total_sectors = count;
     part->block_dev.sector_size   = master->sector_size;
-    part->block_dev.flags         = BLOCKDEV_FLAG_PARTITION;
+    part->block_dev.flags         = BLOCKDEV_FLAG_PARTITION | BLOCKDEV_FLAG_READONLY;
     part->block_dev.read_sectors  = partition_read_sectors;
     part->block_dev.write_sectors = partition_write_sectors;
     part->block_dev.priv_data     = part;

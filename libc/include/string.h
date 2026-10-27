@@ -18,6 +18,7 @@ int memcmp(const void* lhs, const void* rhs, size_t n);
 char* strchr(const char* s, int c);
 char* strstr(const char* haystack, const char* needle);
 void* memmove(void* dest, const void* src, size_t n);
+void explicit_bzero(void* s, size_t n);
 
 #ifdef __cplusplus
 }

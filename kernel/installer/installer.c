@@ -10,10 +10,8 @@ void installer_init(void) {
 
 void installer_start(void) {
     current_step = INSTALLER_WELCOME;
-    inst_win = compositor_create_window("Phoxtra OS Installer (Preview)", 100, 80, 820, 560, 0x00020617);
-    if (!inst_win) return;
+    klog(LOG_WARNING, "Installer disabled: physical disk installation, partition formatting, and file copy are not implemented");
 
-    klog(LOG_WARNING, "Installer preview only: disk selection, partitioning, formatting, file copy, and boot installation are not implemented");
 }
 
 void installer_next_step(void) {

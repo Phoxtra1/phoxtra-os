@@ -106,6 +106,12 @@ void* memmove(void* dest, const void* src, size_t n) {
 }
 
 
+/* Guaranteed zeroization: volatile stores prevent dead-store elimination. */
+void explicit_bzero(void* s, size_t n) {
+    volatile unsigned char* p = (volatile unsigned char*)s;
+    while (n--) *p++ = 0;
+}
+
 char* strchr(const char* s, int c) {
     if (!s) return NULL;
     const unsigned char target = (unsigned char)c;
