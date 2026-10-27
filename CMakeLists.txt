@@ -31,6 +31,10 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable Mbed TLS sample programs" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "Disable upstream Mbed TLS tests in OS build" FORCE)
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static Mbed TLS libraries" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared Mbed TLS libraries" FORCE)
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # Third-party TLS archives must match the freestanding guest ELF ABI.
+    add_compile_options(-fno-pie -fno-stack-protector)
+endif()
 add_subdirectory(third_party/mbedtls EXCLUDE_FROM_ALL)
 
 set(PHOXTRA_CA_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -64,15 +68,6 @@ target_compile_definitions(phoxtra_userlib PRIVATE MBEDTLS_USER_CONFIG_FILE="${P
 target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror)
 
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
-    # This is a freestanding Ring 3 static executable, not a hosted application.
-    # Compile upstream TLS archives with compatible flags so host hardening
-    # defaults do not inject stack-canary calls or PIE GOTPCREL relocations.
-    foreach(_phoxtra_tls_target mbedtls mbedx509 tfpsacrypto)
-        if(TARGET ${_phoxtra_tls_target})
-            set_property(TARGET ${_phoxtra_tls_target} PROPERTY POSITION_INDEPENDENT_CODE OFF)
-            target_compile_options(${_phoxtra_tls_target} PRIVATE -fno-pie -fno-stack-protector)
-        endif()
-    endforeach()
     set(PHOXTRA_GUEST_HTTPS_DIR "${CMAKE_BINARY_DIR}/guest-https")
     set(PHOXTRA_GUEST_HTTPS_CA_HEADER "${PHOXTRA_CA_GENERATED_DIR}/phoxtra_guest_test_ca.h")
     set(PHOXTRA_GUEST_HTTPS_CERT "${PHOXTRA_GUEST_HTTPS_DIR}/server.pem")
