@@ -66,6 +66,7 @@ target_include_directories(phoxtra_userlib PRIVATE libc/include userland/net "${
     third_party/mbedtls/include third_party/mbedtls/tf-psa-crypto/include
     third_party/mbedtls/tf-psa-crypto/drivers/builtin/include)
 target_compile_definitions(phoxtra_userlib PRIVATE "MBEDTLS_USER_CONFIG_FILE=\"${PHOXTRA_MBEDTLS_USER_CONFIG}\"")
+target_compile_definitions(phoxtra_userlib PRIVATE "TF_PSA_CRYPTO_USER_CONFIG_FILE=\"${CMAKE_SOURCE_DIR}/libc/tls/psa_crypto_phoxtra_config.h\"")
 target_compile_options(phoxtra_userlib PRIVATE -ffreestanding -fno-pie -fno-stack-protector -fno-builtin -Wall -Wextra -Werror)
 
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
