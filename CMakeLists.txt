@@ -122,3 +122,8 @@ target_include_directories(test_https_client PRIVATE third_party/mbedtls/include
 target_compile_definitions(test_https_client PRIVATE MBEDTLS_USER_CONFIG_FILE="${PHOXTRA_MBEDTLS_USER_CONFIG}")
 target_compile_options(test_https_client PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_https_client PRIVATE phoxtra_https_client mbedtls mbedx509 tfpsacrypto)
+if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
+    # Mbed TLS archives are built no-PIE for the freestanding guest ELF.
+    # Keep the host-side regression executable compatible with those archives.
+    target_link_options(test_https_client PRIVATE -no-pie)
+endif()
