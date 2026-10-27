@@ -2,6 +2,7 @@
 #include "pic.h"
 #include "panic.hpp"
 #include "../syscall/syscall.h"
+#include "../log/logger.h"
 #include "../process/process.h"
 #include "../scheduler/scheduler.h"
 
