@@ -10,14 +10,13 @@ static int partition_read_sectors(block_device_t* dev, uint64_t lba, uint32_t co
     return part->master_dev->read_sectors(part->master_dev, part->start_lba + lba, count, buffer);
 }
 
-static int partition_write_sectors(block_device_t* dev, uint64_t lba,
-                                   uint32_t count, const uint8_t* buffer) {
+static int partition_write_sectors(block_device_t* dev, uint64_t lba, uint32_t count, const uint8_t* buffer) {
+    /* Partition writes remain disabled even if called outside the blockdev wrapper. */
     (void)dev;
     (void)lba;
     (void)count;
     (void)buffer;
     return -1;
-
 }
 
 static void kstrncpy(char* dst, const char* src, int maxlen) {
