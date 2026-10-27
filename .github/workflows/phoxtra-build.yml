@@ -122,6 +122,14 @@ jobs:
         run: |
           rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-settings-screen.ppm /tmp/phoxtra-ahci-test.img
           truncate -s 64M /tmp/phoxtra-ahci-test.img
+          TCP_GUEST_PORT=4242
+          TCP_HOST_PORT=$(python3 - <<'PY'
+          import socket
+          with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+              probe.bind(("127.0.0.1", 0))
+              print(probe.getsockname()[1])
+          PY
+          )
           python3 - <<'PY'
           import struct
           from pathlib import Path
@@ -142,7 +150,7 @@ jobs:
           dd if=/tmp/phoxtra-ext2-partition.img of=/tmp/phoxtra-ahci-test.img bs=512 seek=2048 conv=notrunc status=none
           sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
           # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
-          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0 -device e1000,netdev=net0 \
+          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
             -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
             -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
@@ -200,7 +208,26 @@ jobs:
           # Exercise a real DNS A lookup through the guest network path before GUI startup.
           { for key in d n s spc e x a m p l e dot c o m ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
-            grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log && break
+            grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log
+          # Real TCP handshake and request/response through QEMU's E1000 and guest socket stack.
+          { for key in t c p c h e c k ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_TCP_E2E_LISTENER_READY' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_TCP_E2E_LISTENER_READY' /tmp/phoxtra-serial.log
+          python3 tests/qemu_tcp_probe.py "$TCP_HOST_PORT"
+          for attempt in $(seq 1 40); do
+            grep -Fq 'PHOXTRA_TCP_E2E_OK' /tmp/phoxtra-serial.log && break
+            grep -Fq 'PHOXTRA_TCP_E2E_FAILED' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'PHOXTRA_TCP_E2E_OK' /tmp/phoxtra-serial.log
+          if grep -Fq 'PHOXTRA_TCP_E2E_FAILED' /tmp/phoxtra-serial.log; then
+            echo 'End-to-end TCP validation failed.'
+            exit 1
+          fi
+ && break
             sleep 0.25
           done
           grep -Fq 'PHOXTRA_DNS_QUERY_OK' /tmp/phoxtra-serial.log

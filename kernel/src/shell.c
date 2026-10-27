@@ -201,6 +201,7 @@ static void cmd_help(void) {
     console_write("  ping       - Show current ICMP diagnostic limitations\n");
     console_write("  netstat    - Show socket-subsystem implementation status\n");
     console_write("  dhcp       - Request a DHCP lease (experimental)\n");
+    console_write("  tcpcheck   - Run one-shot end-to-end TCP socket diagnostic\n");
     console_write("  dns        - Resolve a hostname with a DNS A query (experimental)\n");
     console_write("  elf        - Show ELF validation and execution support status\n");
     console_write("  libc       - Show user-space C runtime support status\n");
@@ -410,6 +411,78 @@ static void cmd_netstat(void) {
     console_write("Inbound protocol dispatch   : ARP, validated IPv4, ICMP, UDP and TCP\n");
     console_write("Socket receive buffers      : bounded TCP stream buffer; one pending UDP datagram per socket\n");
     console_write("No TCP/UDP services are listening by default; bind/listen/accept are experimental APIs.\n\n");
+}
+
+static void cmd_tcpcheck(void) {
+    static const char request_expected[] = "PHOXTRA_TCP_PROBE";
+    static const char response_text[] = "PHOXTRA_TCP_E2E_OK";
+    netdev_t* dev = netdev_get_default();
+    if (!dev || !dev->ip_addr || !dev->netmask || !dev->send_packet ||
+        !(dev->flags & 0x01u)) {
+        console_write("TCP check requires a supported link and active IPv4 lease.\n");
+        klog(LOG_WARNING, "PHOXTRA_TCP_E2E_FAILED: no configured link");
+        return;
+    }
+    int listener = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener < 0) {
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: socket allocation");
+        return;
+    }
+    sockaddr_in_t local = {0};
+    local.sin_family = AF_INET;
+    local.sin_port = htons(4242u);
+    local.sin_addr = dev->ip_addr;
+    if (sys_bind(listener, &local) != 0 || sys_listen(listener, 1) != 0) {
+        (void)sys_close(listener);
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: bind/listen");
+        console_write("TCP check could not open its diagnostic listener.\n");
+        return;
+    }
+    klog(LOG_INFO, "PHOXTRA_TCP_E2E_LISTENER_READY");
+    console_write("TCP diagnostic listener ready on port 4242; awaiting one probe.\n");
+    int client = sys_accept(listener, 0);
+    if (client < 0) {
+        (void)sys_close(listener);
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: accept timeout");
+        console_write("TCP check timed out waiting for its peer.\n");
+        return;
+    }
+    uint8_t request[sizeof(request_expected) - 1u];
+    uint32_t received_total = 0;
+    while (received_total < sizeof(request)) {
+        int received = sys_recv(client, request + received_total,
+                                (uint32_t)sizeof(request) - received_total, 0);
+        if (received <= 0) {
+            (void)sys_close(client);
+            (void)sys_close(listener);
+            klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: receive timeout");
+            console_write("TCP check did not receive the complete probe.\n");
+            return;
+        }
+        received_total += (uint32_t)received;
+    }
+    for (uint32_t i = 0; i < sizeof(request); ++i) {
+        if (request[i] != (uint8_t)request_expected[i]) {
+            (void)sys_close(client);
+            (void)sys_close(listener);
+            klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: request mismatch");
+            console_write("TCP check received an invalid probe payload.\n");
+            return;
+        }
+    }
+    int sent = sys_send(client, response_text, (uint32_t)(sizeof(response_text) - 1u), 0);
+    if (sent != (int)(sizeof(response_text) - 1u)) {
+        (void)sys_close(client);
+        (void)sys_close(listener);
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: response send/ack");
+        console_write("TCP check could not send an acknowledged response.\n");
+        return;
+    }
+    /* Success is recorded only after the TCP API confirms the response was ACKed. */
+    klog(LOG_INFO, "PHOXTRA_TCP_E2E_OK");
+    console_write("TCP end-to-end request and acknowledged response succeeded.\n");
+    (void)sys_close(client);
+    (void)sys_close(listener);
 }
 
 static void cmd_dhcp(void) {
@@ -842,6 +915,7 @@ void shell_start(void) {
                 }
                 else if (kstrcmp(input, "netstat")    == 0) cmd_netstat();
                 else if (kstrcmp(input, "dhcp")       == 0) cmd_dhcp();
+                else if (kstrcmp(input, "tcpcheck")   == 0) cmd_tcpcheck();
                 else if (input[0]=='d' && input[1]=='n' && input[2]=='s') {
                     const char* p = input + 3;
                     while (*p == ' ') p++;
