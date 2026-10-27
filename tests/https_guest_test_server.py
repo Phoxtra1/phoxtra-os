@@ -37,6 +37,7 @@ def main() -> int:
                 request.extend(part)
             if not request.startswith(b"GET / HTTP/1.1\r\n"):
                 raise RuntimeError("guest sent an unexpected HTTP request line")
+            print("HTTPS_SERVER_REQUEST_OK GET /", flush=True)
             body = b"PHOXTRA_GUEST_HTTPS_OK"
             tls.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
                         + b"Content-Length: " + str(len(body)).encode("ascii")
