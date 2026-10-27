@@ -90,7 +90,9 @@ static void mouse_irq(struct registers* regs) {
 
     const uint8_t next_buttons = flags & 0x07u;
     if ((next_buttons & 0x01u) && !(pointer_buttons & 0x01u))
-        click_pending = 1;
+        click_pending |= 0x01u;
+    if ((next_buttons & 0x02u) && !(pointer_buttons & 0x02u))
+        click_pending |= 0x02u;
 
     pointer_x = next_x;
     pointer_y = next_y;
@@ -165,7 +167,8 @@ int mouse_poll_event(mouse_event_t* event) {
     event->x = pointer_x;
     event->y = pointer_y;
     event->buttons = pointer_buttons;
-    event->left_clicked = click_pending;
+    event->left_clicked = (uint8_t)((click_pending & 0x01u) != 0);
+    event->right_clicked = (uint8_t)((click_pending & 0x02u) != 0);
     click_pending = 0;
     event_pending = 0;
     __asm__ volatile ("pushq %0; popfq" : : "r"(flags) : "memory", "cc");

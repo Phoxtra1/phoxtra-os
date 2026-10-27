@@ -127,6 +127,11 @@ void framebuffer_init(void) {
 framebuffer_t* framebuffer_get(void) { return &fb; }
 int framebuffer_is_available(void) { return fb.available != 0; }
 
+uint32_t fb_get_back_pixel(uint32_t x, uint32_t y) {
+    if (!fb.available || x >= fb.width || y >= fb.height) return 0;
+    return back_storage[(size_t)y * FB_WIDTH + x];
+}
+
 void fb_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     if (!fb.available || x >= fb.width || y >= fb.height) return;
     back_storage[(size_t)y * FB_WIDTH + x] = color;

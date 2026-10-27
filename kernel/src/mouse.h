@@ -12,6 +12,7 @@ typedef struct mouse_event {
     int32_t y;
     uint8_t buttons;
     uint8_t left_clicked;
+    uint8_t right_clicked;
 } mouse_event_t;
 
 void mouse_init(void);

@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v2.1.0-hardware] - 2026-10-17
+
+### Added
+- **Phoxtra Universal Hardware Device Framework (`kernel/hardware/hardware_manager.c`, `hardware_manager.h`)**:
+  - Central hardware device registry establishing Phoxtra OS as the native mother foundation for all Phoxtra physical hardware products.
+  - Multi-class hardware profile classification (`AUTOMOTIVE`, `AGRICULTURE`, `SMART_MOBILITY`, `INDUSTRIAL_IOT`, `EDGE_GATEWAY`, `MOBILE`, `DESKTOP_LAPTOP`).
+- **Phoxdrive Automotive Safety & Telematics Subsystem (`kernel/hardware/phoxdrive/`)**:
+  - `phoxdrive.c`, `phoxdrive.h`: In-vehicle central hardware controller running natively inside Phoxtra OS.
+  - `phoxdrive_hazard.c`, `phoxdrive_hazard.h`: Stalled/broken vehicle radar detection (closing speed, distance tracking, collision avoidance) and accident-prone hotspot geofencing.
+  - `phoxdrive_telemetry.c`, `phoxdrive_telemetry.h`: Vehicle speed tracking, 3-axis IMU vertical shock ingestion, and deplorable road surface & severe pothole scanner (0-100 road rating).
+  - `phoxdrive_audio.c`, `phoxdrive_audio.h`: Synthetic voice speak-out alert engine broadcasting audible voice warnings directly to the driver for overspeeding, broken vehicles, and deplorable roads.
+- **FieldSense Agricultural Hardware Foundation (`kernel/hardware/fieldsense/`)**:
+  - `fieldsense.c`, `fieldsense.h`: Groundwork for future Phoxtra AgTech soil sensing hardware (soil moisture, temperature, pH, humidity, solar battery, automated irrigation valve controls).
+- **Interactive Shell Hardware Commands (`kernel/src/shell.c`)**:
+  - Added `hardware` / `devices` command to view all registered Phoxtra hardware products and active profile.
+  - Added `phoxdrive` command with rich subcommands: `status`, `hazard`, `speed <kmh>`, `limit <kmh>`, `broken <dist>`, `road <0-100>`, `alert <msg>`, and `clear`.
+  - Added `fieldsense` command to audit agricultural telemetry.
+- **Automotive GUI Integration (`kernel/ui/wm.c`)**:
+  - Integrated Phoxdrive automotive status and Universal Hardware Engine into the Phoxtra-WM compositor.
+- **Architectural Specifications**:
+  - `docs/architecture/HARDWARE_ECOSYSTEM.md`: Universal hardware runtime specification.
+  - `docs/architecture/PHOXDRIVE_SPECIFICATION.md`: Phoxdrive engineering and safety radar specification.
+
 ## [v1.0.0] - 2026-08-22
 
 ### Added

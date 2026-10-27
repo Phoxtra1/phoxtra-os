@@ -1,12 +1,9 @@
 #include "font.h"
-#include "font_carlito_data.h"
+#include "font_carlito_aa_data.h"
 #include "../drivers/framebuffer.h"
 #include "../log/logger.h"
 
-#define GLYPH_COUNT 95u
-#define GLYPH_BYTES 18u
-
-static uint8_t glyph_data[GLYPH_COUNT][GLYPH_BYTES];
+static uint8_t glyph_data[PHOXTRA_AA_GLYPH_COUNT][PHOXTRA_AA_GLYPH_BYTES];
 static int font_ready;
 
 static int base64_value(char c) {
@@ -37,12 +34,30 @@ static uint32_t decode_base64(const char* src, uint8_t* dst, uint32_t capacity) 
 int font_is_ready(void) { return font_ready; }
 
 void font_init(void) {
-    uint32_t decoded = decode_base64(phoxtra_carlito_regular_b64,
+    uint32_t decoded = decode_base64(phoxtra_carlito_aa_b64,
                                      &glyph_data[0][0], sizeof(glyph_data));
     font_ready = decoded == sizeof(glyph_data);
     klog(font_ready ? LOG_INFO : LOG_ERROR,
-         font_ready ? "Carlito Calibri-compatible 9x16 font initialized"
-                    : "Carlito font data invalid; text renderer disabled");
+         font_ready ? "Carlito proportional antialiased font initialized"
+                    : "Carlito font bitmap invalid; text renderer disabled");
+}
+
+static uint8_t glyph_coverage(uint32_t index, uint32_t x, uint32_t y) {
+    if (x >= PHOXTRA_AA_GLYPH_WIDTH || y >= PHOXTRA_AA_GLYPH_HEIGHT) return 0;
+    uint32_t pixel = y * PHOXTRA_AA_GLYPH_WIDTH + x;
+    uint8_t packed = glyph_data[index][pixel / 4u];
+    return (uint8_t)((packed >> (6u - 2u * (pixel % 4u))) & 0x03u);
+}
+
+static uint32_t blend_channel(uint32_t foreground, uint32_t background, uint8_t coverage) {
+    return (foreground * coverage + background * (3u - coverage) + 1u) / 3u;
+}
+
+static uint32_t blend_coverage(uint32_t foreground, uint32_t background, uint8_t coverage) {
+    uint32_t r = blend_channel((foreground >> 16) & 0xFFu, (background >> 16) & 0xFFu, coverage);
+    uint32_t g = blend_channel((foreground >> 8) & 0xFFu, (background >> 8) & 0xFFu, coverage);
+    uint32_t b = blend_channel(foreground & 0xFFu, background & 0xFFu, coverage);
+    return (r << 16) | (g << 8) | b;
 }
 
 static void draw_char_style(char c, uint32_t x, uint32_t y,
@@ -50,21 +65,22 @@ static void draw_char_style(char c, uint32_t x, uint32_t y,
     uint8_t code = (uint8_t)c;
     if (code < 32 || code > 126) code = '?';
     uint32_t index = (uint32_t)code - 32u;
-    const uint8_t* glyph = glyph_data[index];
-    for (uint32_t row = 0; row < FONT_HEIGHT; ++row) {
-        for (uint32_t col = 0; col < FONT_WIDTH; ++col) {
-            uint32_t bit = row * FONT_WIDTH + col;
-            int set = font_ready && ((glyph[bit / 8u] >> (bit % 8u)) & 1u);
-            if (bold && !set && col > 0) {
-                uint32_t previous = bit - 1u;
-                set = ((glyph[previous / 8u] >> (previous % 8u)) & 1u) != 0;
+
+    for (uint32_t row = 0; row < PHOXTRA_AA_GLYPH_HEIGHT; ++row) {
+        for (uint32_t col = 0; col < PHOXTRA_AA_GLYPH_WIDTH; ++col) {
+            uint8_t coverage = font_ready ? glyph_coverage(index, col, row) : 0;
+            if (bold && col > 0) {
+                uint8_t left = font_ready ? glyph_coverage(index, col - 1u, row) : 0;
+                if (left > coverage) coverage = left;
             }
-            if (set) {
-                fb_put_pixel(x + col, y + row, fg);
-                if (bold && col + 1u < FONT_WIDTH)
-                    fb_put_pixel(x + col + 1u, y + row, fg);
-            } else if (bg != 0) {
-                fb_put_pixel(x + col, y + row, bg);
+
+            uint32_t px = x + col, py = y + row;
+            if (px < x || py < y) continue;
+            if (coverage) {
+                uint32_t background = bg ? bg : fb_get_back_pixel(px, py);
+                fb_put_pixel(px, py, blend_coverage(fg, background, coverage));
+            } else if (bg) {
+                fb_put_pixel(px, py, bg);
             }
         }
     }
@@ -77,21 +93,36 @@ void font_draw_char_bold(char c, uint32_t x, uint32_t y, uint32_t fg, uint32_t b
     draw_char_style(c, x, y, fg, bg, 1);
 }
 
+static uint32_t advance_for(char c) {
+    uint8_t code = (uint8_t)c;
+    if (code < 32 || code > 126) code = '?';
+    return phoxtra_carlito_advance[(uint32_t)code - 32u];
+}
+
 static void draw_string_style(const char* str, uint32_t x, uint32_t y,
                               uint32_t fg, uint32_t bg, int bold) {
     if (!str) return;
     uint32_t cur_x = x, cur_y = y;
     while (*str) {
-        if (*str == '\n') { cur_x = x; cur_y += FONT_HEIGHT + 2u; }
-        else if (*str == '\r') { cur_x = x; }
-        else if (*str == '\t') { cur_x += 4u * (FONT_WIDTH + 1u); }
-        else { draw_char_style(*str, cur_x, cur_y, fg, bg, bold); cur_x += FONT_WIDTH + 1u; }
+        if (*str == '\n') {
+            cur_x = x;
+            cur_y += FONT_HEIGHT + 2u;
+        } else if (*str == '\r') {
+            cur_x = x;
+        } else if (*str == '\t') {
+            cur_x += 4u * (FONT_AVG_WIDTH + 1u);
+        } else {
+            draw_char_style(*str, cur_x, cur_y, fg, bg, bold);
+            cur_x += advance_for(*str);
+        }
         ++str;
     }
 }
+
 void font_draw_string(const char* str, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_string_style(str, x, y, fg, bg, 0);
 }
+
 void font_draw_string_bold(const char* str, uint32_t x, uint32_t y, uint32_t fg, uint32_t bg) {
     draw_string_style(str, x, y, fg, bg, 1);
 }

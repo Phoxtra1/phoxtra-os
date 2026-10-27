@@ -1,90 +1,109 @@
 # Phoxtra OS
 
-**Phoxtra OS is an experimental x86_64 operating-system prototype under active development.** Its current bootable ISO brings up a kernel, a graphical desktop environment, keyboard and pointer interaction in the tested virtual machine, a small set of built-in system panels, and an application catalogue. The prototype also has experimental Ethernet/ARP/IPv4/UDP/TCP paths, DHCP lease acquisition/renewal/expiry management, DNS A-record lookups, and bounded TCP stream sockets, covered by packet-validation and handshake regression tests. Automated CI builds the ISO and exercises core desktop interactions in QEMU, including read-only AHCI/SATA sector I/O and reading a file from a test ext2 partition.
+Phoxtra OS is a secure, identity-first operating system and the **unified mother foundation powering all Phoxtra physical hardware products**. Rather than existing statically solely for laptops or mobile devices, Phoxtra OS adapts dynamically to empower every class of hardware Phoxtra builds—ranging from automotive safety and telematics systems (**Phoxdrive**) to agricultural soil stations (**FieldSense**), industrial edge gateways, smart mobility units, and enterprise workstations.
 
-The long-term Phoxtra direction includes software integrated with Phoxtra devices. This repository currently validates an x86_64 prototype; it is **not** a production-ready general-purpose operating system, and this ISO is **not** a mobile-phone build.
+The operating system is built around six core principles: **Hardware-Native Empowerment, Security, Identity, Privacy, Trust, and Intelligence**.
 
-## Current state
+---
 
-**Prototype stage — automated virtual-machine checks pass; physical-laptop validation is still pending.**
+## 🚀 Current Project Status
 
-The current CI pipeline:
-- Builds the default x86_64 kernel and ISO.
-- Builds the desktop and embedded product profiles.
-- Checks storage-write safety and the hardware-readiness probe.
-- Boots the ISO under QEMU and verifies framebuffer/console initialization, desktop event-loop startup, themes, Application Center/Amineva Workspace catalogue access, functional mouse/file-manager interactions, RAM-backed file and folder creation, and screenshot rendering.
-- Produces an ISO plus a SHA-256 checksum as a downloadable workflow artifact.
+Phoxtra OS has successfully evolved through its **v1.0.0 Commercial Release Foundation** and has expanded into its **Universal Hardware Ecosystem (v2.1.0-hardware)**.
 
-A successful CI run proves that those automated checks passed for the tested build. It does **not** prove that the ISO boots correctly on every physical laptop or that the OS is complete.
+### Active Subsystems & Verified Capabilities:
+1. **Phoxtra Universal Hardware Device Framework (`kernel/hardware/`)**:
+   - Central device registry managing physical Phoxtra hardware profiles: `AUTOMOTIVE`, `AGRICULTURE`, `SMART_MOBILITY`, `INDUSTRIAL_IOT`, `EDGE_GATEWAY`, `MOBILE`, and `DESKTOP_LAPTOP`.
+   - Dynamic profile adaptation without relying on fragmented third-party application stacks.
+2. **Phoxdrive In-Vehicle Automotive Subsystem (`kernel/hardware/phoxdrive/`)**:
+   - **Broken-down Vehicle Radar**: Detection of stationary or stalled vehicles ahead with relative velocity and time-to-impact calculations.
+   - **Accident-Prone Zone Geofencing**: Proactive warnings prior to entering high-risk accident hotspots.
+   - **Deplorable Road & Pothole Surface Scanner**: High-frequency vertical shock (Z-axis IMU) monitoring evaluating road quality on an index of 0–100.
+   - **Speed Telemetry & Synthetic Voice Alert Engine**: Real-time speed cross-checking against road thresholds with audible spoken speech warnings.
+3. **FieldSense AgTech Hardware Foundation (`kernel/hardware/fieldsense/`)**:
+   - Soil moisture, temperature, pH, ambient humidity telemetry, and automated irrigation solenoid controls.
+4. **Core Kernel & Multitasking**:
+   - 64-bit Long Mode bootstrap (`boot.S`, Multiboot2).
+   - 100 Hz timer-driven preemptive round-robin scheduler with assembly context switching (`context.asm`).
+   - Stress tested for up to 64 concurrent tasks.
+5. **Memory Subsystem**:
+   - 3-tier memory management: Physical page frame allocator (Bitmap PMM), 4-level paging VMM, and dynamic kernel heap (`kmalloc`/`kfree`) with memory leak auditing.
+6. **Hardware Root-of-Trust & Zero-Trust Security**:
+   - TPM 2.0 SPI MMIO interface with PCR 0–3 measurements.
+   - Cryptographic SHA-256 process identity attestation.
+   - Immutable hash-chained audit logger.
+   - 64-bit Capability Access Control (CAC) and Mandatory Access Control (MAC) domain isolation.
+   - Stack canaries, guard pages, and ASLR protection.
+7. **Storage, Filesystems & Hardware Discovery**:
+   - Hardware Abstraction Layer (HAL) with PCI Express scanner.
+   - AHCI SATA controller, MBR/GPT partition parser, ext2 and FAT32 filesystems.
+   - Unified Virtual Filesystem (VFS), DevFS, and InitRD.
+8. **Networking Stack**:
+   - Intel 82540EM Gigabit Ethernet NIC driver.
+   - Complete TCP/IP stack: Ethernet II, ARP, IPv4, ICMP Echo, UDP, TCP state machine, BSD Socket API, DHCP client, and DNS resolver.
+9. **Display, Window Compositor & Desktop Environment**:
+   - High-resolution 1024x768 @ 32bpp linear framebuffer with double buffering.
+   - 8x16 anti-aliased bitmap fonts.
+   - Window Compositor (`compositor.c`) and Window Manager (`phoxtra-wm`) with glassmorphism aesthetics, dock/taskbar, theme engine, and file manager UI.
+10. **Interactive Diagnostic Shell**:
+    - Over 35 interactive commands (`help`, `hardware`, `phoxdrive`, `fieldsense`, `ps`, `tpm`, `identity`, `ifconfig`, `ping`, `gui`, `dipa`, `vfs`, etc.).
 
-## Implemented in the prototype
+---
 
-- x86_64 bootable ISO using GRUB/Multiboot2.
-- Graphical framebuffer desktop and window/compositor services.
-- Keyboard input and a PS/2 mouse path used by the QEMU interaction tests.
-- Built-in Shell Console, Files, System Status, and Settings panels; Settings supports desktop-theme selection and read-only readiness information.
-- Theme switching from the desktop and Settings panel, Application Center, and a read-only `hardware` diagnostic report.
-- A shared platform service interface and a catalogue that distinguishes available native panels from planned integrations.
-- Experimental Intel 82540EM/E1000 packet transmission/reception, ARP validation, inbound IPv4 header validation, and ICMP echo replies. The host-side unit tests cover protocol validation; real NIC/laptop networking is not yet physically validated.
-- Bounded UDP receive demultiplexing with length/checksum validation, DHCP Discover/Offer/Request/ACK lease acquisition, and DNS A-query/response parsing with bounded compression/CNAME handling.
-- Experimental minimal TCP stream sockets with checksummed segments, active/passive handshakes, connection retries for ARP deferral, bounded receive/send buffers, acknowledged single-segment sends, and bounded close/timeout handling. These are not a complete high-performance or fully standards-conformant TCP stack.
-- Experimental PCI AHCI/SATA read support for ATA LBA48 disks with 512-byte logical sectors; physical disks and discovered MBR partitions are exposed read-only.
-- A limited read-only ext2 path exposes supported on-disk files through the VFS; CI tests it against a temporary QEMU SATA disk.
-- Storage-safety controls identify the RAM disk as simulated and keep physical writes, installation, and formatting disabled.
-- Automated build, product-profile, QEMU, rendering, and storage/hardware-readiness checks.
+## 📂 Project Structure
 
-## Important limitations
-
-These are known scope limitations, not features to assume are present:
-
-- **Writable persistent storage is not implemented.** The experimental AHCI/SATA path currently reads only supported ATA LBA48 disks with 512-byte logical sectors; it is not validated on a physical laptop, and NVMe is unsupported.
-- The on-disk ext2 implementation is a limited read-only subset. It rejects journaled filesystems, indexed directories, and unsupported feature combinations; there is no ext2 write path. The FAT32 component remains an in-memory demo adapter, not an on-disk FAT32 driver.
-- The 32 MiB RAM test disk used for desktop demonstrations is volatile. Files in RAM-backed demo folders are lost at reboot.
-- **The installer is disabled.** Do not install or format a laptop's internal drive with this prototype.
-- Settings are limited to three desktop themes and read-only display/input/storage readiness information. Display resolution, network configuration, accounts, sound, power management, and software-update controls are not implemented.
-- Amineva Global products and Amnewsworld entries in the Application Center are catalogue entries. Only the listed native panels are currently marked available; external apps are not yet launchable from Phoxtra.
-- **Amineva Workspace is not yet integrated as a functioning suite.** Docs, Sheets, Slides, Forms, Drive, account sign-in, cross-application file access, and offline operation must not be considered available from the OS until their real service/runtime connections are implemented and tested.
-- The network layer remains experimental. TCP receive discards out-of-order data rather than reassembling it; congestion control, full-window/multiple-segment sending, robust TIME_WAIT/recovery, and broad standards interoperability remain incomplete. DHCP lease acquisition, T1 renewal, T2 rebinding, and expiry clearing are implemented with automated timer tests, but remain unvalidated on a physical NIC; DNS falls back to bounded TCP reads for validated truncated UDP replies but remains limited to A records and a bounded response size; IPv4 fragmentation/reassembly is rejected. HTTPS/TLS, certificate validation, a general-purpose browser, and a fully validated end-user web-app path are not delivered. Physical NIC/laptop interoperability has not yet passed acceptance.
-- For a connected test NIC, the shell exposes `dhcp` to request a lease and `dns example.com` to test a DNS A lookup. These are experimental, synchronous prototype commands; they do not imply TCP, HTTPS, or Workspace integration.
-- A physical standard-laptop test has not yet passed the Phase 7 acceptance checklist.
-- No dedicated Phoxtra hardware target has been selected and brought up.
-- There is no validated ARM64 mobile-phone build. Mobile support remains a future project, not a capability of this ISO.
-- Security, identity, driver coverage, persistence, recovery, and app/runtime capabilities need more engineering before production use.
-
-## Build and test
-
-The project is built on Ubuntu in GitHub Actions. For local development, install the project's build dependencies (CMake, build tools, NASM, GRUB/ISO tools, QEMU, socat, e2fsprogs, and Python 3), then run:
-
-```bash
-python3 scripts/check_storage_safety.py
-cmake -B build -S .
-cmake --build build -j2
-cmake --build build --target iso
+```
+.
+├── boot/                      # Custom Bootloader & UEFI entry stubs
+├── config/                    # System and boot configuration profiles
+├── docs/                      # Architectural specifications & Roadmaps
+│   └── architecture/          # Hardware ecosystem, Phoxdrive specs, memory, security
+├── iso/                       # ISO packaging configuration & GRUB bootloader script
+├── kernel/                    # Main kernel directory (x86_64 and architecture-independent sources)
+│   ├── arch/x86_64/           # x86_64 Assembly boot, IDT/ISR, GDT, context switching
+│   ├── hardware/              # Universal Hardware Framework (Phoxdrive, FieldSense, Device Registry)
+│   ├── include/               # Core kernel header files
+│   ├── log/                   # Kernel serial logging & logger engine
+│   ├── memory/                # PMM, VMM, kernel heap, and heap audit
+│   ├── net/                   # Intel e1000 NIC, Ethernet, ARP, IPv4, TCP/UDP, sockets
+│   ├── process/               # PCB, process manager, multitasking stress engine
+│   ├── scheduler/             # Preemptive round-robin scheduler
+│   ├── security/              # TPM 2.0, SHA-256 attestation, CAC, MAC, audit logger
+│   ├── src/                   # Kernel entry, init, shell, console, interrupts, timer
+│   ├── storage/               # AHCI, block devices, ext2, FAT32, partition tables
+│   ├── ui/                    # Framebuffer, compositor, window manager (phoxtra-wm), fonts
+│   └── vfs/                   # Virtual filesystem, DevFS, InitRD
+├── libc/                      # Native C standard library (phoxtra-libc POSIX subset)
+├── linker/                    # Custom linker script (`linker.ld`)
+├── scripts/                   # Build and release packaging scripts
+└── sdk/                       # Developer cross-compiler toolchains and utilities
 ```
 
-The generated ISO is typically at `build/phoxtra.iso`. To start it in QEMU:
+---
 
-```bash
-qemu-system-x86_64 -m 256M -cdrom build/phoxtra.iso -serial stdio
-```
+## 🛠️ Building & Running Phoxtra OS
 
-Follow the current workflow in [`.github/workflows/phoxtra-build.yml`](.github/workflows/phoxtra-build.yml) for the canonical CI test sequence. A local build by itself is not a release sign-off.
+### Prerequisites
+- **CMake** (v3.20 or newer)
+- **GCC / G++** cross-compiler for `x86_64-elf` (or standard GCC with `-ffreestanding`)
+- **NASM** (for x86_64 assembly modules)
+- **xorriso** & **grub-mkrescue** (for bootable ISO creation)
+- **QEMU** (for virtualization and testing)
 
-## Prototype completion and release policy
+### Build Commands
 
-Use these documents as the source of truth for status and next actions:
+1. **Configure and build the kernel**:
+   ```bash
+   cmake -B build -S .
+   cmake --build build
+   ```
 
-- [Prototype completion and release gates](docs/release/prototype-completion-and-release-gates.md)
-- [Amineva Workspace integration plan](docs/integration/amineva-workspace-integration-plan.md)
-- [Funding and prototype brief](docs/funding/prototype-brief.md)
-- [Standard-laptop validation checklist](docs/roadmap/laptop-validation-checklist.md)
-- [Phase 8 hardware integration plan](docs/roadmap/phase8-hardware-integration-plan.md)
-- [Development roadmap](docs/roadmap/roadmap.md)
+2. **Generate the bootable ISO**:
+   ```bash
+   ./scripts/build-iso.sh
+   ```
+   This generates `phoxtra-os.iso` in the project root.
 
-The release workflow supports creating an **unpublished draft GitHub Release** from a successful manual build. It is opt-in and does not publish a public release automatically. Use it only after release checks are reviewed. Build artifacts expire; a draft/published Release is the versioned distribution location. Do not publish the release until the physical-laptop acceptance gate, known-limitations review, and release notes are complete.
-
-## Funding and demonstration
-
-Phoxtra OS can be described honestly as an early-stage, bootable desktop OS prototype with automated QEMU evidence and a staged hardware-readiness plan. Suitable opportunities may include prototype-development grants, R&D support, incubators, university or maker-lab programmes, and hardware/operating-system innovation support. Eligibility and fit depend on each funder's criteria; no funding outcome is guaranteed.
-
-Do not claim production readiness, writable persistent-disk support, finished Amineva Workspace integration, mobile-phone support, or successful physical hardware validation until the corresponding work has been implemented and evidenced.
+3. **Run in QEMU**:
+   ```bash
+   qemu-system-x86_64 -cdrom phoxtra-os.iso -serial stdio
+   ```

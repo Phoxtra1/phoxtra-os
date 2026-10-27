@@ -7,12 +7,6 @@
 /* Transparent, palette-indexed 48x48 raster sampled from the supplied
  * Phoxtra brand mark. RLE keeps this source asset compact for the kernel.
  */
-static const uint32_t phoxtra_logo_palette[16] = {
-    0x00000000, 0x00EBCD28, 0x006DC159, 0x00FE9909,
-    0x009BA041, 0x0011C2F8, 0x0019A3AD, 0x00098BCB,
-    0x00128D43, 0x00DE761F, 0x00E65119, 0x00097A6E,
-    0x00085494, 0x00006DD1, 0x00000072, 0x00000000
-};
 static const char phoxtra_logo_rle_base64[] =
 "QQAGCAgCIAAJCAkCAQcaAAsICgICDQEHFwAMCAgCAQQBAgMNAQcUAAELDQgIAgEEAQIBBwQNAQcRAAEEDQgJAgEEAQIBBQIHBA0PAAIBAQMBBAsICQIBBAECAwUBBwQNDQAEAwIBCggJAgEEAQIDBQIHBA0LAAYDAgEBBAgICQIBBAECBAUCBwQNCQAIAwMBAQQGCAkCAQQBAgUFAgcEDQgACQMEAQECBAgJAgEEAQIGBQEHBA0HAAsDBQEBAgMICAIBBAECBwUBBwQNBgAMAwUBAQQBCAkCAQQBAgcFAgcDDQUAAQkNAwQBAgAJAgEEAQIIBQEHBA0EAAMJCgMDAQYABwIBBAECCAUBBwQNAwAECQoDAQEKAAcCCQUBBwQNAgABCQIKAgkHAwEEAQUMAAYCCQUBBwMNAQwCAAMKBAkDAwEEAwUOAAQCCQUBBwENAQYCCgEABQoCCQIDAQQBBgQFEAACAgkFAQYBCQoKAQkBBAEGBgURAAgFAQYBBAsKAQQBBggFEQAHBQEEAQkKCgEEAQcKBREABQUBAgEJAQMCCQgKAgcLBREAAwUBAgEJAwMCCQYKAQcDDQEHCgUSAAEGAQEGAwEJBgoEDQEHCgURAAEBCAMBCQYKBA0CBwkFDwABAQoDAQkGCgUNAQcJBQ0AAgELAwEJBgoFDQEHCQULAAMBDAMBCQYKAQAFDQEHCAUKAAQBDAMBCQUKAgAFDQIHBwUDAAIIAwAGAQwDAgkECgIABg0BBwcFAwADCAECBwENAwEJBAoDAAUNAgcGBQMABQgBBAYBDAMBCQMKBAAGDQIHBQUDAAcIAQQEAQwDAQkDCgUABg0CBwQFAwAJCAEEAgEMAwEJAgoGAAcNAgcDBQMACwgBBAEBCwMDCQcABw0CBwEFAQcDAA0IAQQKAwIJCAAJDQIHAwAPCAEECQMBCQkACQ0BBwMAEQgBBAYDAQkLAAkNAwATCAEEAwMBCQ0ACA0DABUIAQQBCQ8ABw0DABUIAQsRAAYNAwAVCBQABA0DABMIFwADDQMAEQgbAAENAwAPCCEADAhCAA==";
 static uint8_t phoxtra_logo_pixels[48 * 48];
@@ -49,14 +43,14 @@ static void phoxtra_logo_prepare(void) {
     while (out < 2304) phoxtra_logo_pixels[out++] = 0;
     phoxtra_logo_decoded = 1;
 }
-static void phoxtra_logo_draw(uint32_t x, uint32_t y, uint32_t size) {
+static void phoxtra_logo_draw(uint32_t x, uint32_t y, uint32_t size, uint32_t color) {
     if (!size) return;
     phoxtra_logo_prepare();
     for (uint32_t dy = 0; dy < size; ++dy) {
         uint32_t sy = dy * 48u / size;
         for (uint32_t dx = 0; dx < size; ++dx) {
             uint8_t index = phoxtra_logo_pixels[sy * 48u + dx * 48u / size];
-            if (index) fb_put_pixel(x + dx, y + dy, phoxtra_logo_palette[index]);
+            if (index) fb_put_pixel(x + dx, y + dy, color);
         }
     }
 }

@@ -23,6 +23,7 @@ void framebuffer_set_boot_info(uint32_t magic, uint32_t info_phys);
 void framebuffer_init(void);
 framebuffer_t* framebuffer_get(void);
 int framebuffer_is_available(void);
+uint32_t fb_get_back_pixel(uint32_t x, uint32_t y);
 void fb_put_pixel(uint32_t x, uint32_t y, uint32_t color);
 void fb_draw_rect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t color);
 void fb_fill_rect(uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t color);

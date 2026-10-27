@@ -65,6 +65,9 @@ void user_mode_smoke_init(void);
 #include "../exec/phoxtra_box.h"
 #include "../drivers/phoxtra_gl.h"
 #include "../net/cloud_sync.h"
+#include "../hardware/hardware_manager.h"
+#include "../hardware/phoxdrive/phoxdrive.h"
+#include "../hardware/fieldsense/fieldsense.h"
 }
 
 /* ────────────────────────────────────────────────
@@ -142,6 +145,11 @@ void system_init()
     phoxtra_box_init();
     phoxtra_gl_init();
     cloud_sync_init();
+
+    /* ── Phoxtra Universal Hardware Device Framework & Phoxdrive ── */
+    hardware_manager_init();
+    phoxdrive_init();
+    fieldsense_init();
 
     /* ── Phase 8: TCP/IP Network Stack & e1000 Driver ───────── */
     netdev_init();

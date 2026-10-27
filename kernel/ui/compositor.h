@@ -24,6 +24,7 @@ typedef struct window {
 void compositor_init(void);
 window_t* compositor_create_window(const char* title, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint32_t bg_color);
 void compositor_render_frame(void);
+void compositor_draw_phoxtra_mark(uint32_t x, uint32_t y, uint32_t size, uint32_t color);
 uint32_t compositor_window_count(void);
 window_t* compositor_window_at(uint32_t index);
 window_t* compositor_window_at_point(uint32_t x, uint32_t y);
