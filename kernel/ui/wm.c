@@ -237,7 +237,19 @@ static void wm_draw_application_center(void) {
                          app_win->x + 670u, row_y + 5u,
                          app->state == PLATFORM_APP_AVAILABLE ? 0x0034D399 : 0x00F59E0B, 0);
     }
-    font_draw_string(app_page == 0 ? "Page 1/2" : "Page 2/2", app_win->x + 24u, app_win->y + 500u, palette->accent_secondary, 0);
+    uint32_t page_count = (total + APP_CENTER_PAGE_SIZE - 1u) / APP_CENTER_PAGE_SIZE;
+    if (page_count == 0u) page_count = 1u;
+    char page_label[32];
+    page_label[0] = 'P'; page_label[1] = 'a'; page_label[2] = 'g'; page_label[3] = 'e'; page_label[4] = ' ';
+    uint32_t page_number = app_page + 1u;
+    uint32_t pos = 5u;
+    if (page_number >= 10u) page_label[pos++] = (char)('0' + (page_number / 10u));
+    page_label[pos++] = (char)('0' + (page_number % 10u));
+    page_label[pos++] = '/';
+    if (page_count >= 10u) page_label[pos++] = (char)('0' + (page_count / 10u));
+    page_label[pos++] = (char)('0' + (page_count % 10u));
+    page_label[pos] = '\\0';
+    font_draw_string(page_label, app_win->x + 24u, app_win->y + 500u, palette->accent_secondary, 0);
     font_draw_string("[: previous page  ]: next page  W: Workspace  Q: close", app_win->x + 24u, app_win->y + 526u, palette->accent_secondary, 0);
 }
 

@@ -115,11 +115,11 @@ static void redraw_entries(void) {
     /* The fixed status text avoids presenting fictitious disk capacity. */
     font_draw_string("Folder: click  File: double-click",
                      fm_win->x + 16, fm_win->y + fm_win->height - 60, palette->text_color, 0);
-    font_draw_string("Backspace: parent  N: folder",
+    font_draw_string("Backspace: parent  N: new folder",
                      fm_win->x + 16, fm_win->y + fm_win->height - 42, palette->text_color, 0);
     font_draw_string(entry_count > FM_VISIBLE_ITEMS
-                         ? "Ctrl+N: file  [ ]: pages"
-                         : "Ctrl+N: create file",
+                         ? "C: new file  [ ]: pages"
+                         : "C: create file",
                      fm_win->x + 16, fm_win->y + fm_win->height - 24, palette->text_color, 0);
     (void)status;
 }
