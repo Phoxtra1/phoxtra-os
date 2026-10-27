@@ -11,6 +11,9 @@ extern "C" {
 #include "boot_screen.h"
 #include "../net/netdev.h"
 #include "../net/dhcp.h"
+#ifdef PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE
+#include "../exec/guest_https_image.h"
+#endif
 }
 
 extern "C" void kernel_init(uint32_t multiboot_magic, uint32_t multiboot_info_phys)
@@ -32,6 +35,9 @@ extern "C" void kernel_init(uint32_t multiboot_magic, uint32_t multiboot_info_ph
         serial::write("[NETWORK] Supported link is up; requesting DHCP configuration\n");
         if (dhcp_request_lease(network_device) == 0) {
             serial::write("[NETWORK] PHOXTRA_NETWORK_DHCP_OK\n");
+#ifdef PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE
+            guest_https_smoke_start();
+#endif
         } else {
             serial::write("[NETWORK] PHOXTRA_NETWORK_DHCP_FAILED; use 'dhcp' to retry\n");
         }

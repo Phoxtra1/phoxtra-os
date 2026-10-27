@@ -5,7 +5,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#ifndef PHOXTRA_HTTPS_PORT
 #define PHOXTRA_HTTPS_PORT 443u
+#endif
 #define PHOXTRA_HTTPS_MAX_HOSTNAME 253u
 #define PHOXTRA_HTTPS_MAX_PATH 1024u
 #define PHOXTRA_HTTPS_MAX_REQUEST 1400u
