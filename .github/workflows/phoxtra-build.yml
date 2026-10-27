@@ -123,13 +123,7 @@ jobs:
           rm -f /tmp/qemu-monitor.sock /tmp/phoxtra-serial.log /tmp/phoxtra-screen.ppm /tmp/phoxtra-settings-screen.ppm /tmp/phoxtra-ahci-test.img
           truncate -s 64M /tmp/phoxtra-ahci-test.img
           TCP_GUEST_PORT=4242
-          TCP_HOST_PORT=$(python3 - <<'PY'
-          import socket
-          with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-              probe.bind(("127.0.0.1", 0))
-              print(probe.getsockname()[1])
-          PY
-          )
+          TCP_HOST_PORT=44242
           python3 - <<'PY'
           import struct
           from pathlib import Path
