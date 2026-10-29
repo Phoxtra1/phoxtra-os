@@ -102,10 +102,6 @@ _start:
 
 .code64
 long_mode_start:
-    # Start from a deterministic FPU/SSE state. The scheduler saves and
-    # restores this state for every process context switch.
-    fninit
-    ldmxcsr mxcsr_default(%rip)
     mov $0x10, %ax
     mov %ax, %ds
     mov %ax, %es
@@ -114,6 +110,10 @@ long_mode_start:
     mov %ax, %ss
     mov $stack_top, %rsp
     and $-16, %rsp
+    # Start from a deterministic FPU/SSE state. The scheduler saves and
+    # restores this state for every process context switch.
+    fninit
+    ldmxcsr mxcsr_default(%rip)
     # SysV AMD64: kernel_init(magic, info_phys).
     mov multiboot2_magic_saved(%rip), %edi
     mov multiboot2_info_saved(%rip), %esi
