@@ -27,6 +27,8 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t*,const char*,const char*,
  const unsigned char*,size_t,unsigned char*,size_t,size_t*);
 int phoxtra_https_get(const char*,const char*,const unsigned char*,size_t,unsigned char*,size_t,size_t*);
 int phoxtra_https_get_default(const char*,const char*,unsigned char*,size_t,size_t*);
+/* Verification flags from the most recent call, for diagnostics and tests. */
+uint32_t phoxtra_https_last_verify_flags(void);
 #ifdef __cplusplus
 }
 #endif
