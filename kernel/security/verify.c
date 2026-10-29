@@ -2,17 +2,18 @@
 #include "../log/logger.h"
 
 void verify_init(void) {
-    klog(LOG_INFO, "Initializing Phoxtra Verify Cryptographic Authentication Engine...");
+    klog(LOG_WARNING, "Signature verification is unavailable: no trusted verification key store or signature scheme is configured");
 }
 
 uint32_t verify_file_signature(const char* file_path, const char* expected_hash) {
-    (void)file_path; (void)expected_hash;
-    klog(LOG_INFO, "Phoxtra Verify: Binary SHA-256 Hash Verified against PhoxtraID Root CA");
-    return 1; // Authentic
+    (void)file_path;
+    (void)expected_hash;
+    klog(LOG_WARNING, "File signature verification unavailable; target remains unverified");
+    return 0;
 }
 
 uint32_t verify_document_authenticity(const char* doc_id) {
     (void)doc_id;
-    klog(LOG_INFO, "Phoxtra Verify: Document Authenticity Confirmed via Blockchain Ledger");
-    return 1; // Authentic
+    klog(LOG_WARNING, "Document authenticity verification unavailable; no blockchain or trusted document service is connected");
+    return 0;
 }
