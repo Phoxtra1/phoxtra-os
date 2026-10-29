@@ -1,6 +1,7 @@
 #include "../include/cpu.hpp"
 #include "../include/fpu.h"
 #include <stdint.h>
+#include <stddef.h>
 
 namespace {
 alignas(16) static uint8_t default_fpu_state[512];
