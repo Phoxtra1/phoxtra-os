@@ -13,6 +13,28 @@ static void guest_log(const char* message)
     __asm__ volatile ("int $0x80" : "+a"(rax) : "D"(rdi) : "memory", "cc");
 }
 
+static void guest_log_hex(const char* label, uint64_t value)
+{
+    static const char digits[] = "0123456789ABCDEF";
+    char message[96];
+    size_t length = 0;
+    while (label[length] && length < sizeof(message) - 18u) {
+        message[length] = label[length];
+        ++length;
+    }
+    for (int shift = 60; shift >= 0; shift -= 4)
+        message[length++] = digits[(value >> (unsigned)shift) & 0xFu];
+    message[length] = '\0';
+    guest_log(message);
+}
+
+static int64_t guest_time_unix(void)
+{
+    register uint64_t rax __asm__("rax") = 14u; /* SYS_TIME */
+    __asm__ volatile ("int $0x80" : "+a"(rax) : : "memory", "cc");
+    return (int64_t)rax;
+}
+
 static int contains_bytes(const unsigned char* data, size_t data_length, const char* text)
 {
     size_t text_length = 0;
@@ -38,7 +60,10 @@ int phoxtra_https_guest_smoke_main(void)
         guest_log("PHOXTRA_GUEST_HTTPS_CONNECT_FAILED"); return 1;
     }
     if (result == PHOXTRA_HTTPS_ERR_CERTIFICATE) {
-        guest_log("PHOXTRA_GUEST_HTTPS_CERTIFICATE_FAILED"); return 1;
+        guest_log("PHOXTRA_GUEST_HTTPS_CERTIFICATE_FAILED");
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_VERIFY_FLAGS=", phoxtra_https_last_verify_flags());
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_TIME_UNIX=", (uint64_t)guest_time_unix());
+        return 1;
     }
     if (result == PHOXTRA_HTTPS_ERR_TLS) {
         guest_log("PHOXTRA_GUEST_HTTPS_TLS_FAILED"); return 1;
