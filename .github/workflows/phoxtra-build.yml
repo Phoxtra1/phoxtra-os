@@ -1,8 +1,10 @@
 name: Phoxtra OS build
 
 on:
+  # Main is validated on push. Feature/fix branches are validated by the
+  # corresponding pull_request event, avoiding duplicate runs for one commit.
   push:
-    branches: [main, "fix/**", "feat/**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -21,7 +23,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
