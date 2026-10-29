@@ -15,6 +15,13 @@ uint32_t phoxtra_https_last_verify_flags(void)
  return last_verify_flags;
 }
 
+static int last_tls_error;
+
+int phoxtra_https_last_tls_error(void)
+{
+ return last_tls_error;
+}
+
 #define TLS_READ_CHUNK 512u
 #define TLS_HTTP_VERSION " HTTP/1.1\r\n"
 #define TLS_HEADERS "User-Agent: PhoxtraOS/0.1\r\nAccept: */*\r\nConnection: close\r\n\r\n"
@@ -74,6 +81,7 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  int socket=-1,result=PHOXTRA_HTTPS_ERR_TLS,ssl_init=0,config_init=0,ca_init=0;
  if(response_length)*response_length=0;
  last_verify_flags=0;
+ last_tls_error=0;
  if(!io||!io->connect_tcp||!io->send||!io->recv||!io->close||
     !hostname_valid(hostname)||!path_valid(path,&request_len)||!ca_pem||ca_pem_length<2u||
     !response_buffer||!response_capacity||!response_length)return PHOXTRA_HTTPS_ERR_ARGUMENT;
@@ -96,12 +104,21 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  https_bio_t bio={io,socket};mbedtls_ssl_set_bio(&ssl,&bio,tls_send,tls_recv,NULL);
  rc=mbedtls_ssl_handshake(&ssl);
  if(rc!=0){
+  last_tls_error=rc;
   last_verify_flags=mbedtls_ssl_get_verify_result(&ssl);
-  result=last_verify_flags?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;
+  /*
+   * Mbed TLS returns UINT32_MAX from get_verify_result when no negotiated
+   * session is available. That sentinel is not a certificate-verification
+   * failure; preserve the actual handshake error for diagnosis.
+   */
+  result=(last_verify_flags!=0u && last_verify_flags!=UINT32_MAX)
+      ?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;
   goto cleanup;
  }
  last_verify_flags=mbedtls_ssl_get_verify_result(&ssl);
- if(last_verify_flags){result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;}
+ if(last_verify_flags!=0u && last_verify_flags!=UINT32_MAX){
+  result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;
+ }
  size_t sent=0;
  while(sent<request_len){
   rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);
