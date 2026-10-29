@@ -62,11 +62,16 @@ int phoxtra_https_guest_smoke_main(void)
     if (result == PHOXTRA_HTTPS_ERR_CERTIFICATE) {
         guest_log("PHOXTRA_GUEST_HTTPS_CERTIFICATE_FAILED");
         guest_log_hex("PHOXTRA_GUEST_HTTPS_VERIFY_FLAGS=", phoxtra_https_last_verify_flags());
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_TLS_ERROR=", (uint64_t)(int64_t)phoxtra_https_last_tls_error());
         guest_log_hex("PHOXTRA_GUEST_HTTPS_TIME_UNIX=", (uint64_t)guest_time_unix());
         return 1;
     }
     if (result == PHOXTRA_HTTPS_ERR_TLS) {
-        guest_log("PHOXTRA_GUEST_HTTPS_TLS_FAILED"); return 1;
+        guest_log("PHOXTRA_GUEST_HTTPS_TLS_FAILED");
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_VERIFY_FLAGS=", phoxtra_https_last_verify_flags());
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_TLS_ERROR=", (uint64_t)(int64_t)phoxtra_https_last_tls_error());
+        guest_log_hex("PHOXTRA_GUEST_HTTPS_TIME_UNIX=", (uint64_t)guest_time_unix());
+        return 1;
     }
     if (result != PHOXTRA_HTTPS_OK) {
         guest_log("PHOXTRA_GUEST_HTTPS_IO_OR_SETUP_FAILED"); return 1;
