@@ -20,6 +20,9 @@
 #include "../net/dhcp.h"
 #include "../net/dns.h"
 #include "../exec/elf.h"
+#ifdef PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE
+#include "../exec/guest_https_image.h"
+#endif
 #include "../exec/ld_so.h"
 #include "../drivers/framebuffer.h"
 #include "../ui/font.h"
@@ -190,7 +193,9 @@ static void cmd_help(void) {
     console_write("  stackguard - Stack Canary & Kernel Guard Page Protection Audit\n");
     console_write("  ifconfig   - Display active network interfaces and IP addresses\n");
     console_write("  ping       - Send ICMP Echo Request to remote IPv4 host\n");
-    console_write("  netstat    - List BSD Sockets and TCP/UDP transport protocol connections\n");
+    console_write("  netstat    - List active prototype socket states\n");
+    console_write("  tcpcheck   - Run a real TCP request/response integration probe\n");
+    console_write("  httpscheck - Queue the verified guest HTTPS integration probe\n");
     console_write("  dhcp       - Request dynamic IPv4 address lease via DHCP\n");
     console_write("  dns        - Resolve hostname domain to IPv4 address\n");
     console_write("  elf        - Parse & load ELF64 executable binary program\n");
@@ -483,29 +488,120 @@ static void cmd_dhcp(void) {
     console_write("\n=== DHCP Dynamic Lease Request ===\n");
     netdev_t* dev = netdev_get_default();
     if (!dev) {
+        klog(LOG_ERROR, "PHOXTRA_NETWORK_DHCP_FAILED: no network interface registered");
         console_write("No network interface registered; DHCP cannot run.\n\n");
         return;
     }
     int result = dhcp_request_lease(dev);
-    if (result == 0) {
-        console_write("DHCP lease request completed. Check interface values to confirm the applied lease.\n\n");
+    if (result == 0 && dev->ip_addr && dev->netmask) {
+        klog(LOG_INFO, "PHOXTRA_NETWORK_DHCP_OK");
+        console_write("Validated DHCP lease acquired and applied.\n");
+        char address[16]; uint32_to_ip(dev->ip_addr, address);
+        console_write("IPv4: "); console_write(address); console_write("\n\n");
     } else {
-        console_write("DHCP did not acquire a lease; existing interface settings were not reported as newly configured.\n\n");
+        klog(LOG_ERROR, "PHOXTRA_NETWORK_DHCP_FAILED");
+        console_write("DHCP did not acquire a validated lease; no new address is claimed.\n\n");
     }
 }
 
 static void cmd_dns(const char* host) {
     console_write("\n=== DNS Hostname Resolution ===\n");
-    if (!host || host[0] == '\0') host = "phoxtra.org";
-    console_write("Resolving hostname '"); console_write(host); console_write("' via DNS (8.8.8.8)...\n");
-
+    if (!host || host[0] == '\0') host = "example.com";
     netdev_t* dev = netdev_get_default();
-    uint32_t resolved_ip = dns_resolve_hostname(dev, host);
+    if (!dev || !dev->dns_server || !dev->ip_addr) {
+        klog(LOG_WARNING, "PHOXTRA_DNS_QUERY_FAILED: interface is not configured");
+        console_write("DNS unavailable: no configured interface/DNS server.\n\n");
+        return;
+    }
+    char dns_server[16];
+    uint32_to_ip(dev->dns_server, dns_server);
+    console_write("Resolving hostname '"); console_write(host);
+    console_write("' via configured DNS server "); console_write(dns_server); console_write("...\n");
 
+    uint32_t resolved_ip = dns_resolve_hostname(dev, host);
+    if (!resolved_ip) {
+        klog(LOG_ERROR, "PHOXTRA_DNS_QUERY_FAILED");
+        console_write("DNS query returned no usable A record.\n\n");
+        return;
+    }
     char ip_str[16];
     uint32_to_ip(resolved_ip, ip_str);
     console_write("Name    : "); console_write(host); console_write("\n");
     console_write("Address : "); console_write(ip_str); console_write("\n\n");
+    klog(LOG_INFO, "PHOXTRA_DNS_QUERY_OK");
+}
+
+static void cmd_tcpcheck(void) {
+    static const uint8_t expected_request[] = "PHOXTRA_TCP_PROBE";
+    static const char response[] = "PHOXTRA_TCP_E2E_OK";
+    const uint32_t expected_length = (uint32_t)sizeof(expected_request) - 1u;
+    netdev_t* dev = netdev_get_default();
+
+    if (!dev || !dev->send_packet || !dev->receive_packet ||
+        !dev->ip_addr || !(dev->flags & 0x01u)) {
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: network interface is not ready");
+        return;
+    }
+    int listener = sys_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener < 0) {
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: socket allocation failed");
+        return;
+    }
+    sockaddr_in_t local = {0};
+    local.sin_family = AF_INET;
+    local.sin_port = htons(4242u);
+    local.sin_addr = dev->ip_addr;
+    if (sys_bind(listener, &local) != 0 || sys_listen(listener, 1) != 0) {
+        (void)sys_close(listener);
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: bind/listen failed");
+        return;
+    }
+
+    klog(LOG_INFO, "PHOXTRA_TCP_E2E_LISTENER_READY");
+    int client = sys_accept(listener, 0);
+    if (client < 0) {
+        (void)sys_close(listener);
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: accept timed out or failed");
+        return;
+    }
+
+    uint8_t request[sizeof(expected_request) - 1u];
+    uint32_t received_total = 0;
+    for (uint32_t attempt = 0; attempt < 4u && received_total < expected_length; ++attempt) {
+        int received = sys_recv(client, request + received_total,
+                                expected_length - received_total, 0);
+        if (received <= 0) break;
+        received_total += (uint32_t)received;
+    }
+    int request_matches = received_total == expected_length;
+    for (uint32_t i = 0; request_matches && i < expected_length; ++i)
+        if (request[i] != expected_request[i]) request_matches = 0;
+
+    int sent = -1;
+    if (request_matches)
+        sent = sys_send(client, response, (uint32_t)sizeof(response) - 1u, 0);
+    (void)sys_close(client);
+    (void)sys_close(listener);
+
+    if (!request_matches || sent != (int)(sizeof(response) - 1u)) {
+        klog(LOG_ERROR, "PHOXTRA_TCP_E2E_FAILED: request validation or acknowledged response failed");
+        return;
+    }
+    klog(LOG_INFO, "PHOXTRA_TCP_E2E_OK");
+}
+
+static void cmd_httpscheck(void) {
+#ifdef PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE
+    netdev_t* dev = netdev_get_default();
+    if (!dev || !dev->ip_addr || !dev->dns_server) {
+        klog(LOG_ERROR, "PHOXTRA_GUEST_HTTPS_SETUP_FAILED: network lease is not ready");
+        return;
+    }
+    klog(LOG_INFO, "PHOXTRA_GUEST_HTTPS_START_REQUESTED");
+    guest_https_smoke_start();
+#else
+    klog(LOG_ERROR, "PHOXTRA_GUEST_HTTPS_SETUP_FAILED: guest HTTPS smoke is not enabled in this build");
+#endif
 }
 
 static void cmd_elf(const char* path) {
@@ -959,6 +1055,8 @@ void shell_start(void) {
                     cmd_ping(p);
                 }
                 else if (kstrcmp(input, "netstat")    == 0) cmd_netstat();
+                else if (kstrcmp(input, "tcpcheck")   == 0) cmd_tcpcheck();
+                else if (kstrcmp(input, "httpscheck") == 0) cmd_httpscheck();
                 else if (kstrcmp(input, "dhcp")       == 0) cmd_dhcp();
                 else if (input[0]=='d' && input[1]=='n' && input[2]=='s') {
                     const char* p = input + 3;
