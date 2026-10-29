@@ -1,7 +1,7 @@
 #include "guest_https_image.h"
 #include "phoxtra_guest_https_elf.h"
-#include "process/process.h"
-#include "log/logger.h"
+#include "../process/process.h"
+#include "../log/logger.h"
 
 void guest_https_smoke_start(void)
 {
