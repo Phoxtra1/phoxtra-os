@@ -1,7 +1,22 @@
 #include "../include/time.h"
+#include <mbedtls/platform_time.h>
 #include <stdint.h>
 static int64_t get_time_syscall(void){register uint64_t rax __asm__("rax")=14u;__asm__ volatile("int $0x80":"+a"(rax)::"memory","cc");return (int64_t)rax;}
 time_t time(time_t* timer){int64_t value=get_time_syscall();if(value<0)return (time_t)-1;if(timer)*timer=(time_t)value;return (time_t)value;}
+
+static int64_t get_monotonic_ms_syscall(void) {
+    register uint64_t rax __asm__("rax") = 15u;
+    __asm__ volatile("int $0x80" : "+a"(rax) : : "memory", "cc");
+    return (int64_t)rax;
+}
+
+/* TF-PSA-Crypto's freestanding monotonic clock hook. */
+mbedtls_ms_time_t mbedtls_ms_time(void) {
+    static mbedtls_ms_time_t last_ms;
+    const int64_t now = get_monotonic_ms_syscall();
+    if (now > (int64_t)last_ms) last_ms = (mbedtls_ms_time_t)now;
+    return last_ms;
+}
 static int leap(int y){return y%4==0&&(y%100!=0||y%400==0);}
 struct tm* gmtime_r(const time_t* timer,struct tm* out){
  if(!timer||!out)return (struct tm*)0;

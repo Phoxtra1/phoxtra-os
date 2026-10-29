@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <psa/crypto.h>
 #include <psa/crypto_platform.h>
+#include <mbedtls/platform_time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,14 @@ typedef struct test_transport {
 } test_transport_t;
 
 static int64_t time_offset_seconds;
+
+mbedtls_ms_time_t mbedtls_ms_time(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
+    return (mbedtls_ms_time_t)now.tv_sec * 1000 +
+           (mbedtls_ms_time_t)now.tv_nsec / 1000000;
+}
 
 time_t time(time_t* out)
 {

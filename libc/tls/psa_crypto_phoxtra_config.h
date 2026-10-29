@@ -11,6 +11,7 @@
 /* Keep PSA's view of Mbed TLS time capabilities in sync with X.509 validation. */
 #define MBEDTLS_HAVE_TIME
 #define MBEDTLS_HAVE_TIME_DATE
+#define MBEDTLS_PLATFORM_MS_TIME_ALT
 
 /* The embedded client has no hosted debug or self-test output channel. */
 #undef MBEDTLS_SELF_TEST

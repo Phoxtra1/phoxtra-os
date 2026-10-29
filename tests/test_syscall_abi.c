@@ -330,6 +330,19 @@ int main(void) {
     CHECK("SYS_TIME returns RTC Unix seconds",regs.rax==1700000000ULL);
     mock_rtc_failure=1;init_user_regs(&regs,SYS_TIME);syscall_handler(&regs);
     CHECK("SYS_TIME fails closed when RTC is invalid",(int64_t)regs.rax==-5);
+
+    reset_mock();
+    mock_uptime_ticks = 1234u;
+    init_user_regs(&regs, SYS_MONOTONIC_MS);
+    syscall_handler(&regs);
+    CHECK("SYS_MONOTONIC_MS returns monotonic scheduler ticks as milliseconds",
+          regs.rax == 12340u);
+    reset_mock();
+    mock_uptime_ticks = 0x7FFFFFFFFFFFFFFFULL / 10u + 1u;
+    init_user_regs(&regs, SYS_MONOTONIC_MS);
+    syscall_handler(&regs);
+    CHECK("SYS_MONOTONIC_MS rejects signed millisecond overflow",
+          (int64_t)regs.rax == -22);
     puts("Syscall ABI tests passed.");
     return 0;
 }
