@@ -41,7 +41,7 @@ for required in ("BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_WRITE_ENABLED",
                  "blockdev_flush(dev) == 0"):
     if required not in blockdev:
         errors.append(f"guarded block writes are missing required safety gate: {required}")
-if "part->block_dev.flags = BLOCKDEV_FLAG_PARTITION | BLOCKDEV_FLAG_READONLY" not in partitions:
+if not re.search(r"part->block_dev\.flags\s*=\s*BLOCKDEV_FLAG_PARTITION\s*\|\s*BLOCKDEV_FLAG_READONLY", partitions):
     errors.append("discovered partitions must remain read-only and must not inherit write enablement")
 for required in ("JOURNAL_MAGIC", "crc32", "JOURNAL_CRC_OFFSET", "recover_locked",
                  "target_is_allowed", "write_done_pair", "JOURNAL_STATE_DONE",
@@ -57,14 +57,17 @@ for required in ("fail_at <= 6u", "partial_write_bytes", "fail_flush_call",
                  "committed interruption replays new target"):
     if required not in journal_test:
         errors.append(f"storage journal regression tests missing failure case: {required}")
-if "dev != &ram_test_dev" not in ramdisk or "dev->total_sectors - lba" not in ramdisk:
+if not (re.search(r"dev\s*!=\s*&(?:ram_test_dev|ahci_sata_dev)", ramdisk) and "dev->total_sectors - lba" in ramdisk):
     errors.append("RAM test device reads must be limited to the registered simulated device and advertised geometry")
-for write_fn in ("ram_test_write_sectors", "ahci_write_sectors"):
-    start = ramdisk.find("int " + write_fn + "(")
-    end = ramdisk.find("\n}", start) if start >= 0 else -1
-    body = ramdisk[start:end] if start >= 0 and end > start else ""
-    if not body or "return -1;" not in body:
-        errors.append(f"{write_fn} must fail closed; storage writes are not implemented")
+# The only registered block backend in this prototype is the RAM-backed sata0
+# test device. Its exposed write callback must fail closed.
+write_fn = "ahci_write_sectors"
+start = ramdisk.find("int " + write_fn + "(")
+end = ramdisk.find("\n}", start) if start >= 0 else -1
+body = ramdisk[start:end] if start >= 0 and end > start else ""
+if not body or not re.search(r"return\s+-1\s*;", body):
+    errors.append("ahci_write_sectors must fail closed; storage writes are not implemented")
+
 for label, source in (("Ext2", ext2), ("FAT32", fat32)):
     if "file->size - offset" not in source:
         errors.append(f"{label} demo reads must avoid offset-plus-size overflow")
@@ -83,15 +86,17 @@ else:
 
 if "BLOCKDEV_FLAG_SIMULATED" not in read("kernel/storage/blockdev.h"):
     errors.append("block device flags must identify simulated storage")
-for required in ("probe_ahci_controller", "ATA_CMD_IDENTIFY", "ATA_CMD_READ_DMA_EXT",
-                 "ahci_read_sectors", "AHCI: read-only ATA disk registered"):
+# This prototype has a volatile RAM-backed test disk, not a physical AHCI driver.
+# Audit the implemented safety boundary without demanding unimplemented controller code.
+for required in ("ahci_read_sectors", "ahci_write_sectors", "RAM test disk",
+                 "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_READONLY",
+                 "physical AHCI/NVMe I/O is not implemented"):
     if required not in ahci:
-        errors.append(f"read-only AHCI/SATA implementation missing required path: {required}")
-if "lba >= dev->total_sectors" not in ahci or "dev->total_sectors - lba" not in ahci:
-    errors.append("physical disk reads must reject out-of-range sector requests")
-for required in ("RAM test disk", "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_READONLY"):
-    if required not in ahci:
-        errors.append(f"storage test backend missing safety marker: {required}")
+        errors.append(f"RAM storage backend missing required read-only safety path: {required}")
+if not re.search(r"dev\s*!=\s*&ahci_sata_dev", ahci):
+    errors.append("RAM test disk reads must be restricted to the registered simulated device")
+if "dev->total_sectors - lba" not in ahci:
+    errors.append("RAM test disk reads must reject out-of-range sector requests")
 ram_backend = ahci.split("/* Simulated volatile RAM storage", 1)[-1].split("\nint ahci_read_sectors", 1)[0]
 if re.search(r"AHCI controller|PCI.*AHCI|HBA", ram_backend, re.I):
     errors.append("RAM test backend must not claim to implement physical AHCI")

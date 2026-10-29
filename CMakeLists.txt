@@ -44,7 +44,7 @@ set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static Mbed TLS libraries" F
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared Mbed TLS libraries" FORCE)
 if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     # Third-party TLS archives must match the freestanding guest ELF ABI.
-    add_compile_options(-fno-pie -fno-stack-protector -ffunction-sections -fdata-sections)
+    add_compile_options(-mcmodel=large -fno-pie -fno-stack-protector -ffunction-sections -fdata-sections)
 endif()
 add_subdirectory(third_party/mbedtls EXCLUDE_FROM_ALL)
 

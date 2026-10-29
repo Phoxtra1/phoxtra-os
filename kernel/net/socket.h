@@ -74,6 +74,9 @@ int sys_accept(int sockfd, sockaddr_in_t* addr);
 int sys_send(int sockfd, const void* buf, uint32_t len, int flags);
 int sys_recv(int sockfd, void* buf, uint32_t len, int flags);
 int sys_close(int sockfd);
+int socket_udp_dispatch(netdev_t* dev, uint32_t source_ip, uint16_t source_port,
+                        uint16_t destination_port, const uint8_t* payload,
+                        uint32_t payload_length);
 socket_entry_t* socket_get_by_id(int sockfd);
 uint32_t socket_get_active_count(void);
 
