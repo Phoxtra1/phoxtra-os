@@ -1,6 +1,10 @@
 #ifndef PHOXTRA_MBEDTLS_CONFIG_H
 #define PHOXTRA_MBEDTLS_CONFIG_H
 
+/* Enable mandatory X.509 validity-time checks. */
+#define MBEDTLS_HAVE_TIME
+#define MBEDTLS_HAVE_TIME_DATE
+
 /* This client is freestanding in the guest, but X.509 certificate validity
  * checks MUST retain wall-clock support. The host test overrides time() to
  * exercise expiration; the guest time() syscall reads the CMOS RTC. */
