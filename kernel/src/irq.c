@@ -5,6 +5,7 @@
 #include "../log/logger.h"
 #include "../process/process.h"
 #include "../scheduler/scheduler.h"
+#include "../memory/vmm.h"
 
 #define PIC1_DATA 0x21
 #define PIC2_DATA 0xA1
@@ -149,6 +150,28 @@ static void log_fault_value(const char* label, uint64_t value) {
 
 /* User-triggerable synchronous faults include context useful for debugging
  * a failed guest ABI call without turning the process fault into a panic. */
+static void log_user_instruction_bytes(const pcb_t* current, uint64_t rip) {
+    static const char digits[] = "0123456789ABCDEF";
+    uint8_t bytes[16];
+    if (!current || !current->page_directory ||
+        vmm_copy_from_user(current->page_directory, bytes, rip, sizeof(bytes)) != 0) {
+        klog(LOG_ERROR, "Unable to read faulting user instruction bytes");
+        return;
+    }
+    char line[80];
+    const char prefix[] = "User instruction bytes = ";
+    unsigned length = 0;
+    for (unsigned i = 0; i < sizeof(prefix) - 1u; ++i)
+        line[length++] = prefix[i];
+    for (unsigned i = 0; i < sizeof(bytes); ++i) {
+        line[length++] = digits[bytes[i] >> 4];
+        line[length++] = digits[bytes[i] & 0x0Fu];
+        if (i + 1u < sizeof(bytes)) line[length++] = ' ';
+    }
+    line[length] = '\0';
+    klog(LOG_ERROR, line);
+}
+
 static int terminate_faulting_user_process(struct registers* regs) {
     if (!regs || (regs->cs & 3u) != 3u ||
         !exception_is_process_local(regs->int_no)) return 0;
@@ -169,6 +192,7 @@ static int terminate_faulting_user_process(struct registers* regs) {
     log_fault_value("User exception RIP", regs->rip);
     log_fault_value("User exception CS", regs->cs);
     log_fault_value("User exception RSP", regs->rsp);
+    log_user_instruction_bytes(current, regs->rip);
     if (regs->int_no == 14u) {
         uint64_t fault_address;
         __asm__ volatile ("mov %%cr2, %0" : "=r"(fault_address));
