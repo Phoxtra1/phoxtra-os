@@ -136,7 +136,10 @@ jobs:
           done
           grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log
           # Attached AHCI controller is inventoried only; the OS must not claim physical disk access.
-          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
+          # The guest TLS stack uses RDRAND as its fail-closed entropy source.
+          # QEMU's default qemu64 model omits RDRAND; expose supported features
+          # so the HTTPS integration test exercises TLS rather than no-entropy failure.
+          qemu-system-x86_64 -cpu max -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
             -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
             -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
