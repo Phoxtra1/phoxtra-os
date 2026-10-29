@@ -79,6 +79,8 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  mbedtls_ssl_context ssl;mbedtls_ssl_config config;mbedtls_x509_crt ca;
  unsigned char request[PHOXTRA_HTTPS_MAX_REQUEST];size_t request_len=0,received=0;
  int socket=-1,result=PHOXTRA_HTTPS_ERR_TLS,ssl_init=0,config_init=0,ca_init=0;
+ int handshake_error=0;
+ uint32_t verification_flags=0;
  if(response_length)*response_length=0;
  last_verify_flags=0;
  last_tls_error=0;
@@ -104,19 +106,19 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  https_bio_t bio={io,socket};mbedtls_ssl_set_bio(&ssl,&bio,tls_send,tls_recv,NULL);
  rc=mbedtls_ssl_handshake(&ssl);
  if(rc!=0){
-  last_tls_error=rc;
-  last_verify_flags=mbedtls_ssl_get_verify_result(&ssl);
+  handshake_error=rc;
+  verification_flags=mbedtls_ssl_get_verify_result(&ssl);
   /*
    * Mbed TLS returns UINT32_MAX from get_verify_result when no negotiated
    * session is available. That sentinel is not a certificate-verification
    * failure; preserve the actual handshake error for diagnosis.
    */
-  result=(last_verify_flags!=0u && last_verify_flags!=UINT32_MAX)
+  result=(verification_flags!=0u && verification_flags!=UINT32_MAX)
       ?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;
   goto cleanup;
  }
- last_verify_flags=mbedtls_ssl_get_verify_result(&ssl);
- if(last_verify_flags!=0u && last_verify_flags!=UINT32_MAX){
+ verification_flags=mbedtls_ssl_get_verify_result(&ssl);
+ if(verification_flags!=0u && verification_flags!=UINT32_MAX){
   result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;
  }
  size_t sent=0;
@@ -157,5 +159,11 @@ cleanup:
  if(config_init)mbedtls_ssl_config_free(&config);
  if(ssl_init)mbedtls_ssl_free(&ssl);
  if(result!=PHOXTRA_HTTPS_OK)*response_length=0;
+ /*
+  * Persist diagnostics after all TLS teardown. Never let cleanup change the
+  * failure classification or overwrite the reason the handshake failed.
+  */
+ last_verify_flags=verification_flags;
+ last_tls_error=handshake_error;
  return result;
 }
