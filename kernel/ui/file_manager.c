@@ -20,7 +20,14 @@ static uint32_t entry_count = 0;
 static uint32_t page_start = 0;
 static int32_t selected_entry = -1;
 static char preview_name[FM_NAME_CAP];
-static char preview_text[513];
+static char preview_text[PLATFORM_TEXT_EDIT_MAX + 1u];
+static char preview_original[PLATFORM_TEXT_EDIT_MAX + 1u];
+static char preview_status[64];
+static platform_fs_node_t* preview_file;
+static uint32_t preview_length;
+static uint8_t preview_editable;
+static uint8_t preview_editing;
+static uint8_t preview_dirty;
 
 static int text_copy(char* dst, const char* src, uint32_t capacity) {
     if (!dst || !src || capacity == 0) return 0;
@@ -58,7 +65,7 @@ static void draw_preview(void) {
     uint32_t max_lines = preview_win->height > 118u
         ? (preview_win->height - 118u) / (FONT_HEIGHT + 2u) : 1u;
     if (!max_lines) max_lines = 1u;
-    if (max_lines > 8u) max_lines = 8u;
+    if (max_lines > 10u) max_lines = 10u;
     for (uint32_t i = 0; preview_text[i] && lines < max_lines; ++i) {
         char ch[2] = { preview_text[i], 0 };
         if (preview_text[i] == '\r') continue;
@@ -75,8 +82,13 @@ static void draw_preview(void) {
         x += FONT_WIDTH + 1;
         ++chars;
     }
-    font_draw_string("Preview is read-only in this build", preview_win->x + 16,
-                     preview_win->y + preview_win->height - 24, 0x0094A3B8, 0);
+    font_draw_string(preview_editing ? "Ctrl+S: save  Ctrl+Q: discard"
+                                     : "E: edit  Q: close",
+                     preview_win->x + 16, preview_win->y + preview_win->height - 52,
+                     palette->accent_secondary, 0);
+    font_draw_string(preview_status, preview_win->x + 16,
+                     preview_win->y + preview_win->height - 28,
+                     preview_dirty ? 0x00FBBF24u : 0x0094A3B8u, 0);
 }
 
 static void redraw_entries(void) {
@@ -117,7 +129,7 @@ static void redraw_entries(void) {
                                        fm_win->y + 86, palette->text_color, 0);
     char status[64];
     /* The fixed status text avoids presenting fictitious disk capacity. */
-    font_draw_string("Folder: click  File: double-click",
+    font_draw_string("Click to select; Enter opens folders and files",
                      fm_win->x + 16, fm_win->y + fm_win->height - 72, palette->text_color, 0);
     font_draw_string("Backspace: parent  N: folder",
                      fm_win->x + 16, fm_win->y + fm_win->height - 48, palette->text_color, 0);
@@ -131,6 +143,13 @@ static void redraw_entries(void) {
 void file_manager_init(void) {
     preview_name[0] = '\0';
     preview_text[0] = '\0';
+    preview_original[0] = '\0';
+    preview_status[0] = '\0';
+    preview_file = 0;
+    preview_length = 0;
+    preview_editable = 0;
+    preview_editing = 0;
+    preview_dirty = 0;
     klog(LOG_INFO, "Platform-storage file manager initialized");
 }
 void file_manager_open_window(const char* initial_path) {
@@ -142,13 +161,15 @@ void file_manager_open_window(const char* initial_path) {
         redraw_entries();
         return;
     }
-    fm_win = compositor_create_window("PHOXTRA FILE MANAGER", 592, 54, 410, 300, 0x00020617);
+    fm_win = compositor_create_window("PHOXTRA FILE MANAGER", 592, 54, 410, 390, 0x00020617);
     if (!fm_win) return;
     fm_win->active = 1;
     redraw_entries();
     klog(LOG_INFO, "Opened platform-storage File Manager");
 }
 window_t* file_manager_get_window(void) { return fm_win; }
+window_t* file_manager_get_preview_window(void) { return preview_win; }
+
 
 void file_manager_navigate(const char* path) {
     klog(LOG_INFO, "File manager navigation requested");
@@ -210,6 +231,11 @@ void file_manager_select_entry(uint32_t index) {
 int file_manager_open_entry(uint32_t index) {
     platform_fs_entry_t entry;
     if (!entry_at(index, &entry)) return 0;
+    if (preview_dirty) {
+        text_copy(preview_status, "Unsaved edits: Ctrl+S to save or Ctrl+Q to discard",
+                  sizeof(preview_status));
+        return 0;
+    }
     selected_entry = (int32_t)index;
     if (entry.type == PLATFORM_FS_ENTRY_DIRECTORY) {
         char next[FM_PATH_CAP];
@@ -226,10 +252,27 @@ int file_manager_open_entry(uint32_t index) {
         return 1;
     }
 
-    uint64_t got = platform_storage_read(entry.handle, 0, sizeof(preview_text) - 1, (uint8_t*)preview_text);
-    preview_text[got < sizeof(preview_text) ? got : sizeof(preview_text) - 1] = '\0';
+    uint64_t got = platform_storage_read(entry.handle, 0, PLATFORM_TEXT_EDIT_MAX,
+                                                 (uint8_t*)preview_text);
+    preview_length = (got <= PLATFORM_TEXT_EDIT_MAX) ? (uint32_t)got : PLATFORM_TEXT_EDIT_MAX;
+    preview_text[preview_length] = '\0';
+    text_copy(preview_original, preview_text, sizeof(preview_original));
     text_copy(preview_name, entry.name, sizeof(preview_name));
-    if (!preview_win) preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 280, 170, 450, 190, 0x00020617);
+    preview_file = entry.handle;
+    preview_editing = 0;
+    preview_dirty = 0;
+    preview_editable = (entry.size <= PLATFORM_TEXT_EDIT_MAX) ? 1u : 0u;
+    for (uint32_t i = 0; preview_editable && i < preview_length; ++i) {
+        uint8_t ch = (uint8_t)preview_text[i];
+        if (ch < 0x20u && ch != '\n' && ch != '\r' && ch != '\t')
+            preview_editable = 0;
+    }
+    text_copy(preview_status,
+              preview_editable ? "Editable text; edits stay in volatile RAM"
+                               : "Read-only: binary data or file exceeds 512 bytes",
+              sizeof(preview_status));
+    if (!preview_win)
+        preview_win = compositor_create_window("PHOXTRA FILE PREVIEW", 220, 150, 620, 340, 0x00020617);
     if (preview_win) {
         preview_win->active = 1;
         preview_win->minimized = 0;
@@ -254,6 +297,116 @@ void file_manager_create_file(const char* name, const char* content) {
         klog(LOG_INFO, "Created RAM-backed file");
     } else klog(LOG_WARNING, "File creation failed (invalid name, duplicate or allocation error)");
 }
+
+int file_manager_preview_has_unsaved_changes(void) { return preview_dirty != 0; }
+
+int file_manager_handle_preview_key(char key, uint8_t modifiers) {
+    if (!preview_win || !preview_win->active || preview_win->minimized) return 0;
+
+    if (!preview_editing) {
+        if (key == 'q' || key == 'Q') {
+            preview_win->active = 0;
+            klog(LOG_INFO, "File preview closed");
+            return 0;
+        }
+        if (key == 'e' || key == 'E') {
+            if (!preview_editable) {
+                text_copy(preview_status, "This file is read-only in the text editor",
+                          sizeof(preview_status));
+                return 1;
+            }
+            preview_editing = 1;
+            text_copy(preview_status, "Edit mode: typing appends at the end of the file",
+                      sizeof(preview_status));
+            return 1;
+        }
+        return 1;
+    }
+
+    if (modifiers & PLATFORM_MOD_CTRL) {
+        if (key == 's' || key == 'S') {
+            int result = platform_storage_replace_text_file(
+                preview_file, (const uint8_t*)preview_text, preview_length);
+            if (result == PLATFORM_OK) {
+                uint8_t verify[PLATFORM_TEXT_EDIT_MAX];
+                uint64_t verified = platform_storage_read(preview_file, 0,
+                                                           preview_length, verify);
+                int matches = verified == preview_length;
+                for (uint32_t i = 0; matches && i < preview_length; ++i)
+                    if (verify[i] != (uint8_t)preview_text[i]) matches = 0;
+                if (matches) {
+                    text_copy(preview_original, preview_text, sizeof(preview_original));
+                    preview_dirty = 0;
+                    text_copy(preview_status, "Saved and verified in volatile RAM",
+                              sizeof(preview_status));
+                    klog(LOG_INFO, "Saved RAM-backed file from preview editor");
+                    klog(LOG_INFO, "File preview save read-back verification passed");
+                } else {
+                    text_copy(preview_status, "Save verification failed; changes remain unsaved",
+                              sizeof(preview_status));
+                    klog(LOG_ERROR, "File preview save read-back verification failed");
+                }
+            } else {
+                text_copy(preview_status, "Save failed: file is not a writable RAM text file",
+                          sizeof(preview_status));
+                klog(LOG_WARNING, "File preview editor save failed");
+            }
+            return 1;
+        }
+        if (key == 'q' || key == 'Q') {
+            text_copy(preview_text, preview_original, sizeof(preview_text));
+            preview_length = 0;
+            while (preview_text[preview_length] &&
+                   preview_length < PLATFORM_TEXT_EDIT_MAX) ++preview_length;
+            preview_editing = 0;
+            preview_dirty = 0;
+            text_copy(preview_status, preview_dirty
+                          ? "Unsaved changes discarded" : "Edit mode closed",
+                      sizeof(preview_status));
+            return 1;
+        }
+        return 1;
+    }
+
+    if (key == '\b' || key == 127) {
+        if (preview_length) {
+            --preview_length;
+            preview_text[preview_length] = '\0';
+            preview_dirty = 1;
+            text_copy(preview_status, "Unsaved changes",
+                      sizeof(preview_status));
+        }
+        return 1;
+    }
+    if (key == '\r' || key == '\n') {
+        if (preview_length < PLATFORM_TEXT_EDIT_MAX) {
+            preview_text[preview_length++] = '\n';
+            preview_text[preview_length] = '\0';
+            preview_dirty = 1;
+            text_copy(preview_status, "Unsaved changes",
+                      sizeof(preview_status));
+        } else {
+            text_copy(preview_status, "Edit buffer full (512-byte limit)",
+                      sizeof(preview_status));
+        }
+        return 1;
+    }
+    if (key >= ' ' && key <= '~') {
+        if (preview_length < PLATFORM_TEXT_EDIT_MAX) {
+            preview_text[preview_length++] = key;
+            preview_text[preview_length] = '\0';
+            preview_dirty = 1;
+            text_copy(preview_status, "Unsaved changes",
+                      sizeof(preview_status));
+        } else {
+            text_copy(preview_status, "Edit buffer full (512-byte limit)",
+                      sizeof(preview_status));
+        }
+        return 1;
+    }
+    return 1;
+}
+
 void file_manager_render(void) {
     redraw_entries();
     draw_preview();

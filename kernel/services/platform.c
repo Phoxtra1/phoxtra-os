@@ -34,7 +34,7 @@ static const platform_product_profile_t active_profile = {
 static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
     /* Phoxtra OS native panels and first-party system applications. */
     { "terminal", "Shell Console", "Phoxtra", "System", "Native panel", "Interactive desktop shell with navigation, RAM filesystem commands and basic system controls", "panel:terminal", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
-    { "file-manager", "Files", "Phoxtra", "Files and storage", "Native panel", "Browse the current RAM-backed filesystem", "panel:file-manager", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "file-manager", "Files", "Phoxtra", "Files and storage", "Native panel", "Browse folders, preview files and edit small RAM-backed text files", "panel:file-manager", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "system-status", "System Status", "Phoxtra", "System tools", "Native panel", "View current OS, input and storage status", "panel:system-status", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "settings", "Settings", "Phoxtra", "System tools", "Native panel", "Change the desktop theme and inspect read-only device readiness", "panel:settings", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "phoxtra-diagnostics", "Phoxtra Diagnostics", "Phoxtra", "System tools", "Planned native application", "System diagnostics application; full interactive panel planned", NULL, PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_PLANNED_APPLICATION, PLATFORM_LAUNCH_PENDING, PLATFORM_APP_PLANNED },
@@ -89,11 +89,12 @@ const platform_product_profile_t* platform_product_profile(void) { return &activ
 int platform_input_poll(platform_input_event_t* event) {
     if (!event) return PLATFORM_ERR_INVALID;
     char key;
-    if (keyboard_poll_char(&key)) {
+    uint8_t keyboard_modifiers = 0;
+    if (keyboard_poll_event(&key, &keyboard_modifiers)) {
         event->type = PLATFORM_INPUT_KEY;
         event->key = (uint8_t)key;
         event->buttons = 0;
-        event->modifiers = keyboard_control_pressed() ? PLATFORM_MOD_CTRL : 0;
+        event->modifiers = (keyboard_modifiers & KEYBOARD_MOD_CONTROL) ? PLATFORM_MOD_CTRL : 0;
         event->x = 0;
         event->y = 0;
         return 1;
@@ -177,6 +178,12 @@ uint64_t platform_storage_read(const platform_fs_node_t* file, uint64_t offset, 
 uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint64_t size, const uint8_t* buffer) {
     if (!file || !buffer || file->flags != VFS_FILE) return 0;
     return vfs_write(file, offset, size, buffer);
+}
+int platform_storage_replace_text_file(platform_fs_node_t* file, const uint8_t* contents,
+                                       uint32_t length) {
+    if (!file || length > PLATFORM_TEXT_EDIT_MAX || (!contents && length))
+        return PLATFORM_ERR_INVALID;
+    return vfs_replace_ram_file(file, contents, length) ? PLATFORM_OK : PLATFORM_ERR_UNSUPPORTED;
 }
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name) {
     if (!parent || !name || !name[0] || parent->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;

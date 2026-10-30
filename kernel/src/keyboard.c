@@ -12,6 +12,7 @@ static inline unsigned char inb(unsigned short port)
 }
 
 static char kbd_buffer[KBD_BUFFER_SIZE];
+static uint8_t kbd_modifiers[KBD_BUFFER_SIZE];
 static volatile int kbd_head = 0;
 static volatile int kbd_tail = 0;
 static int shift_active = 0;
@@ -117,6 +118,9 @@ static void keyboard_callback(struct registers* regs) {
         int next = (kbd_head + 1) % KBD_BUFFER_SIZE;
         if (next != kbd_tail) {
             kbd_buffer[kbd_head] = c;
+            kbd_modifiers[kbd_head] = (uint8_t)(
+                (control_active ? KEYBOARD_MOD_CONTROL : 0u) |
+                (shift_active ? KEYBOARD_MOD_SHIFT : 0u));
             kbd_head = next;
         }
     }
@@ -126,14 +130,22 @@ void keyboard_init(void) {
     kbd_head = 0;
     kbd_tail = 0;
     shift_active = 0;
+    control_active = 0;
+    for (uint32_t i = 0; i < KBD_BUFFER_SIZE; ++i) kbd_modifiers[i] = 0;
     irq_install_handler(1, keyboard_callback);
 }
 
-int keyboard_poll_char(char* out) {
+int keyboard_poll_event(char* out, uint8_t* modifiers) {
     if (!out || kbd_head == kbd_tail) return 0;
-    *out = kbd_buffer[kbd_tail];
-    kbd_tail = (kbd_tail + 1) % KBD_BUFFER_SIZE;
+    int tail = kbd_tail;
+    *out = kbd_buffer[tail];
+    if (modifiers) *modifiers = kbd_modifiers[tail];
+    kbd_tail = (tail + 1) % KBD_BUFFER_SIZE;
     return 1;
+}
+
+int keyboard_poll_char(char* out) {
+    return keyboard_poll_event(out, (uint8_t*)0);
 }
 
 int keyboard_control_pressed(void) { return control_active; }

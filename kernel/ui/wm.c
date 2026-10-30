@@ -1139,8 +1139,14 @@ static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
     (void)y;
     uint32_t local_x = x - win->x;
     if (local_x >= 12 && local_x < 28) {
+        if (win == file_manager_get_preview_window() &&
+            file_manager_preview_has_unsaved_changes()) {
+            klog(LOG_WARNING, "Preview close blocked: unsaved edits must be saved or discarded");
+            return;
+        }
         win->active = 0;
-        if (focused_win == win) focused_win = 0;
+        if (focused_win == win)
+            focused_win = (win == file_manager_get_preview_window()) ? fm_win : 0;
         drag_win = 0;
         return;
     }
@@ -1247,7 +1253,10 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
             selected_file_entry = index;
             /* Single click selects; a second click on the same item opens it. */
             if (last_file_entry == index && now - last_file_click_tick <= 45u) {
+                int is_directory = file_manager_entry_is_directory((uint32_t)index);
                 (void)file_manager_open_entry((uint32_t)index);
+                window_t* preview = file_manager_get_preview_window();
+                if (!is_directory && preview && preview->active) focused_win = preview;
                 last_file_entry = -1;
             } else {
                 last_file_entry = index;
@@ -1264,8 +1273,13 @@ static void wm_create_new_file(void) {
     file_manager_create_file("New File.txt", "Welcome to Phoxtra OS.\nThis file is stored in temporary RAM.\n");
 }
 
-static void wm_handle_key(char key) {
+static void wm_handle_key(char key, uint8_t modifiers) {
     if (key == 27) return;
+    window_t* preview = file_manager_get_preview_window();
+    if (preview && preview == focused_win && preview->active && !preview->minimized) {
+        if (!file_manager_handle_preview_key(key, modifiers)) focused_win = fm_win;
+        return;
+    }
     if (focused_win == term_win && term_win && term_win->active && !term_win->minimized) {
         wm_terminal_handle_key(key);
         return;
@@ -1330,7 +1344,11 @@ static void wm_handle_key(char key) {
     }
     if (key == '\n') {
         if (selected_file_entry >= 0) {
-            (void)file_manager_open_entry((uint32_t)selected_file_entry);
+            uint32_t index = (uint32_t)selected_file_entry;
+            int is_directory = file_manager_entry_is_directory(index);
+            (void)file_manager_open_entry(index);
+            window_t* preview = file_manager_get_preview_window();
+            if (!is_directory && preview && preview->active) focused_win = preview;
             selected_file_entry = -1;
         }
         return;
@@ -1376,7 +1394,7 @@ void wm_desktop_event_loop(void) {
         if (event_result > 0 && event.type == PLATFORM_INPUT_KEY) {
             char key = (char)event.key;
             if (key == 27) break;
-            wm_handle_key(key);
+            wm_handle_key(key, event.modifiers);
             last_redraw = 0;
         }
 
