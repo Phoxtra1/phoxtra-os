@@ -28,6 +28,11 @@ static uint32_t preview_length;
 static uint8_t preview_editable;
 static uint8_t preview_editing;
 static uint8_t preview_dirty;
+#define FM_CREATE_NAME_CAP 40u
+static uint8_t create_dialog_mode; /* 1 = folder, 2 = file */
+static char create_dialog_name[FM_CREATE_NAME_CAP];
+static uint32_t create_dialog_length;
+static char create_dialog_status[64];
 
 static int text_copy(char* dst, const char* src, uint32_t capacity) {
     if (!dst || !src || capacity == 0) return 0;
@@ -127,17 +132,33 @@ static void redraw_entries(void) {
 
     if (!entry_count) font_draw_string("This directory is empty", fm_win->x + 16,
                                        fm_win->y + 86, palette->text_color, 0);
-    char status[64];
-    /* The fixed status text avoids presenting fictitious disk capacity. */
-    font_draw_string("Click to select; Enter opens folders and files",
-                     fm_win->x + 16, fm_win->y + fm_win->height - 72, palette->text_color, 0);
-    font_draw_string("Backspace: parent  N: folder",
-                     fm_win->x + 16, fm_win->y + fm_win->height - 48, palette->text_color, 0);
-    font_draw_string(entry_count > FM_VISIBLE_ITEMS
-                         ? "C: new file  [ ]: pages"
-                         : "C: create file",
-                     fm_win->x + 16, fm_win->y + fm_win->height - 24, palette->text_color, 0);
-    (void)status;
+    if (create_dialog_mode) {
+        char prompt[FM_CREATE_NAME_CAP + 20u];
+        uint32_t p = 0;
+        const char* prefix = create_dialog_mode == 1u ? "New folder: " : "New file: ";
+        while (*prefix && p + 1u < sizeof(prompt)) prompt[p++] = *prefix++;
+        for (uint32_t i = 0; i < create_dialog_length && p + 1u < sizeof(prompt); ++i)
+            prompt[p++] = create_dialog_name[i];
+        prompt[p] = '\0';
+        font_draw_string(prompt, fm_win->x + 16,
+                         fm_win->y + fm_win->height - 72,
+                         palette->accent_primary, 0);
+        font_draw_string("ENTER: create  Q: cancel",
+                         fm_win->x + 16, fm_win->y + fm_win->height - 48,
+                         palette->text_color, 0);
+        font_draw_string(create_dialog_status,
+                         fm_win->x + 16, fm_win->y + fm_win->height - 24,
+                         palette->accent_secondary, 0);
+    } else {
+        font_draw_string("Click to select; Enter opens folders and files",
+                         fm_win->x + 16, fm_win->y + fm_win->height - 72, palette->text_color, 0);
+        font_draw_string("Backspace: parent  N: new folder",
+                         fm_win->x + 16, fm_win->y + fm_win->height - 48, palette->text_color, 0);
+        font_draw_string(entry_count > FM_VISIBLE_ITEMS
+                             ? "C: new file  [ ]: pages"
+                             : "C: create file",
+                         fm_win->x + 16, fm_win->y + fm_win->height - 24, palette->text_color, 0);
+    }
 }
 
 void file_manager_init(void) {
@@ -150,6 +171,10 @@ void file_manager_init(void) {
     preview_editable = 0;
     preview_editing = 0;
     preview_dirty = 0;
+    create_dialog_mode = 0;
+    create_dialog_name[0] = '\0';
+    create_dialog_length = 0;
+    create_dialog_status[0] = '\0';
     klog(LOG_INFO, "Platform-storage file manager initialized");
 }
 void file_manager_open_window(const char* initial_path) {
@@ -299,6 +324,79 @@ void file_manager_create_file(const char* name, const char* content) {
 }
 
 int file_manager_preview_has_unsaved_changes(void) { return preview_dirty != 0; }
+
+int file_manager_create_dialog_active(void) { return create_dialog_mode != 0; }
+
+int file_manager_handle_key(char key) {
+    if (!fm_win || !fm_win->active || fm_win->minimized) return 0;
+
+    if (!create_dialog_mode) {
+        if (key != 'n' && key != 'N' && key != 'c' && key != 'C') return 0;
+        create_dialog_mode = (key == 'n' || key == 'N') ? 1u : 2u;
+        create_dialog_length = 0;
+        create_dialog_name[0] = '\0';
+        create_dialog_status[0] = '\0';
+        redraw_entries();
+        return 1;
+    }
+
+    if (key == 'q' || key == 'Q' || key == 27) {
+        create_dialog_mode = 0;
+        create_dialog_name[0] = '\0';
+        create_dialog_length = 0;
+        create_dialog_status[0] = '\0';
+        redraw_entries();
+        return 1;
+    }
+    if (key == '\b' || key == 127) {
+        if (create_dialog_length) {
+            --create_dialog_length;
+            create_dialog_name[create_dialog_length] = '\0';
+        }
+        create_dialog_status[0] = '\0';
+        redraw_entries();
+        return 1;
+    }
+    if (key == '\n' || key == '\r') {
+        if (!create_dialog_length) {
+            text_copy(create_dialog_status, "Enter a name first", sizeof(create_dialog_status));
+            redraw_entries();
+            return 1;
+        }
+        if (!current_directory || !platform_storage_is_directory(current_directory))
+            current_directory = platform_storage_lookup(current_path);
+        int result = create_dialog_mode == 1u
+            ? platform_storage_create_directory(current_directory, create_dialog_name)
+            : platform_storage_create_text_file(current_directory, create_dialog_name, "");
+        if (result == PLATFORM_OK) {
+            klog(LOG_INFO, create_dialog_mode == 1u
+                ? "Created RAM-backed folder" : "Created RAM-backed file");
+            create_dialog_mode = 0;
+            create_dialog_name[0] = '\0';
+            create_dialog_length = 0;
+            create_dialog_status[0] = '\0';
+            redraw_entries();
+        } else {
+            text_copy(create_dialog_status, "Invalid name, duplicate or insufficient memory",
+                      sizeof(create_dialog_status));
+            redraw_entries();
+        }
+        return 1;
+    }
+    if (key >= ' ' && key <= '~') {
+        if (create_dialog_length + 1u < sizeof(create_dialog_name)) {
+            create_dialog_name[create_dialog_length++] = key;
+            create_dialog_name[create_dialog_length] = '\0';
+            create_dialog_status[0] = '\0';
+        } else {
+            text_copy(create_dialog_status, "Name limit: 39 characters",
+                      sizeof(create_dialog_status));
+        }
+        redraw_entries();
+        return 1;
+    }
+    return 1;
+}
 
 int file_manager_handle_preview_key(char key, uint8_t modifiers) {
     if (!preview_win || !preview_win->active || preview_win->minimized) return 0;
