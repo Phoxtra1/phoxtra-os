@@ -52,8 +52,6 @@ static uint8_t wm_terminal_initialized;
 #define DESKTOP_MENU_HEIGHT 310u
 
 
-static void wm_create_new_folder(void);
-static void wm_create_new_file(void);
 static void wm_draw_context_menu(void);
 static int wm_handle_context_menu_click(uint32_t x, uint32_t y);
 static void wm_handle_right_click(uint32_t x, uint32_t y);
@@ -1266,15 +1264,12 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
     }
 }
 
-static void wm_create_new_folder(void) {
-    file_manager_create_folder("New Folder");
-}
-static void wm_create_new_file(void) {
-    file_manager_create_file("New File.txt", "Welcome to Phoxtra OS.\nThis file is stored in temporary RAM.\n");
-}
-
 static void wm_handle_key(char key, uint8_t modifiers) {
-    if (key == 27) return;
+    if (key == 27) {
+        if (focused_win == fm_win && file_manager_create_dialog_active())
+            (void)file_manager_handle_key(key);
+        return;
+    }
     window_t* preview = file_manager_get_preview_window();
     if (preview && preview == focused_win && preview->active && !preview->minimized) {
         if (!file_manager_handle_preview_key(key, modifiers)) focused_win = fm_win;
@@ -1282,6 +1277,11 @@ static void wm_handle_key(char key, uint8_t modifiers) {
     }
     if (focused_win == term_win && term_win && term_win->active && !term_win->minimized) {
         wm_terminal_handle_key(key);
+        return;
+    }
+    if (focused_win == fm_win && fm_win && fm_win->active &&
+        file_manager_create_dialog_active()) {
+        (void)file_manager_handle_key(key);
         return;
     }
     if (key == 'f' || key == 'F') {
@@ -1355,8 +1355,8 @@ static void wm_handle_key(char key, uint8_t modifiers) {
     }
     if (key == '[') { file_manager_scroll(-1); return; }
     if (key == ']') { file_manager_scroll(1); return; }
-    if (key == 'n' || key == 'N') wm_create_new_folder();
-    else if (key == 'c' || key == 'C') wm_create_new_file();
+    if (key == 'n' || key == 'N' || key == 'c' || key == 'C')
+        (void)file_manager_handle_key(key);
 }
 
 void wm_desktop_event_loop(void) {
@@ -1393,7 +1393,9 @@ void wm_desktop_event_loop(void) {
 
         if (event_result > 0 && event.type == PLATFORM_INPUT_KEY) {
             char key = (char)event.key;
-            if (key == 27) break;
+            if (key == 27 &&
+                !(focused_win == fm_win && file_manager_create_dialog_active()))
+                break;
             wm_handle_key(key, event.modifiers);
             last_redraw = 0;
         }
