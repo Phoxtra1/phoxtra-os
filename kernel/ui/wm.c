@@ -1139,6 +1139,11 @@ static void wm_handle_window_button(window_t* win, uint32_t x, uint32_t y) {
     (void)y;
     uint32_t local_x = x - win->x;
     if (local_x >= 12 && local_x < 28) {
+        if (win == file_manager_get_preview_window() &&
+            file_manager_preview_has_unsaved_changes()) {
+            klog(LOG_WARNING, "Preview close blocked: unsaved edits must be saved or discarded");
+            return;
+        }
         win->active = 0;
         if (focused_win == win)
             focused_win = (win == file_manager_get_preview_window()) ? fm_win : 0;
