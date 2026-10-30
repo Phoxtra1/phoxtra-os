@@ -321,11 +321,24 @@ int file_manager_handle_preview_key(char key, uint8_t modifiers) {
             int result = platform_storage_replace_text_file(
                 preview_file, (const uint8_t*)preview_text, preview_length);
             if (result == PLATFORM_OK) {
-                text_copy(preview_original, preview_text, sizeof(preview_original));
-                preview_dirty = 0;
-                text_copy(preview_status, "Saved in volatile RAM",
-                          sizeof(preview_status));
-                klog(LOG_INFO, "Saved RAM-backed file from preview editor");
+                uint8_t verify[PLATFORM_TEXT_EDIT_MAX];
+                uint64_t verified = platform_storage_read(preview_file, 0,
+                                                           preview_length, verify);
+                int matches = verified == preview_length;
+                for (uint32_t i = 0; matches && i < preview_length; ++i)
+                    if (verify[i] != (uint8_t)preview_text[i]) matches = 0;
+                if (matches) {
+                    text_copy(preview_original, preview_text, sizeof(preview_original));
+                    preview_dirty = 0;
+                    text_copy(preview_status, "Saved and verified in volatile RAM",
+                              sizeof(preview_status));
+                    klog(LOG_INFO, "Saved RAM-backed file from preview editor");
+                    klog(LOG_INFO, "File preview save read-back verification passed");
+                } else {
+                    text_copy(preview_status, "Save verification failed; changes remain unsaved",
+                              sizeof(preview_status));
+                    klog(LOG_ERROR, "File preview save read-back verification failed");
+                }
             } else {
                 text_copy(preview_status, "Save failed: file is not a writable RAM text file",
                           sizeof(preview_status));
@@ -340,7 +353,8 @@ int file_manager_handle_preview_key(char key, uint8_t modifiers) {
                    preview_length < PLATFORM_TEXT_EDIT_MAX) ++preview_length;
             preview_editing = 0;
             preview_dirty = 0;
-            text_copy(preview_status, "Unsaved changes discarded",
+            text_copy(preview_status, preview_dirty
+                          ? "Unsaved changes discarded" : "Edit mode closed",
                       sizeof(preview_status));
             return 1;
         }
