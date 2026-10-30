@@ -33,7 +33,7 @@ static const platform_product_profile_t active_profile = {
 
 static const platform_app_info_t app_registry[PLATFORM_APP_COUNT] = {
     /* Phoxtra OS native panels and first-party system applications. */
-    { "terminal", "Shell Console", "Phoxtra", "System", "Native panel", "Kernel shell access; desktop terminal emulation is not yet implemented", "panel:terminal", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
+    { "terminal", "Shell Console", "Phoxtra", "System", "Native panel", "Interactive desktop shell with navigation, RAM filesystem commands and basic system controls", "panel:terminal", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "file-manager", "Files", "Phoxtra", "Files and storage", "Native panel", "Browse the current RAM-backed filesystem", "panel:file-manager", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "system-status", "System Status", "Phoxtra", "System tools", "Native panel", "View current OS, input and storage status", "panel:system-status", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
     { "settings", "Settings", "Phoxtra", "System tools", "Native panel", "Change the desktop theme and inspect read-only device readiness", "panel:settings", PLATFORM_PUBLISHER_PHOXTRA, PLATFORM_APP_EMBEDDED_PANEL, PLATFORM_LAUNCH_INTERNAL_PANEL, PLATFORM_APP_AVAILABLE },
