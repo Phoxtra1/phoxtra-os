@@ -129,7 +129,7 @@ static void redraw_entries(void) {
                                        fm_win->y + 86, palette->text_color, 0);
     char status[64];
     /* The fixed status text avoids presenting fictitious disk capacity. */
-    font_draw_string("Folder: click  File: double-click",
+    font_draw_string("Click to select; Enter opens folders and files",
                      fm_win->x + 16, fm_win->y + fm_win->height - 72, palette->text_color, 0);
     font_draw_string("Backspace: parent  N: folder",
                      fm_win->x + 16, fm_win->y + fm_win->height - 48, palette->text_color, 0);
@@ -161,7 +161,7 @@ void file_manager_open_window(const char* initial_path) {
         redraw_entries();
         return;
     }
-    fm_win = compositor_create_window("PHOXTRA FILE MANAGER", 592, 54, 410, 300, 0x00020617);
+    fm_win = compositor_create_window("PHOXTRA FILE MANAGER", 592, 54, 410, 390, 0x00020617);
     if (!fm_win) return;
     fm_win->active = 1;
     redraw_entries();
