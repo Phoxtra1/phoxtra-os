@@ -39,6 +39,7 @@ int vfs_mount(const char* path, vfs_node_t* node);
 vfs_node_t* vfs_lookup(const char* path);
 uint64_t vfs_read(vfs_node_t* node, uint64_t offset, uint64_t size, uint8_t* buffer);
 uint64_t vfs_write(vfs_node_t* node, uint64_t offset, uint64_t size, const uint8_t* buffer);
+int vfs_replace_ram_file(vfs_node_t* node, const uint8_t* contents, uint64_t length);
 vfs_node_t* vfs_readdir(vfs_node_t* node, uint32_t index);
 
 #ifdef __cplusplus
