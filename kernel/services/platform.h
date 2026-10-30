@@ -98,6 +98,8 @@ int platform_storage_list(const platform_fs_node_t* directory, uint32_t index, p
 uint32_t platform_storage_count(const platform_fs_node_t* directory);
 uint64_t platform_storage_read(const platform_fs_node_t* file, uint64_t offset, uint64_t size, uint8_t* buffer);
 uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint64_t size, const uint8_t* buffer);
+#define PLATFORM_TEXT_EDIT_MAX 512u
+int platform_storage_replace_text_file(platform_fs_node_t* file, const uint8_t* contents, uint32_t length);
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name);
 int platform_storage_create_text_file(platform_fs_node_t* parent, const char* name, const char* initial_contents);
 int platform_storage_get_info(platform_storage_info_t* info);
