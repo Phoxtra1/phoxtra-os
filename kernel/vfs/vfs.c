@@ -167,6 +167,19 @@ uint64_t vfs_write(vfs_node_t* node, uint64_t offset, uint64_t size, const uint8
     if (!node || !node->write || !buffer || size == 0) return 0;
     return node->write(node, offset, size, buffer);
 }
+
+int vfs_replace_ram_file(vfs_node_t* node, const uint8_t* contents, uint64_t length) {
+    if (!node || node->flags != VFS_FILE || node->write != ram_file_write ||
+        !node->ptr || (!contents && length) || length > VFS_RAM_FILE_CAPACITY)
+        return 0;
+
+    uint8_t* data = (uint8_t*)node->ptr;
+    for (uint64_t i = 0; i < length; ++i) data[i] = contents[i];
+    for (uint64_t i = length; i < node->size && i < VFS_RAM_FILE_CAPACITY; ++i)
+        data[i] = 0;
+    node->size = length;
+    return 1;
+}
 vfs_node_t* vfs_readdir(vfs_node_t* node, uint32_t index) {
     if (!node || !(node->flags & VFS_DIRECTORY)) return (void*)0;
     if (node->readdir) return node->readdir(node, index);
