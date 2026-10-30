@@ -333,6 +333,9 @@ int file_manager_handle_key(char key) {
     if (!create_dialog_mode) {
         if (key != 'n' && key != 'N' && key != 'c' && key != 'C') return 0;
         create_dialog_mode = (key == 'n' || key == 'N') ? 1u : 2u;
+        klog(LOG_INFO, create_dialog_mode == 1u
+            ? "File Manager folder-name dialog opened"
+            : "File Manager file-name dialog opened");
         create_dialog_length = 0;
         create_dialog_name[0] = '\0';
         create_dialog_status[0] = '\0';
@@ -365,6 +368,9 @@ int file_manager_handle_key(char key) {
         }
         if (!current_directory || !platform_storage_is_directory(current_directory))
             current_directory = platform_storage_lookup(current_path);
+        klog(LOG_INFO, create_dialog_mode == 1u
+            ? "File Manager submitting folder creation"
+            : "File Manager submitting file creation");
         int result = create_dialog_mode == 1u
             ? platform_storage_create_directory(current_directory, create_dialog_name)
             : platform_storage_create_text_file(current_directory, create_dialog_name, "");
