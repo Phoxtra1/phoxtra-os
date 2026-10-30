@@ -48,8 +48,8 @@ run_case(){
 }
 run_case TLSv1_2 localhost "$TMP/ca.pem" 0 success
 run_case TLSv1_3 localhost "$TMP/ca.pem" 0 success
-run_case TLSv1_2 wrong.example.test "$TMP/ca.pem" 0 reject
-run_case TLSv1_2 localhost "$TMP/unrelated.pem" 0 reject
-run_case TLSv1_2 localhost "$TMP/ca.pem" 2592000 reject
+run_case TLSv1_2 wrong.example.test "$TMP/ca.pem" 0 reject-cert
+run_case TLSv1_2 localhost "$TMP/unrelated.pem" 0 reject-cert
+run_case TLSv1_2 localhost "$TMP/ca.pem" 2592000 reject-cert
 "$CLIENT" 1 localhost - 0 reject
 echo "HTTPS validation passed: TLS 1.2/1.3, wrong host, untrusted CA, expired certificate, missing trust."
