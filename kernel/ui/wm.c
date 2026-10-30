@@ -11,6 +11,7 @@
 #include "timer.h"
 #include "../services/platform.h"
 #include "../net/netdev.h"
+#include "../memory/pmm.h"
 
 static window_t* term_win = 0;
 static window_t* sec_win = 0;
@@ -136,15 +137,189 @@ static void wm_draw_desktop_icons(void) {
     icon_draw_folder(18, 308, "Desktop");
 }
 
+static void wm_status_append(char* output, uint32_t capacity, uint32_t* position,
+                             const char* text) {
+    if (!output || !position || !text || capacity == 0) return;
+    while (*text && *position + 1u < capacity)
+        output[(*position)++] = *text++;
+    output[*position] = '\0';
+}
+
+static void wm_status_append_u64(char* output, uint32_t capacity, uint32_t* position,
+                                 uint64_t value) {
+    char digits[20];
+    uint32_t count = 0;
+    do {
+        digits[count++] = (char)('0' + (value % 10u));
+        value /= 10u;
+    } while (value && count < sizeof(digits));
+    while (count && *position + 1u < capacity)
+        output[(*position)++] = digits[--count];
+    output[*position] = '\0';
+}
+
+static void wm_status_line(uint32_t x, uint32_t y, const char* label,
+                           const char* value, uint32_t color) {
+    char line[96];
+    uint32_t position = 0;
+    line[0] = '\0';
+    wm_status_append(line, sizeof(line), &position, label);
+    wm_status_append(line, sizeof(line), &position, value);
+    font_draw_string(line, x, y, color, 0);
+}
+
+static void wm_status_memory_line(uint32_t x, uint32_t y, uint32_t color) {
+    char line[96];
+    uint32_t position = 0;
+    uint64_t total_mib = pmm_get_total_memory() / (1024ULL * 1024ULL);
+    uint64_t free_mib = pmm_get_free_memory() / (1024ULL * 1024ULL);
+    line[0] = '\0';
+    wm_status_append(line, sizeof(line), &position, "Memory: ");
+    wm_status_append_u64(line, sizeof(line), &position, free_mib);
+    wm_status_append(line, sizeof(line), &position, " / ");
+    wm_status_append_u64(line, sizeof(line), &position, total_mib);
+    wm_status_append(line, sizeof(line), &position, " MiB free");
+    font_draw_string(line, x, y, color, 0);
+}
+
+static void wm_status_uptime_line(uint32_t x, uint32_t y, uint32_t color) {
+    char line[96];
+    uint32_t position = 0;
+    uint64_t seconds = timer_get_ticks() / 100u;
+    uint64_t hours = seconds / 3600u;
+    uint64_t minutes = (seconds / 60u) % 60u;
+    seconds %= 60u;
+    line[0] = '\0';
+    wm_status_append(line, sizeof(line), &position, "Uptime: ");
+    wm_status_append_u64(line, sizeof(line), &position, hours);
+    wm_status_append(line, sizeof(line), &position, "h ");
+    wm_status_append_u64(line, sizeof(line), &position, minutes);
+    wm_status_append(line, sizeof(line), &position, "m ");
+    wm_status_append_u64(line, sizeof(line), &position, seconds);
+    wm_status_append(line, sizeof(line), &position, "s");
+    font_draw_string(line, x, y, color, 0);
+}
+
+static void wm_status_display_line(uint32_t x, uint32_t y, uint32_t color) {
+    platform_display_info_t display;
+    char line[96];
+    uint32_t position = 0;
+    line[0] = '\0';
+    if (platform_display_get_info(&display) != PLATFORM_OK) {
+        wm_status_line(x, y, "Display: ", "unavailable", color);
+        return;
+    }
+    wm_status_append(line, sizeof(line), &position, "Display: ");
+    wm_status_append_u64(line, sizeof(line), &position, display.width);
+    wm_status_append(line, sizeof(line), &position, " x ");
+    wm_status_append_u64(line, sizeof(line), &position, display.height);
+    wm_status_append(line, sizeof(line), &position, " / ");
+    wm_status_append_u64(line, sizeof(line), &position, display.bits_per_pixel);
+    wm_status_append(line, sizeof(line), &position, " bpp");
+    font_draw_string(line, x, y, color, 0);
+}
+
+static void wm_status_applications_line(uint32_t x, uint32_t y, uint32_t color) {
+    uint32_t ready = 0, planned = 0;
+    char line[96];
+    uint32_t position = 0;
+    for (uint32_t i = 0; i < platform_app_count(); ++i) {
+        const platform_app_info_t* app = 0;
+        if (platform_app_get(i, &app) != PLATFORM_OK || !app) continue;
+        if (app->state == PLATFORM_APP_AVAILABLE) ++ready;
+        else if (app->state == PLATFORM_APP_PLANNED) ++planned;
+    }
+    line[0] = '\0';
+    wm_status_append(line, sizeof(line), &position, "Apps: ");
+    wm_status_append_u64(line, sizeof(line), &position, ready);
+    wm_status_append(line, sizeof(line), &position, " ready / ");
+    wm_status_append_u64(line, sizeof(line), &position, planned);
+    wm_status_append(line, sizeof(line), &position, " planned");
+    font_draw_string(line, x, y, color, 0);
+}
+
+static void wm_status_network_lines(uint32_t x, uint32_t y, uint32_t color,
+                                    const netdev_t* network) {
+    char line[96];
+    uint32_t position = 0;
+    if (!network) {
+        wm_status_line(x, y, "Adapter: ", "none registered", color);
+        wm_status_line(x, y + 24u, "Link: ", "unavailable", color);
+        wm_status_line(x, y + 48u, "IPv4: ", "not configured", color);
+        wm_status_line(x, y + 72u, "Traffic: ", "no adapter", color);
+        return;
+    }
+
+    wm_status_line(x, y, "Adapter: ", network->name, color);
+    wm_status_line(x, y + 24u, "Link: ",
+                   (network->flags & 0x01u) ? "UP" : "DOWN", color);
+
+    if (network->ip_addr) {
+        char address[16];
+        uint32_to_ip(network->ip_addr, address);
+        wm_status_line(x, y + 48u, "IPv4: ", address, color);
+    } else {
+        wm_status_line(x, y + 48u, "IPv4: ", "not configured", color);
+    }
+
+    position = 0;
+    line[0] = '\0';
+    wm_status_append(line, sizeof(line), &position, "RX/TX packets: ");
+    wm_status_append_u64(line, sizeof(line), &position, network->rx_packets);
+    wm_status_append(line, sizeof(line), &position, " / ");
+    wm_status_append_u64(line, sizeof(line), &position, network->tx_packets);
+    font_draw_string(line, x, y + 72u, color, 0);
+}
+
 static void wm_draw_window_contents(void) {
     wm_terminal_render();
     if (sec_win && sec_win->active && !sec_win->minimized) {
-        /* Repaint the full status panel after the larger terminal underneath it. */
-        wm_redraw_window_frame(sec_win, theme_get_current());
-        font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
-        font_draw_string("Storage: temporary RAM-backed VFS", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
-        font_draw_string("Input: detected keyboard and PS/2 pointer", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
-        font_draw_string("Press A for Phoxtra and Amineva application entries.", sec_win->x + 16, sec_win->y + 122, 0x0094A3B8, 0);
+        theme_palette_t* palette = theme_get_current();
+        uint32_t left_x = sec_win->x + 16u;
+        uint32_t right_x = sec_win->x + 420u;
+        uint32_t top_y = sec_win->y + 50u;
+        static int status_render_logged = 0;
+
+        /* Repaint this panel after the terminal underneath it. */
+        wm_redraw_window_frame(sec_win, palette);
+        font_draw_string_bold("SYSTEM STATUS", left_x, top_y,
+                              palette->accent_primary, 0);
+        if (!status_render_logged) {
+            klog(LOG_INFO, "Phoxtra live System Status panel content rendered");
+            status_render_logged = 1;
+        }
+
+        font_draw_string_bold("SYSTEM", left_x, top_y + 28u,
+                              palette->accent_secondary, 0);
+        wm_status_line(left_x, top_y + 54u, "OS: ",
+                       "Phoxtra x86_64 desktop", palette->text_color);
+        wm_status_uptime_line(left_x, top_y + 78u, palette->text_color);
+        wm_status_memory_line(left_x, top_y + 102u, palette->text_color);
+        wm_status_display_line(left_x, top_y + 126u, palette->text_color);
+        wm_status_line(left_x, top_y + 150u, "Keyboard: ",
+                       platform_input_has_keyboard() ? "available" : "unavailable",
+                       palette->text_color);
+        wm_status_line(left_x, top_y + 174u, "Pointer: ",
+                       platform_input_has_pointer() ? "available" : "unavailable",
+                       palette->text_color);
+        wm_status_applications_line(left_x, top_y + 198u, palette->text_color);
+
+        font_draw_string_bold("NETWORK AND STORAGE", right_x, top_y + 28u,
+                              palette->accent_secondary, 0);
+        wm_status_network_lines(right_x, top_y + 54u, palette->text_color,
+                                netdev_get_default());
+        wm_status_line(right_x, top_y + 150u, "Storage: ",
+                       "volatile RAM VFS", palette->text_color);
+        wm_status_line(right_x, top_y + 174u, "Persistent disk: ",
+                       "not connected", palette->text_color);
+        char devices[96];
+        uint32_t position = 0;
+        devices[0] = '\0';
+        wm_status_append(devices, sizeof(devices), &position, "PCI devices: ");
+        wm_status_append_u64(devices, sizeof(devices), &position,
+                             platform_device_count());
+        wm_status_append(devices, sizeof(devices), &position, " enumerated");
+        font_draw_string(devices, right_x, top_y + 198u, palette->text_color, 0);
     }
 }
 
