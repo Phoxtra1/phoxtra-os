@@ -178,6 +178,12 @@ uint64_t platform_storage_write(platform_fs_node_t* file, uint64_t offset, uint6
     if (!file || !buffer || file->flags != VFS_FILE) return 0;
     return vfs_write(file, offset, size, buffer);
 }
+int platform_storage_replace_text_file(platform_fs_node_t* file, const uint8_t* contents,
+                                       uint32_t length) {
+    if (!file || length > PLATFORM_TEXT_EDIT_MAX || (!contents && length))
+        return PLATFORM_ERR_INVALID;
+    return vfs_replace_ram_file(file, contents, length) ? PLATFORM_OK : PLATFORM_ERR_UNSUPPORTED;
+}
 int platform_storage_create_directory(platform_fs_node_t* parent, const char* name) {
     if (!parent || !name || !name[0] || parent->flags != VFS_DIRECTORY) return PLATFORM_ERR_INVALID;
     return vfs_create_child(parent, name, VFS_DIRECTORY) ? PLATFORM_OK : PLATFORM_ERR_IO;
