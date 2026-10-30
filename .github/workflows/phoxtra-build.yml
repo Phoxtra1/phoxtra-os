@@ -297,7 +297,8 @@ jobs:
           grep -Fq 'Phoxtra Application Center content rendered' /tmp/phoxtra-serial.log
           grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
           # Cursor visual/trail comparison remains deferred; retain functional input checks.
-          { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          # File Manager opens entries on a double-click; keep both clicks inside its 450ms window.
+          { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.08; printf 'mouse_button 0\n'; sleep 0.08; printf 'mouse_button 1\n'; sleep 0.08; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
           cat /tmp/phoxtra-serial.log
           grep -q 'Desktop mouse click event received' /tmp/phoxtra-serial.log
