@@ -33,6 +33,18 @@ static int32_t last_desktop_icon = -1;
 static uint64_t last_desktop_click_tick = 0;
 static uint8_t context_menu_open = 0;
 static uint32_t context_menu_x = 0, context_menu_y = 0;
+
+#define WM_TERMINAL_HISTORY 18u
+#define WM_TERMINAL_LINE_CAP 80u
+#define WM_TERMINAL_INPUT_CAP 96u
+#define WM_TERMINAL_PATH_CAP 128u
+static char wm_terminal_history[WM_TERMINAL_HISTORY][WM_TERMINAL_LINE_CAP];
+static uint32_t wm_terminal_history_count;
+static char wm_terminal_input[WM_TERMINAL_INPUT_CAP];
+static uint32_t wm_terminal_input_length;
+static char wm_terminal_cwd[WM_TERMINAL_PATH_CAP] = "/home/user";
+static uint8_t wm_terminal_initialized;
+
 #define DESKTOP_MENU_WIDTH 304u
 #define DESKTOP_MENU_HEIGHT 310u
 
@@ -42,6 +54,9 @@ static void wm_create_new_file(void);
 static void wm_draw_context_menu(void);
 static int wm_handle_context_menu_click(uint32_t x, uint32_t y);
 static void wm_handle_right_click(uint32_t x, uint32_t y);
+static void wm_terminal_init(void);
+static void wm_terminal_render(void);
+static void wm_terminal_handle_key(char key);
 
 void wm_init(void) {
     klog(LOG_INFO, "Initializing Phoxtra desktop window manager");
@@ -50,7 +65,8 @@ void wm_init(void) {
     installer_init();
 
     /* Keep the left icon rail clear and prevent the top windows from overlapping. */
-    term_win = compositor_create_window("PHOXTRA TERMINAL", 170, 54, 400, 300, 0x00020617);
+    term_win = compositor_create_window("PHOXTRA TERMINAL", 160, 72, 700, 510, 0x00020617);
+    wm_terminal_init();
     file_manager_open_window("/home/user");
     fm_win = file_manager_get_window();
     sec_win = compositor_create_window("SYSTEM STATUS", 170, 374, 832, 310, 0x00020617);
@@ -58,7 +74,9 @@ void wm_init(void) {
     if (app_win) app_win->active = 0;
     settings_win = compositor_create_window("SETTINGS", 138, 54, 846, 630, 0x00020617);
     if (settings_win) settings_win->active = 0;
-    focused_win = term_win;
+    /* Keep desktop navigation shortcuts available at startup; clicking Terminal
+       transfers keyboard focus to its command line. */
+    focused_win = sec_win;
     (void)mon_win;
 }
 
@@ -114,13 +132,7 @@ static void wm_draw_desktop_icons(void) {
 }
 
 static void wm_draw_window_contents(void) {
-    if (term_win && term_win->active && !term_win->minimized) {
-        font_draw_string("AKWAABA - PHOXTRA OS", term_win->x + 16, term_win->y + 50, 0x00FFD700, 0);
-        font_draw_string("Terminal shell is available after leaving the desktop.", term_win->x + 16, term_win->y + 76, 0x00F8FAFC, 0);
-        font_draw_string("Esc: return to shell", term_win->x + 16, term_win->y + 102, 0x0094A3B8, 0);
-        font_draw_string("F: show file manager", term_win->x + 16, term_win->y + 124, 0x0094A3B8, 0);
-        font_draw_string("1: Light Blue  2: Blue  3: Emerald", term_win->x + 16, term_win->y + 148, 0x0094A3B8, 0);
-    }
+    wm_terminal_render();
     if (sec_win && sec_win->active && !sec_win->minimized) {
         font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
         font_draw_string("Storage: temporary RAM-backed VFS", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
@@ -422,6 +434,8 @@ static void wm_render_desktop(void) {
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
     wm_draw_application_center();
     wm_draw_settings();
+    /* Render the focused terminal last so its text remains above overlapping windows. */
+    if (focused_win == term_win) wm_terminal_render();
     wm_draw_context_menu();
     wm_draw_pointer();
     platform_display_present();
@@ -462,6 +476,392 @@ static void wm_handle_dock_click(uint32_t x) {
     } else if (x < 520) {
         wm_open_settings();
     }
+}
+
+
+static uint32_t wm_terminal_length(const char* text) {
+    uint32_t n = 0;
+    if (text) while (text[n]) ++n;
+    return n;
+}
+
+static int wm_terminal_equal(const char* a, const char* b) {
+    if (!a || !b) return 0;
+    while (*a && *a == *b) { ++a; ++b; }
+    return *a == *b;
+}
+
+static void wm_terminal_copy(char* dst, const char* src, uint32_t capacity) {
+    if (!dst || capacity == 0) return;
+    uint32_t i = 0;
+    if (src) while (src[i] && i + 1u < capacity) { dst[i] = src[i]; ++i; }
+    dst[i] = '\0';
+}
+
+static void wm_terminal_push_line(const char* line) {
+    if (!line) return;
+    if (wm_terminal_history_count >= WM_TERMINAL_HISTORY) {
+        for (uint32_t i = 1; i < WM_TERMINAL_HISTORY; ++i)
+            wm_terminal_copy(wm_terminal_history[i - 1u], wm_terminal_history[i], WM_TERMINAL_LINE_CAP);
+        wm_terminal_history_count = WM_TERMINAL_HISTORY - 1u;
+    }
+    wm_terminal_copy(wm_terminal_history[wm_terminal_history_count++], line, WM_TERMINAL_LINE_CAP);
+}
+
+static void wm_terminal_write(const char* text) {
+    char line[WM_TERMINAL_LINE_CAP];
+    uint32_t used = 0;
+    if (!text) return;
+    for (uint32_t i = 0; text[i]; ++i) {
+        char ch = text[i];
+        if (ch == '\r') continue;
+        if (ch == '\n') {
+            line[used] = '\0';
+            wm_terminal_push_line(line);
+            used = 0;
+            continue;
+        }
+        if (used + 1u >= sizeof(line)) {
+            line[used] = '\0';
+            wm_terminal_push_line(line);
+            used = 0;
+        }
+        line[used++] = ch;
+    }
+    if (used) {
+        line[used] = '\0';
+        wm_terminal_push_line(line);
+    }
+}
+
+static void wm_terminal_clear(void) {
+    wm_terminal_history_count = 0;
+    for (uint32_t i = 0; i < WM_TERMINAL_HISTORY; ++i)
+        wm_terminal_history[i][0] = '\0';
+}
+
+static int wm_terminal_make_path(const char* name, char* output, uint32_t capacity) {
+    if (!name || !output || capacity < 2u) return 0;
+    if (name[0] == '/') {
+        uint32_t n = wm_terminal_length(name);
+        if (n >= capacity) return 0;
+        wm_terminal_copy(output, name, capacity);
+        return 1;
+    }
+    uint32_t base = wm_terminal_length(wm_terminal_cwd);
+    uint32_t tail = wm_terminal_length(name);
+    uint32_t need = base + tail + ((base == 1u && wm_terminal_cwd[0] == '/') ? 0u : 1u);
+    if (need >= capacity) return 0;
+    uint32_t p = 0;
+    for (uint32_t i = 0; i < base; ++i) output[p++] = wm_terminal_cwd[i];
+    if (!(base == 1u && wm_terminal_cwd[0] == '/')) output[p++] = '/';
+    for (uint32_t i = 0; i < tail; ++i) output[p++] = name[i];
+    output[p] = '\0';
+    return 1;
+}
+
+static int wm_terminal_valid_leaf(const char* name) {
+    if (!name || !name[0] || wm_terminal_equal(name, ".") || wm_terminal_equal(name, "..")) return 0;
+    uint32_t n = 0;
+    while (name[n]) {
+        if (name[n] == '/' || name[n] == '\\' || name[n] < ' ') return 0;
+        if (++n >= PLATFORM_FS_NAME_CAP) return 0;
+    }
+    return 1;
+}
+
+static void wm_terminal_init(void) {
+    wm_terminal_clear();
+    wm_terminal_input[0] = '\0';
+    wm_terminal_input_length = 0;
+    wm_terminal_copy(wm_terminal_cwd, "/home/user", sizeof(wm_terminal_cwd));
+    wm_terminal_push_line("PHOXTRA OS DESKTOP TERMINAL");
+    wm_terminal_push_line("This shell uses the current volatile RAM filesystem.");
+    wm_terminal_push_line("Type help to see the commands available in this build.");
+    wm_terminal_initialized = 1;
+    klog(LOG_INFO, "Phoxtra desktop terminal initialized");
+}
+
+static void wm_terminal_list(void) {
+    platform_fs_node_t* directory = platform_storage_lookup(wm_terminal_cwd);
+    if (!directory || !platform_storage_is_directory(directory)) {
+        wm_terminal_write("ls: current directory is unavailable");
+        return;
+    }
+    uint32_t count = platform_storage_count(directory);
+    if (!count) {
+        wm_terminal_write("(empty directory)");
+        return;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        platform_fs_entry_t entry;
+        char line[WM_TERMINAL_LINE_CAP];
+        uint32_t p = 0;
+        if (platform_storage_list(directory, i, &entry) != PLATFORM_OK) continue;
+        while (entry.name[p] && p + 2u < sizeof(line)) { line[p] = entry.name[p]; ++p; }
+        if (entry.type == PLATFORM_FS_ENTRY_DIRECTORY) line[p++] = '/';
+        line[p] = '\0';
+        wm_terminal_push_line(line);
+    }
+}
+
+static void wm_terminal_cat(const char* name) {
+    char path[WM_TERMINAL_PATH_CAP];
+    uint8_t data[512];
+    char line[WM_TERMINAL_LINE_CAP];
+    uint32_t used = 0;
+    if (!name || !name[0]) {
+        wm_terminal_write("usage: cat <file>");
+        return;
+    }
+    if (!wm_terminal_make_path(name, path, sizeof(path))) {
+        wm_terminal_write("cat: path is too long");
+        return;
+    }
+    platform_fs_node_t* file = platform_storage_lookup(path);
+    if (!file) {
+        wm_terminal_write("cat: file not found");
+        return;
+    }
+    if (platform_storage_is_directory(file)) {
+        wm_terminal_write("cat: is a directory");
+        return;
+    }
+    uint64_t got = platform_storage_read(file, 0, sizeof(data), data);
+    if (got > sizeof(data)) got = sizeof(data);
+    if (!got) {
+        wm_terminal_write("(empty file)");
+        return;
+    }
+    for (uint32_t i = 0; i < (uint32_t)got; ++i) {
+        char ch = (char)data[i];
+        if (ch == '\r') continue;
+        if (ch == '\n') {
+            line[used] = '\0';
+            wm_terminal_push_line(line);
+            used = 0;
+        } else {
+            if (used + 1u >= sizeof(line)) {
+                line[used] = '\0';
+                wm_terminal_push_line(line);
+                used = 0;
+            }
+            line[used++] = ch;
+        }
+    }
+    if (used) {
+        line[used] = '\0';
+        wm_terminal_push_line(line);
+    }
+}
+
+static void wm_terminal_execute(const char* input) {
+    char command[16];
+    char argument[WM_TERMINAL_INPUT_CAP];
+    uint32_t p = 0, c = 0, a = 0;
+    while (input[p] == ' ' || input[p] == '\t') ++p;
+    while (input[p] && input[p] != ' ' && input[p] != '\t' && c + 1u < sizeof(command))
+        command[c++] = input[p++];
+    command[c] = '\0';
+    while (input[p] == ' ' || input[p] == '\t') ++p;
+    while (input[p] && a + 1u < sizeof(argument)) argument[a++] = input[p++];
+    while (a && (argument[a - 1u] == ' ' || argument[a - 1u] == '\t')) --a;
+    argument[a] = '\0';
+    if (!command[0]) return;
+
+    if (wm_terminal_equal(command, "help")) {
+        wm_terminal_write("help                 show this command list");
+        wm_terminal_write("pwd                  print the current directory");
+        wm_terminal_write("ls                   list the current directory");
+        wm_terminal_write("cd <path>            change the current directory");
+        wm_terminal_write("cat <file>           display a text file (first 512 bytes)");
+        wm_terminal_write("mkdir <name>          create a RAM-backed directory");
+        wm_terminal_write("touch <name>          create an empty RAM-backed file");
+        wm_terminal_write("echo <text>            print text to the terminal");
+        wm_terminal_write("theme 1|2|3           change the desktop theme");
+        wm_terminal_write("open settings|files|apps");
+        wm_terminal_write("clear                clear terminal output");
+        wm_terminal_write("exit                 close the terminal window");
+        wm_terminal_write("Note: RAM filesystem data are lost when the machine reboots.");
+        return;
+    }
+    if (wm_terminal_equal(command, "clear")) {
+        wm_terminal_clear();
+        return;
+    }
+    if (wm_terminal_equal(command, "pwd")) {
+        wm_terminal_write(wm_terminal_cwd);
+        return;
+    }
+    if (wm_terminal_equal(command, "ls")) {
+        wm_terminal_list();
+        return;
+    }
+    if (wm_terminal_equal(command, "cd")) {
+        char path[WM_TERMINAL_PATH_CAP];
+        if (!argument[0]) wm_terminal_copy(argument, "/home/user", sizeof(argument));
+        if (wm_terminal_equal(argument, "..")) {
+            uint32_t n = wm_terminal_length(wm_terminal_cwd);
+            while (n > 1u && wm_terminal_cwd[n - 1u] != '/') --n;
+            if (n > 1u) --n;
+            wm_terminal_cwd[n] = '\0';
+            return;
+        }
+        if (!wm_terminal_make_path(argument, path, sizeof(path))) {
+            wm_terminal_write("cd: path is too long");
+            return;
+        }
+        platform_fs_node_t* node = platform_storage_lookup(path);
+        if (!node || !platform_storage_is_directory(node)) {
+            wm_terminal_write("cd: directory not found");
+            return;
+        }
+        wm_terminal_copy(wm_terminal_cwd, path, sizeof(wm_terminal_cwd));
+        return;
+    }
+    if (wm_terminal_equal(command, "cat")) {
+        wm_terminal_cat(argument);
+        return;
+    }
+    if (wm_terminal_equal(command, "mkdir") || wm_terminal_equal(command, "touch")) {
+        platform_fs_node_t* directory;
+        if (!wm_terminal_valid_leaf(argument)) {
+            wm_terminal_write("usage: mkdir <name>  (or touch <name>); use a simple file name");
+            return;
+        }
+        directory = platform_storage_lookup(wm_terminal_cwd);
+        if (!directory || !platform_storage_is_directory(directory)) {
+            wm_terminal_write("filesystem: current directory unavailable");
+            return;
+        }
+        int result = wm_terminal_equal(command, "mkdir")
+            ? platform_storage_create_directory(directory, argument)
+            : platform_storage_create_text_file(directory, argument, "");
+        if (result == PLATFORM_OK) wm_terminal_write(wm_terminal_equal(command, "mkdir")
+            ? "directory created in volatile RAM" : "empty file created in volatile RAM");
+        else wm_terminal_write("create failed: duplicate name or insufficient memory");
+        return;
+    }
+    if (wm_terminal_equal(command, "echo")) {
+        if (argument[0]) wm_terminal_write(argument);
+        else wm_terminal_write("");
+        return;
+    }
+    if (wm_terminal_equal(command, "theme")) {
+        if (argument[0] >= '1' && argument[0] <= '3' && argument[1] == '\0') {
+            theme_set((uint32_t)(argument[0] - '1'));
+            wm_terminal_write("desktop theme changed");
+        } else wm_terminal_write("usage: theme 1|2|3");
+        return;
+    }
+    if (wm_terminal_equal(command, "open")) {
+        if (wm_terminal_equal(argument, "settings")) wm_open_settings();
+        else if (wm_terminal_equal(argument, "files")) {
+            file_manager_open_window(wm_terminal_cwd);
+            fm_win = file_manager_get_window();
+            wm_restore_window(fm_win);
+        } else if (wm_terminal_equal(argument, "apps")) wm_open_application_center(0u, 0u);
+        else wm_terminal_write("usage: open settings|files|apps");
+        return;
+    }
+    if (wm_terminal_equal(command, "about")) {
+        wm_terminal_write("Phoxtra OS - x86_64 desktop prototype");
+        wm_terminal_write("Kernel shell and desktop share the same RAM VFS.");
+        return;
+    }
+    if (wm_terminal_equal(command, "status")) {
+        platform_display_info_t display;
+        platform_storage_info_t storage;
+        if (platform_display_get_info(&display) == PLATFORM_OK) {
+            char line[WM_TERMINAL_LINE_CAP];
+            uint32_t pos = 0;
+            const char* prefix = "Display: ";
+            while (prefix[pos] && pos + 1u < sizeof(line)) { line[pos] = prefix[pos]; ++pos; }
+            const char* digits = "0123456789";
+            uint32_t width = display.width;
+            char numbers[11];
+            uint32_t count = 0;
+            do { numbers[count++] = digits[width % 10u]; width /= 10u; } while (width && count < sizeof(numbers));
+            while (count && pos + 1u < sizeof(line)) line[pos++] = numbers[--count];
+            if (pos + 2u < sizeof(line)) { line[pos++] = 'x'; line[pos++] = ' '; }
+            uint32_t height = display.height;
+            count = 0;
+            do { numbers[count++] = digits[height % 10u]; height /= 10u; } while (height && count < sizeof(numbers));
+            while (count && pos + 1u < sizeof(line)) line[pos++] = numbers[--count];
+            line[pos] = '\0';
+            wm_terminal_push_line(line);
+        } else wm_terminal_write("Display: unavailable");
+        if (platform_storage_get_info(&storage) == PLATFORM_OK)
+            wm_terminal_write(storage.description);
+        wm_terminal_write(platform_input_has_keyboard() ? "Keyboard: available" : "Keyboard: unavailable");
+        wm_terminal_write(platform_input_has_pointer() ? "Pointer: available" : "Pointer: unavailable");
+        return;
+    }
+    if (wm_terminal_equal(command, "exit")) {
+        if (term_win) term_win->active = 0;
+        wm_restore_window(sec_win);
+        return;
+    }
+    wm_terminal_write("command not found; type help");
+}
+
+static void wm_terminal_handle_key(char key) {
+    if (!wm_terminal_initialized) wm_terminal_init();
+    if (key == '\b' || key == 127) {
+        if (wm_terminal_input_length) {
+            --wm_terminal_input_length;
+            wm_terminal_input[wm_terminal_input_length] = '\0';
+        }
+        return;
+    }
+    if (key == '\r' || key == '\n') {
+        char command_line[WM_TERMINAL_INPUT_CAP];
+        char echoed[WM_TERMINAL_INPUT_CAP + 12u];
+        wm_terminal_copy(command_line, wm_terminal_input, sizeof(command_line));
+        wm_terminal_copy(echoed, "phoxtra> ", sizeof(echoed));
+        uint32_t used = wm_terminal_length(echoed);
+        for (uint32_t i = 0; command_line[i] && used + 1u < sizeof(echoed); ++i)
+            echoed[used++] = command_line[i];
+        echoed[used] = '\0';
+        wm_terminal_push_line(echoed);
+        wm_terminal_input_length = 0;
+        wm_terminal_input[0] = '\0';
+        wm_terminal_execute(command_line);
+        return;
+    }
+    if (key >= ' ' && key <= '~' && wm_terminal_input_length + 1u < sizeof(wm_terminal_input)) {
+        wm_terminal_input[wm_terminal_input_length++] = key;
+        wm_terminal_input[wm_terminal_input_length] = '\0';
+    }
+}
+
+static void wm_terminal_render(void) {
+    if (!term_win || !term_win->active || term_win->minimized) return;
+    if (!wm_terminal_initialized) wm_terminal_init();
+    theme_palette_t* palette = theme_get_current();
+    uint32_t left = term_win->x + 12u;
+    uint32_t top = term_win->y + 42u;
+    uint32_t content_height = term_win->height > 92u ? term_win->height - 92u : 1u;
+    platform_display_fill_rect(left, top, term_win->width - 24u, content_height, term_win->bg_color);
+    uint32_t visible = content_height > 24u ? (content_height - 24u) / (FONT_HEIGHT) : 1u;
+    if (visible > WM_TERMINAL_HISTORY) visible = WM_TERMINAL_HISTORY;
+    uint32_t start = wm_terminal_history_count > visible ? wm_terminal_history_count - visible : 0u;
+    for (uint32_t i = start; i < wm_terminal_history_count; ++i) {
+        uint32_t row = i - start;
+        font_draw_string(wm_terminal_history[i], left + 8u, top + 4u + row * FONT_HEIGHT,
+                         palette->text_color, 0);
+    }
+    font_draw_string("ENTER: execute  |  type help for commands",
+                     left + 8u, term_win->y + term_win->height - 54u,
+                     palette->accent_secondary, 0);
+    char prompt[WM_TERMINAL_INPUT_CAP + 12u];
+    wm_terminal_copy(prompt, "phoxtra> ", sizeof(prompt));
+    uint32_t used = wm_terminal_length(prompt);
+    for (uint32_t i = 0; wm_terminal_input[i] && used + 1u < sizeof(prompt); ++i)
+        prompt[used++] = wm_terminal_input[i];
+    prompt[used] = '\0';
+    font_draw_string(prompt, left + 8u, term_win->y + term_win->height - 30u,
+                     0x0034D399u, 0);
 }
 
 static int wm_desktop_icon_at(uint32_t x, uint32_t y) {
@@ -622,6 +1022,10 @@ static void wm_create_new_file(void) {
 
 static void wm_handle_key(char key) {
     if (key == 27) return;
+    if (focused_win == term_win && term_win && term_win->active && !term_win->minimized) {
+        wm_terminal_handle_key(key);
+        return;
+    }
     if (key == 'f' || key == 'F') {
         file_manager_open_window("/home/user");
         fm_win = file_manager_get_window();
