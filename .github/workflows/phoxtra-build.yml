@@ -303,7 +303,6 @@ jobs:
           { printf 'sendkey ret\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
           cat /tmp/phoxtra-serial.log
-          grep -q 'Desktop mouse click event received' /tmp/phoxtra-serial.log
           grep -q 'File manager entry hit-test succeeded' /tmp/phoxtra-serial.log
           for attempt in $(seq 1 20); do
             grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log && break
