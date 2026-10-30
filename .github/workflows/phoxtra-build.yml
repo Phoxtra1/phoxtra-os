@@ -338,10 +338,10 @@ jobs:
           done
           grep -Fq 'Saved RAM-backed file from preview editor' /tmp/phoxtra-serial.log
           { printf 'sendkey ctrl-q\n'; sleep 0.2; printf 'sendkey q\n'; sleep 0.3; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          { printf 'sendkey f\\n'; sleep 0.35; printf 'sendkey n\\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          { for key in q e m u f o l d e r ret; do printf 'sendkey %s\\n' "$key"; sleep 0.12; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          { printf 'sendkey c\\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          { for key in q e m u f i l e ret; do printf 'sendkey %s\\n' "$key"; sleep 0.12; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { printf 'sendkey f\n'; sleep 0.35; printf 'sendkey n\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { for key in q e m u f o l d e r ret; do printf 'sendkey %s\n' "$key"; sleep 0.12; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { printf 'sendkey c\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { for key in q e m u f i l e ret; do printf 'sendkey %s\n' "$key"; sleep 0.12; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 1
           grep -q 'Created RAM-backed folder' /tmp/phoxtra-serial.log
           grep -q 'Created RAM-backed file' /tmp/phoxtra-serial.log
