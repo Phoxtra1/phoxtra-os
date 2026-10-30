@@ -129,10 +129,28 @@ static void wm_draw_window_contents(void) {
     }
 }
 
+static void wm_redraw_window_frame(window_t* win, const theme_palette_t* palette) {
+    if (!win || !palette) return;
+    platform_display_fill_rect(win->x, win->y, win->width, win->height, win->bg_color);
+    platform_display_draw_rect(win->x, win->y, win->width, win->height, 0x00334155u);
+    platform_display_fill_rect(win->x, win->y, win->width, 32u, palette->titlebar_bg);
+    platform_display_draw_rect(win->x, win->y, win->width, 32u, 0x00475569u);
+    platform_display_fill_rect(win->x + 12u, win->y + 10u, 12u, 12u, 0x00B94A50u);
+    platform_display_fill_rect(win->x + 30u, win->y + 10u, 12u, 12u, 0x00C8A34Au);
+    platform_display_fill_rect(win->x + 48u, win->y + 10u, 12u, 12u, 0x00385F8Cu);
+    font_draw_string_bold(win->title, win->x + 70u, win->y + 8u, 0x00F8FAFCu, 0);
+}
+
 static void wm_draw_settings(void) {
     if (!settings_win || !settings_win->active || settings_win->minimized) return;
 
     theme_palette_t* palette = theme_get_current();
+    wm_redraw_window_frame(settings_win, palette);
+    static int settings_render_logged = 0;
+    if (!settings_render_logged) {
+        klog(LOG_INFO, "Phoxtra Settings panel content rendered");
+        settings_render_logged = 1;
+    }
     uint32_t current = theme_get_current_id();
     uint32_t left_x = settings_win->x + 24u;
     uint32_t content_y = settings_win->y + 48u;
@@ -244,6 +262,12 @@ static void wm_open_application_center(uint32_t selected_index, uint8_t detail) 
 static void wm_draw_application_center(void) {
     if (!app_win || !app_win->active || app_win->minimized) return;
     theme_palette_t* palette = theme_get_current();
+    wm_redraw_window_frame(app_win, palette);
+    static int app_render_logged = 0;
+    if (!app_render_logged) {
+        klog(LOG_INFO, "Phoxtra Application Center content rendered");
+        app_render_logged = 1;
+    }
     if (app_view_detail) {
         const platform_app_info_t* app = 0;
         if (platform_app_get(app_selected_index, &app) != PLATFORM_OK || !app) {
@@ -396,6 +420,8 @@ static void wm_render_desktop(void) {
     wm_draw_desktop_icons();
     wm_draw_window_contents();
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
+    wm_draw_application_center();
+    wm_draw_settings();
     wm_draw_context_menu();
     wm_draw_pointer();
     platform_display_present();

@@ -47,6 +47,8 @@ typedef struct pcb {
     void* stack_base;
     uint64_t stack_size;
     struct pcb* next;
+    /* Architectural x87/MMX/SSE register image saved with FXSAVE64. */
+    uint8_t fpu_state[512] __attribute__((aligned(16)));
 } pcb_t;
 
 void pcb_process_entry_trampoline(void);

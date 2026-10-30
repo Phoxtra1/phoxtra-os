@@ -3,6 +3,7 @@
 #include "../process/process.h"
 #include "../memory/vmm.h"
 #include "../log/logger.h"
+#include "../arch/x86_64/include/fpu.h"
 extern void gdt_set_kernel_stack(uint64_t rsp0);
 
 
@@ -61,6 +62,7 @@ static void idle_task(void) {
 
 static void idle_pcb_init(void) {
     for (size_t i = 0; i < sizeof(pcb_t); i++) ((uint8_t*)&idle_pcb)[i] = 0;
+    cpu_fpu_init_state(idle_pcb.fpu_state);
 
     uint64_t stack_top = ((uint64_t)idle_stack + sizeof(idle_stack)) & ~0xFULL;
     uint64_t* sp = (uint64_t*)stack_top;
@@ -233,6 +235,14 @@ void scheduler_yield(void) {
         klog(LOG_INFO, "Scheduler context switch target: Ring 3");
     else
         klog(LOG_INFO, "Scheduler context switch target: kernel task");
+    /*
+     * x86-64 user code may use x87/MMX/SSE registers. Save the outgoing
+     * task's full architectural state and restore the incoming task's state
+     * before its suspended interrupt/syscall frame resumes.
+     */
+    cpu_fpu_save_state(old->fpu_state);
+    cpu_fpu_restore_state(next->fpu_state);
+
     context_switch(&old->rsp, next->rsp);
 }
 

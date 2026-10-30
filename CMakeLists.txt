@@ -33,7 +33,7 @@ if(PHOXTRA_ENABLE_GUEST_HTTPS_SMOKE)
     # Generate a matching TLS/PSA configuration instead of trying to undo host-only
     # defaults in a user header after their source files have already been selected.
     set(MBEDTLS_CONFIG_UNSET
-        "MBEDTLS_SELF_TEST;MBEDTLS_DEBUG_C;MBEDTLS_FS_IO;MBEDTLS_NET_C;MBEDTLS_TIMING_C;MBEDTLS_HAVE_TIME;MBEDTLS_HAVE_TIME_DATE"
+        "MBEDTLS_SELF_TEST;MBEDTLS_DEBUG_C;MBEDTLS_FS_IO;MBEDTLS_NET_C;MBEDTLS_TIMING_C"
         CACHE STRING "Disable unsupported hosted Mbed TLS features" FORCE)
 else()
     set(MBEDTLS_CONFIG_UNSET "" CACHE STRING "Disable unsupported hosted Mbed TLS features" FORCE)

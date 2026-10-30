@@ -8,6 +8,7 @@
 #include "../security/audit_logger.h"
 #include "../security/capability.h"
 #include "../security/mac.h"
+#include "../arch/x86_64/include/fpu.h"
 
 #define KERNEL_STACK_SIZE (16 * 1024) // 16KB stack per process
 extern void switch_to_user_mode(uint64_t entry_point, uint64_t user_rsp);
@@ -42,6 +43,9 @@ pcb_t* pcb_create(uint32_t pid, const char* name, void (*entry)(void), uint32_t 
     // Zero out structure
     for (size_t i = 0; i < sizeof(pcb_t); i++)
         ((uint8_t*)pcb)[i] = 0;
+
+    /* New processes start with a clean, valid x87/MMX/SSE register image. */
+    cpu_fpu_init_state(pcb->fpu_state);
 
     // Allocate kernel stack
     void* stack = kmalloc(KERNEL_STACK_SIZE);

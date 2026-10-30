@@ -18,6 +18,7 @@
 #define SYS_WRITE       12
 #define SYS_RANDOM      13
 #define SYS_TIME        14
+#define SYS_MONOTONIC_MS 15
 
 #ifdef __cplusplus
 extern "C" {

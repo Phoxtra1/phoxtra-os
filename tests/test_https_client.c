@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <psa/crypto.h>
 #include <psa/crypto_platform.h>
+#include <mbedtls/platform_time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,14 @@ typedef struct test_transport {
 } test_transport_t;
 
 static int64_t time_offset_seconds;
+
+mbedtls_ms_time_t mbedtls_ms_time(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
+    return (mbedtls_ms_time_t)now.tv_sec * 1000 +
+           (mbedtls_ms_time_t)now.tv_nsec / 1000000;
+}
 
 time_t time(time_t* out)
 {
@@ -212,6 +221,12 @@ int main(int argc, char** argv)
 
     time_offset_seconds = (int64_t)strtoll(argv[4], NULL, 10);
     int expect_success = strcmp(argv[5], "success") == 0;
+    int expect_certificate_failure = strcmp(argv[5], "reject-cert") == 0;
+    if (!expect_success && !expect_certificate_failure &&
+        strcmp(argv[5], "reject") != 0) {
+        fprintf(stderr, "expectation must be success, reject-cert or reject\\n");
+        return 2;
+    }
 
     size_t ca_size = 0;
     unsigned char* ca = NULL;
@@ -241,8 +256,16 @@ int main(int argc, char** argv)
     int passed;
     if (expect_success) {
         passed = result == PHOXTRA_HTTPS_OK
+            && phoxtra_https_last_verify_flags() == 0u
+            && phoxtra_https_last_tls_error() == 0
             && contains(response, response_size, "HTTP/1.1 200 OK")
             && contains(response, response_size, "PHOXTRA_TLS_OK");
+    } else if (expect_certificate_failure) {
+        passed = result == PHOXTRA_HTTPS_ERR_CERTIFICATE
+            && phoxtra_https_last_verify_flags() != 0u
+            && phoxtra_https_last_verify_flags() != UINT32_MAX
+            && phoxtra_https_last_tls_error() != 0
+            && response_size == 0;
     } else {
         passed = result != PHOXTRA_HTTPS_OK && response_size == 0;
     }

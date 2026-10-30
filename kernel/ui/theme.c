@@ -70,7 +70,8 @@ void theme_set(uint32_t theme_id) {
 theme_palette_t* theme_get_current(void) {
     return &themes[active_theme_index];
 }
-uint32_t theme_get_current_index(void) { return active_theme_index; }
+uint32_t theme_get_current_id(void) { return active_theme_index; }
+uint32_t theme_get_current_index(void) { return theme_get_current_id(); }
 
 uint32_t theme_get_wallpaper_count(void) {
     return (uint32_t)(sizeof(desktop_wallpapers) / sizeof(desktop_wallpapers[0]));

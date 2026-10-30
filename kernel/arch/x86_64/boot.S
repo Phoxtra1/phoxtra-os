@@ -79,15 +79,20 @@ _start:
 
     mov $p4_table, %eax
     mov %eax, %cr3
+    # Long-mode user code follows the x86-64 ABI and may use SSE2.
+    # Enable PAE, OSFXSR and OSXMMEXCPT before any Ring 3 code can run.
     mov %cr4, %eax
-    or $0x20, %eax
+    or $0x620, %eax
     mov %eax, %cr4
     mov $0xC0000080, %ecx
     rdmsr
     or $0x100, %eax
     wrmsr
+    # Enable paging/protected mode and native x87 errors, keep the FPU
+    # available, and clear EM/TS so x87/SSE instructions do not #UD/#NM.
     mov %cr0, %eax
-    or $0x80000001, %eax
+    and $~0x0C, %eax
+    or $0x80000023, %eax
     mov %eax, %cr0
 
     lgdt gdt64_pointer
@@ -105,6 +110,10 @@ long_mode_start:
     mov %ax, %ss
     mov $stack_top, %rsp
     and $-16, %rsp
+    # Start from a deterministic FPU/SSE state. The scheduler saves and
+    # restores this state for every process context switch.
+    fninit
+    ldmxcsr mxcsr_default(%rip)
     # SysV AMD64: kernel_init(magic, info_phys).
     mov multiboot2_magic_saved(%rip), %edi
     mov multiboot2_info_saved(%rip), %esi
@@ -114,6 +123,8 @@ long_mode_start:
     jmp .hang
 
 .section .rodata
+.align 4
+mxcsr_default: .long 0x1F80
 .align 8
 gdt64: .quad 0
 gdt64_code: .quad 0x00209A0000000000

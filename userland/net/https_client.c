@@ -8,6 +8,20 @@
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
 #include <psa/crypto.h>
+static uint32_t last_verify_flags;
+
+uint32_t phoxtra_https_last_verify_flags(void)
+{
+ return last_verify_flags;
+}
+
+static int last_tls_error;
+
+int phoxtra_https_last_tls_error(void)
+{
+ return last_tls_error;
+}
+
 #define TLS_READ_CHUNK 512u
 #define TLS_HTTP_VERSION " HTTP/1.1\r\n"
 #define TLS_HEADERS "User-Agent: PhoxtraOS/0.1\r\nAccept: */*\r\nConnection: close\r\n\r\n"
@@ -65,7 +79,11 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  mbedtls_ssl_context ssl;mbedtls_ssl_config config;mbedtls_x509_crt ca;
  unsigned char request[PHOXTRA_HTTPS_MAX_REQUEST];size_t request_len=0,received=0;
  int socket=-1,result=PHOXTRA_HTTPS_ERR_TLS,ssl_init=0,config_init=0,ca_init=0;
+ int handshake_error=0;
+ uint32_t verification_flags=0;
  if(response_length)*response_length=0;
+ last_verify_flags=0;
+ last_tls_error=0;
  if(!io||!io->connect_tcp||!io->send||!io->recv||!io->close||
     !hostname_valid(hostname)||!path_valid(path,&request_len)||!ca_pem||ca_pem_length<2u||
     !response_buffer||!response_capacity||!response_length)return PHOXTRA_HTTPS_ERR_ARGUMENT;
@@ -87,8 +105,27 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
  if(socket<0){result=PHOXTRA_HTTPS_ERR_CONNECT;goto cleanup;}
  https_bio_t bio={io,socket};mbedtls_ssl_set_bio(&ssl,&bio,tls_send,tls_recv,NULL);
  rc=mbedtls_ssl_handshake(&ssl);
- if(rc!=0){result=mbedtls_ssl_get_verify_result(&ssl)!=0?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;goto cleanup;}
- if(mbedtls_ssl_get_verify_result(&ssl)!=0){result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;}
+ if(rc!=0){
+  handshake_error=rc;
+  verification_flags=mbedtls_ssl_get_verify_result(&ssl);
+  /*
+   * Mbed TLS returns UINT32_MAX from get_verify_result when no negotiated
+   * session is available. That sentinel is not a certificate-verification
+   * failure; preserve the actual handshake error for diagnosis.
+   */
+  result=(verification_flags!=0u && verification_flags!=UINT32_MAX)
+      ?PHOXTRA_HTTPS_ERR_CERTIFICATE:PHOXTRA_HTTPS_ERR_TLS;
+  goto cleanup;
+ }
+ verification_flags=mbedtls_ssl_get_verify_result(&ssl);
+ /*
+  * A completed handshake must have an established session and an exact
+  * zero verification result. UINT32_MAX means no verification result exists;
+  * never treat that sentinel as a verified peer.
+  */
+ if(verification_flags!=0u){
+  result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;
+ }
  size_t sent=0;
  while(sent<request_len){
   rc=mbedtls_ssl_write(&ssl,request+sent,request_len-sent);
@@ -127,5 +164,11 @@ cleanup:
  if(config_init)mbedtls_ssl_config_free(&config);
  if(ssl_init)mbedtls_ssl_free(&ssl);
  if(result!=PHOXTRA_HTTPS_OK)*response_length=0;
+ /*
+  * Persist diagnostics after all TLS teardown. Never let cleanup change the
+  * failure classification or overwrite the reason the handshake failed.
+  */
+ last_verify_flags=verification_flags;
+ last_tls_error=handshake_error;
  return result;
 }

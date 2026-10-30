@@ -1,10 +1,11 @@
 #include "entitlements.h"
 #include "../log/logger.h"
 
-static subscription_tier_t current_tier = SUBSCRIPTION_ENTERPRISE;
+static subscription_tier_t current_tier = SUBSCRIPTION_COMMUNITY;
 
 void entitlements_init(void) {
-    klog(LOG_INFO, "Initializing Phoxtra Enterprise Entitlements & Subscription Engine...");
+    current_tier = SUBSCRIPTION_COMMUNITY;
+    klog(LOG_WARNING, "No license provider is connected; entitlement checks default to denied");
 }
 
 subscription_tier_t entitlements_get_tier(void) {
@@ -13,6 +14,5 @@ subscription_tier_t entitlements_get_tier(void) {
 
 uint32_t entitlements_check_feature(const char* feature_name) {
     (void)feature_name;
-    // Verified against cloud.phoxtra.com license keys
-    return 1; // Enabled for Enterprise Subscription
+    return 0;
 }

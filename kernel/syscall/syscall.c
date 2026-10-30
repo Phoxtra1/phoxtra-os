@@ -279,6 +279,20 @@ static void sys_time_user(struct registers* regs) {
     regs->rax = unix_seconds;
 }
 
+static void sys_monotonic_ms_user(struct registers* regs) {
+    if (!user_call_valid(regs, scheduler_current())) {
+        if (regs) regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    /* scheduler_get_uptime_ticks() advances from the 100 Hz timer interrupt. */
+    const uint64_t ticks = scheduler_get_uptime_ticks();
+    if (ticks > 0x7FFFFFFFFFFFFFFFULL / 10u) {
+        regs->rax = (uint64_t)(int64_t)SYS_ERROR_INVALID;
+        return;
+    }
+    regs->rax = ticks * 10u;
+}
+
 typedef void (*syscall_fn_t)(struct registers*);
 static syscall_fn_t syscall_table[] = {
     (void*)0,
@@ -295,7 +309,8 @@ static syscall_fn_t syscall_table[] = {
     sys_dns_resolve_user,
     sys_write_user,
     sys_random_user,
-    sys_time_user
+    sys_time_user,
+    sys_monotonic_ms_user
 };
 #define SYSCALL_TABLE_SIZE (sizeof(syscall_table) / sizeof(syscall_table[0]))
 

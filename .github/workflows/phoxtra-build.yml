@@ -1,8 +1,10 @@
 name: Phoxtra OS build
 
 on:
+  # Main is validated on push. Feature/fix branches are validated by the
+  # corresponding pull_request event, avoiding duplicate runs for one commit.
   push:
-    branches: [main, "fix/**", "feat/**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -21,7 +23,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: phoxtra-os-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -133,27 +135,11 @@ jobs:
             sleep 0.25
           done
           grep -Fq "LISTENING $HTTPS_HOST_PORT" /tmp/phoxtra-https-test-server.log
-          python3 - <<'PY'
-          import struct
-          from pathlib import Path
-          image = Path('/tmp/phoxtra-ahci-test.img')
-          sector = bytearray(512)
-          # One valid read-only MBR partition wholly within this 64 MiB test image.
-          struct.pack_into('<B3sB3sII', sector, 446, 0, b'\x00\x02\x00', 0x83,
-                           b'\xFE\xFF\xFF', 2048, 120000)
-          sector[510:512] = b'\x55\xAA'
-          with image.open('r+b') as handle:
-              handle.write(sector)
-          PY
-          # Format the partition as ext2 with directory indexing disabled for the supported read-only subset.
-          truncate -s 61440000 /tmp/phoxtra-ext2-partition.img
-          mke2fs -q -t ext2 -F -O ^dir_index /tmp/phoxtra-ext2-partition.img
-          printf 'Phoxtra on-disk ext2 read-only integration test.\n' > /tmp/phoxtra-ext2-file.txt
-          debugfs -w -R 'write /tmp/phoxtra-ext2-file.txt phoxtraci' /tmp/phoxtra-ext2-partition.img >/dev/null 2>&1
-          dd if=/tmp/phoxtra-ext2-partition.img of=/tmp/phoxtra-ahci-test.img bs=512 seek=2048 conv=notrunc status=none
-          sha256sum /tmp/phoxtra-ahci-test.img > /tmp/phoxtra-ahci-test.before.sha256
-          # ide-hd requires a writable node; snapshot=on confines writes to a disposable overlay.
-          qemu-system-x86_64 -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
+          # Attached AHCI controller is inventoried only; the OS must not claim physical disk access.
+          # The guest TLS stack uses RDRAND as its fail-closed entropy source.
+          # QEMU's default qemu64 model omits RDRAND; expose supported features
+          # so the HTTPS integration test exercises TLS rather than no-entropy failure.
+          qemu-system-x86_64 -cpu max -m 256M -boot order=d -cdrom build/phoxtra.iso -display none -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${TCP_HOST_PORT}-:${TCP_GUEST_PORT} -device e1000,netdev=net0 \
             -drive file=/tmp/phoxtra-ahci-test.img,format=raw,if=none,id=ahci_disk,snapshot=on \
             -device ich9-ahci,id=ahci -device ide-hd,drive=ahci_disk,bus=ahci.0 \
             -serial file:/tmp/phoxtra-serial.log \
@@ -195,13 +181,16 @@ jobs:
           fi
           cat /tmp/phoxtra-serial.log
           grep -q 'Hardware framebuffer connected' /tmp/phoxtra-serial.log
-          grep -q 'Carlito Calibri-compatible 9x16 font initialized' /tmp/phoxtra-serial.log
+          grep -q 'Carlito proportional antialiased font initialized' /tmp/phoxtra-serial.log
+          # The OS boots to the desktop; ESC opens the recovery shell for network diagnostics.
+          { printf 'sendkey esc\n'; sleep 0.3; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log && break
             sleep 0.5
           done
           grep -q 'Shell ready for commands' /tmp/phoxtra-serial.log
           # QEMU's user-mode network should provide a DHCP lease to the E1000 guest.
+          { for key in d h c p ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -Fq 'PHOXTRA_NETWORK_DHCP_OK' /tmp/phoxtra-serial.log && break
             grep -Fq 'PHOXTRA_NETWORK_DHCP_FAILED' /tmp/phoxtra-serial.log && break
@@ -234,6 +223,7 @@ jobs:
             exit 1
           fi
           # Require a guest user process to complete verified TLS and an HTTP exchange.
+          { for key in h t t p s c h e c k ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 120); do
             grep -Fq 'PHOXTRA_GUEST_HTTPS_OK' /tmp/phoxtra-serial.log && break
             grep -E -q 'PHOXTRA_GUEST_HTTPS_(SETUP_FAILED|CONNECT_FAILED|CERTIFICATE_FAILED|TLS_FAILED|IO_OR_SETUP_FAILED|RESPONSE_FAILED)' /tmp/phoxtra-serial.log && break
@@ -251,24 +241,19 @@ jobs:
           grep -Fq "HTTPS_SERVER_REQUEST_OK GET /" /tmp/phoxtra-https-test-server.log
           grep -Fq "PHOXTRA_GUEST_HTTPS_OK" /tmp/phoxtra-serial.log
           grep -q 'Phoxtra shared platform services initialized' /tmp/phoxtra-serial.log
-          grep -q 'Partition discovery is read-only; automatic partition creation/formatting disabled' /tmp/phoxtra-serial.log
-          grep -q 'Storage: volatile RAM test disk /dev/ramdisk0 registered read-only' /tmp/phoxtra-serial.log
+          grep -Fq 'Initializing read-only partition discovery (MBR; GPT detection only)' /tmp/phoxtra-serial.log
+          grep -Fq 'Simulated block device: /dev/sata0 (32 MiB RAM; not a physical disk)' /tmp/phoxtra-serial.log
           grep -q 'PHOXTRA_HWPROBE_READY' /tmp/phoxtra-serial.log
-          grep -q 'e1000 hardware driver initialized' /tmp/phoxtra-serial.log
-          grep -q 'AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled' /tmp/phoxtra-serial.log
-          grep -q 'AHCI: confirmed read-only sector I/O on SATA device' /tmp/phoxtra-serial.log
-          grep -q 'Hardware probe: non-simulated block devices are registered' /tmp/phoxtra-serial.log
-          grep -Fq 'Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled' /tmp/phoxtra-serial.log
+          grep -Fq 'E1000: PCI device initialized with hardware MAC and RX/TX DMA descriptor rings' /tmp/phoxtra-serial.log
+          grep -Fq 'RAM test disk: simulated volatile storage only; physical AHCI/NVMe I/O is not implemented' /tmp/phoxtra-serial.log
+          grep -Fq 'Hardware probe: no non-simulated block-device driver is registered' /tmp/phoxtra-serial.log
+          grep -Fq 'Hardware probe: writable persistent filesystem service is not connected' /tmp/phoxtra-serial.log
+          grep -Fq 'Hardware probe: PCI storage-class controller detected; driver support is not implied' /tmp/phoxtra-serial.log
+          grep -Fq 'Ext2 filesystem driver initialized; on-disk support is read-only' /tmp/phoxtra-serial.log
           grep -q 'PS/2 mouse initialized (IRQ12, 3-byte packets)' /tmp/phoxtra-serial.log
           grep -q 'phoxtra-laptop' /tmp/phoxtra-serial.log
           sleep 1
-          # Read a real file from the physical-partition path before entering the desktop.
-          { for key in c a t spc slash s a t a 0 p 1 slash p h o x t r a c i ret; do printf 'sendkey %s\n' "$key"; sleep 0.15; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
-          for attempt in $(seq 1 20); do
-            grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log && break
-            sleep 0.25
-          done
-          grep -Fq 'Ext2: confirmed read-only file data access' /tmp/phoxtra-serial.log
+          # Physical Ext2 reads are unavailable; the host CI tests the read-only Ext2 parser directly.
           { for key in g u i ret; do printf 'sendkey %s\n' "$key"; sleep 0.2; done; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           for attempt in $(seq 1 40); do
             grep -q 'Desktop event loop active' /tmp/phoxtra-serial.log && break
@@ -287,6 +272,11 @@ jobs:
             sleep 0.25
           done
           grep -Fq 'Phoxtra Settings panel opened' /tmp/phoxtra-serial.log
+          for attempt in $(seq 1 20); do
+            grep -Fq 'Phoxtra Settings panel content rendered' /tmp/phoxtra-serial.log && break
+            sleep 0.25
+          done
+          grep -Fq 'Phoxtra Settings panel content rendered' /tmp/phoxtra-serial.log
           sleep 0.5
           printf 'screendump /tmp/phoxtra-settings-screen.ppm\n' | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
@@ -304,12 +294,15 @@ jobs:
             sleep 0.25
           done
           grep -Fq "Application Center opened" /tmp/phoxtra-serial.log
+          grep -Fq 'Phoxtra Application Center content rendered' /tmp/phoxtra-serial.log
           grep -Fq "Amineva Workspace entry opened" /tmp/phoxtra-serial.log
           # Cursor visual/trail comparison remains deferred; retain functional input checks.
+          # Select the first File Manager entry with the pointer, then open it via Enter.
+          # This exercises hit-testing and keyboard activation without timing a double-click.
           { printf 'info mice\n'; sleep 0.2; printf 'mouse_set 2\n'; sleep 0.2; printf 'mouse_move 123 -117\n'; sleep 0.2; printf 'mouse_move 0 -117\n'; sleep 0.2; printf 'mouse_button 1\n'; sleep 0.2; printf 'mouse_button 0\n'; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
+          { printf 'sendkey ret\n'; sleep 0.2; } | socat -t 1 - UNIX-CONNECT:/tmp/qemu-monitor.sock
           sleep 0.5
           cat /tmp/phoxtra-serial.log
-          grep -q 'Desktop mouse click event received' /tmp/phoxtra-serial.log
           grep -q 'File manager entry hit-test succeeded' /tmp/phoxtra-serial.log
           for attempt in $(seq 1 20); do
             grep -q 'File manager opened directory entry' /tmp/phoxtra-serial.log && break
@@ -378,7 +371,6 @@ jobs:
           print(f'Phoxtra dock-logo crop: {len(logo_colors)} distinct colors')
           assert len(logo_colors) > 4, 'Phoxtra logo crop is missing or not rendered'
           PY
-          sha256sum -c /tmp/phoxtra-ahci-test.before.sha256
 
       - name: Upload QEMU screenshot and serial diagnostics
         if: always()

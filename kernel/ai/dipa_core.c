@@ -4,27 +4,20 @@
 static uint32_t dipa_active = 0;
 
 void dipa_ai_init(void) {
-    dipa_active = 1;
-    klog(LOG_INFO, "Initializing Dipa AI Core OS Daemon (Dipa Engine v2.0)...");
+    dipa_active = 0;
+    klog(LOG_WARNING, "Dipa AI engine is not integrated; query execution is unavailable");
 }
 
 void dipa_ai_process_query(const char* query, char* out_response, uint32_t max_len) {
-    if (!query || !out_response || max_len == 0) return;
-
-    // Direct Dipa AI Query Parser
-    klog(LOG_INFO, "Dipa AI Processing Kernel Query...");
-
-    const char* prefix = "[Dipa AI] System analyzed your request. Execution ready: ";
-    uint32_t p = 0;
-    while (prefix[p] && p < max_len - 1) {
-        out_response[p] = prefix[p];
-        p++;
+    (void)query;
+    if (!out_response || max_len == 0) return;
+    const char* message = "Dipa AI service unavailable; query was not processed.";
+    uint32_t i = 0;
+    while (message[i] && i + 1u < max_len) {
+        out_response[i] = message[i];
+        ++i;
     }
-    uint32_t q = 0;
-    while (query[q] && p < max_len - 1) {
-        out_response[p++] = query[q++];
-    }
-    out_response[p] = '\0';
+    out_response[i] = '\0';
 }
 
 uint32_t dipa_ai_get_status(void) {

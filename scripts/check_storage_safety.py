@@ -110,12 +110,25 @@ for required in ("ext2_mount_readonly", "EXT2_SUPER_MAGIC", "ext2_get_data_block
         errors.append(f"read-only ext2 implementation missing validation: {required}")
 if "node->write =" in ext2 or "ext2_file_write" in ext2:
     errors.append("ext2 VFS nodes must not expose a write callback in the read-only prototype")
-for required in ("e2fsprogs", "mke2fs", "debugfs", "snapshot=on",
-                 "Ext2: mounted supported on-disk filesystem read-only; writes and indexed directories are disabled",
-                 "Ext2: confirmed read-only file data access",
-                 "sha256sum -c /tmp/phoxtra-ahci-test.before.sha256"):
+# On-disk Ext2 structures are exercised through the isolated host regression test.
+# QEMU must not imply physical AHCI is implemented when the runtime only registers RAM storage.
+ext2_test = read("tests/test_ext2_readonly.c")
+for required in ("supported on-disk ext2 partition mounts",
+                 "on-disk file data is read through VFS",
+                 "ext2 mount never calls the disk write callback",
+                 "unclean or error-marked ext2 filesystems are rejected"):
+    if required not in ext2_test:
+        errors.append(f"read-only Ext2 host regression coverage missing: {required}")
+for required in ("Test read-only ext2 filesystem",
+                 "tests/test_ext2_readonly.c kernel/storage/ext2.c kernel/vfs/vfs.c kernel/storage/blockdev.c",
+                 "Hardware probe: no non-simulated block-device driver is registered",
+                 "RAM test disk: simulated volatile storage only; physical AHCI/NVMe I/O is not implemented"):
     if required not in workflow:
-        errors.append(f"QEMU storage integration regression coverage missing: {required}")
+        errors.append(f"QEMU/storage safety regression coverage missing: {required}")
+for forbidden in ("Read a real file from the physical-partition path",
+                  "AHCI: read-only ATA disk registered after IDENTIFY; physical writes disabled"):
+    if forbidden in workflow:
+        errors.append(f"QEMU must not claim unsupported physical disk integration: {forbidden}")
 
 installer = read("kernel/installer/installer.c")
 if "Installer disabled" not in installer or "compositor_create_window" in installer:
@@ -143,4 +156,4 @@ if errors:
         print(f" - {error}")
     sys.exit(1)
 
-print("Storage and hardware readiness audit passed: bounded read-only AHCI/SATA I/O, read-only ext2 mounting, safe partitions, volatile demo storage, and disabled write/installer paths are covered.")
+print("Storage and hardware readiness audit passed: bounded read-only simulated storage, host-tested read-only Ext2 parsing, safe partitions, and disabled physical writes/installer paths are covered.")
