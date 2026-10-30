@@ -89,11 +89,12 @@ const platform_product_profile_t* platform_product_profile(void) { return &activ
 int platform_input_poll(platform_input_event_t* event) {
     if (!event) return PLATFORM_ERR_INVALID;
     char key;
-    if (keyboard_poll_char(&key)) {
+    uint8_t keyboard_modifiers = 0;
+    if (keyboard_poll_event(&key, &keyboard_modifiers)) {
         event->type = PLATFORM_INPUT_KEY;
         event->key = (uint8_t)key;
         event->buttons = 0;
-        event->modifiers = keyboard_control_pressed() ? PLATFORM_MOD_CTRL : 0;
+        event->modifiers = (keyboard_modifiers & KEYBOARD_MOD_CONTROL) ? PLATFORM_MOD_CTRL : 0;
         event->x = 0;
         event->y = 0;
         return 1;
