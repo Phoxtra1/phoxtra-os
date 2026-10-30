@@ -143,7 +143,7 @@ static void redraw_entries(void) {
         font_draw_string(prompt, fm_win->x + 16,
                          fm_win->y + fm_win->height - 72,
                          palette->accent_primary, 0);
-        font_draw_string("ENTER: create  Q: cancel",
+        font_draw_string("ENTER: create  ESC: cancel",
                          fm_win->x + 16, fm_win->y + fm_win->height - 48,
                          palette->text_color, 0);
         font_draw_string(create_dialog_status,
@@ -340,7 +340,7 @@ int file_manager_handle_key(char key) {
         return 1;
     }
 
-    if (key == 'q' || key == 'Q' || key == 27) {
+    if (key == 27) {
         create_dialog_mode = 0;
         create_dialog_name[0] = '\0';
         create_dialog_length = 0;
