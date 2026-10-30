@@ -679,6 +679,7 @@ static void wm_terminal_execute(const char* input) {
         wm_terminal_write("cat <file>           display a text file (first 512 bytes)");
         wm_terminal_write("mkdir <name>          create a RAM-backed directory");
         wm_terminal_write("touch <name>          create an empty RAM-backed file");
+        wm_terminal_write("write <name> <text>   create a text file with initial contents");
         wm_terminal_write("echo <text>            print text to the terminal");
         wm_terminal_write("theme 1|2|3           change the desktop theme");
         wm_terminal_write("open settings|files|apps");
@@ -742,6 +743,36 @@ static void wm_terminal_execute(const char* input) {
         if (result == PLATFORM_OK) wm_terminal_write(wm_terminal_equal(command, "mkdir")
             ? "directory created in volatile RAM" : "empty file created in volatile RAM");
         else wm_terminal_write("create failed: duplicate name or insufficient memory");
+        return;
+    }
+    if (wm_terminal_equal(command, "write")) {
+        uint32_t name_length = 0;
+        char name[PLATFORM_FS_NAME_CAP];
+        while (argument[name_length] && argument[name_length] != ' ' &&
+               argument[name_length] != '\\t') ++name_length;
+        if (!name_length || name_length >= sizeof(name) || !argument[name_length]) {
+            wm_terminal_write("usage: write <new-file-name> <text>");
+            return;
+        }
+        for (uint32_t i = 0; i < name_length; ++i) name[i] = argument[i];
+        name[name_length] = '\\0';
+        if (!wm_terminal_valid_leaf(name)) {
+            wm_terminal_write("write: use a simple new file name");
+            return;
+        }
+        uint32_t content_start = name_length;
+        while (argument[content_start] == ' ' || argument[content_start] == '\\t')
+            ++content_start;
+        platform_fs_node_t* directory = platform_storage_lookup(wm_terminal_cwd);
+        if (!directory || !platform_storage_is_directory(directory)) {
+            wm_terminal_write("write: current directory is unavailable");
+            return;
+        }
+        if (platform_storage_create_text_file(directory, name,
+                                               argument + content_start) == PLATFORM_OK)
+            wm_terminal_write("text file created in volatile RAM");
+        else
+            wm_terminal_write("write failed: file exists or allocation failed");
         return;
     }
     if (wm_terminal_equal(command, "echo")) {
