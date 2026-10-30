@@ -19,6 +19,8 @@ static window_t* fm_win = 0;
 static window_t* app_win = 0;
 static window_t* settings_win = 0;
 static window_t* focused_win = 0;
+static window_t* app_return_focus = 0;
+static window_t* settings_return_focus = 0;
 static uint8_t app_view_detail = 0;
 static uint32_t app_selected_index = 0;
 static uint32_t app_page = 0;
@@ -257,6 +259,7 @@ static void wm_draw_settings(void) {
 
 static void wm_open_application_center(uint32_t selected_index, uint8_t detail) {
     if (!app_win) return;
+    if (!app_win->active) app_return_focus = focused_win;
     app_view_detail = detail;
     app_selected_index = selected_index;
     if (!detail) app_page = 0;
@@ -454,6 +457,7 @@ static void wm_restore_window(window_t* win) {
 
 static void wm_open_settings(void) {
     if (!settings_win) return;
+    if (!settings_win->active) settings_return_focus = focused_win;
     if (app_win) {
         app_win->active = 0;
         app_view_detail = 0;
@@ -1090,14 +1094,18 @@ static void wm_handle_key(char key) {
     if ((key == 'q' || key == 'Q') && settings_win && settings_win->active) {
         settings_win->active = 0;
         klog(LOG_INFO, "Phoxtra Settings panel closed");
-        wm_restore_window(term_win);
+        window_t* restore = settings_return_focus ? settings_return_focus : sec_win;
+        settings_return_focus = 0;
+        wm_restore_window(restore);
         return;
     }
     if ((key == 'q' || key == 'Q') && app_win && app_win->active) {
         app_win->active = 0;
         app_view_detail = 0;
         klog(LOG_INFO, "Application Center closed");
-        wm_restore_window(term_win);
+        window_t* restore = app_return_focus ? app_return_focus : sec_win;
+        app_return_focus = 0;
+        wm_restore_window(restore);
         return;
     }
     if (key == 't' || key == 'T') { wm_restore_window(term_win); return; }
