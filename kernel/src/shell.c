@@ -5,6 +5,7 @@
 #include "timer.h"
 #include "vfs.h"
 #include "../storage/blockdev.h"
+#include "../storage/partition.h"
 #include "../security/tpm2.h"
 #include "../security/process_identity.h"
 #include "../security/audit_logger.h"
@@ -258,11 +259,70 @@ static void cmd_disks(void) {
 }
 
 static void cmd_storage(void) {
-    console_write("\n=== Phoxtra OS Milestone v0.7.0 Verification ===\n");
-    console_write("[1/3] AHCI SATA / NVMe Storage Driver Probing .......... OK\n");
-    console_write("[2/3] MBR & GPT Partition Parser (sata0p1, p2, p3) ..... OK\n");
-    console_write("[3/3] Ext2 & FAT32 Volume Mounting (/boot, /usr, /home)  OK\n");
-    console_write("\nStatus: Storage Drivers & Block Filesystem Layer VERIFIED\n\n");
+    uint32_t total = blockdev_count();
+    uint32_t physical = 0, simulated = 0, partitions = 0;
+    uint32_t readonly = 0, write_enabled = 0;
+    uint32_t pci_storage = 0;
+
+    console_write("\n=== PHOXTRA STORAGE READINESS REPORT ===\n");
+    console_write("Live inventory only; PCI detection does not imply driver support.\n");
+
+    for (uint32_t i = 0; i < total; ++i) {
+        block_device_t* dev = blockdev_get_by_index(i);
+        if (!dev) continue;
+        if (dev->flags & BLOCKDEV_FLAG_PARTITION) ++partitions;
+        else if (dev->flags & BLOCKDEV_FLAG_SIMULATED) ++simulated;
+        else ++physical;
+        if (dev->flags & BLOCKDEV_FLAG_READONLY) ++readonly;
+        if (dev->flags & BLOCKDEV_FLAG_WRITE_ENABLED) ++write_enabled;
+    }
+
+    for (uint32_t i = 0; i < platform_device_count(); ++i) {
+        platform_device_info_t device;
+        if (platform_device_get(i, &device) == PLATFORM_OK &&
+            device.class_id == 0x01u) ++pci_storage;
+    }
+
+    console_write("\n[Controller inventory]\nPCI storage-class controllers detected: ");
+    print_dec(pci_storage);
+    console_write("\nRegistered physical block devices: ");
+    print_dec(physical);
+    console_write("\nRegistered simulated block devices: ");
+    print_dec(simulated);
+    console_write("\nRegistered partition devices: ");
+    print_dec(partitions);
+    console_write("\n\n[Registered block devices]\n");
+    if (total == 0) console_write("No block devices are registered.\n");
+    for (uint32_t i = 0; i < total; ++i) {
+        block_device_t* dev = blockdev_get_by_index(i);
+        if (!dev) continue;
+        console_write("  "); console_write(dev->name); console_write("  ");
+        print_dec(dev->total_sectors); console_write(" sectors x ");
+        print_dec(dev->sector_size); console_write(" bytes  ");
+        console_write((dev->flags & BLOCKDEV_FLAG_SIMULATED) ? "SIMULATED " : "PHYSICAL ");
+        if (dev->flags & BLOCKDEV_FLAG_PARTITION) console_write("PARTITION ");
+        console_write((dev->flags & BLOCKDEV_FLAG_READONLY) ? "READ-ONLY" :
+                      ((dev->flags & BLOCKDEV_FLAG_WRITE_ENABLED) ? "WRITE-ENABLED" : "WRITE-DISABLED"));
+        console_write("\n");
+    }
+
+    console_write("\n[Filesystem and write capability]\n");
+    console_write("MBR: read-only primary-partition discovery; extended partitions unsupported.\n");
+    console_write("GPT: detected but partition enumeration is not implemented.\n");
+    console_write("Ext2: limited read-only implementation for supported clean volumes.\n");
+    console_write("FAT32: on-disk parsing is not implemented; demo adapter only.\n");
+    console_write("Persistent filesystem: unavailable. Installer and physical disk writes: disabled.\n");
+    console_write("Read-only registered devices: "); print_dec(readonly);
+    console_write("\nWrite-enabled registered devices: "); print_dec(write_enabled);
+    console_write("\n");
+
+    if (physical == 0) {
+        console_write("\nRESULT: NO PHYSICAL BLOCK-DEVICE DRIVER IS REGISTERED. "
+                      "The current disk is volatile RAM-backed test storage.\n\n");
+    } else {
+        console_write("\nRESULT: Physical block devices are registered; filesystem and "
+                      "write readiness must be assessed separately.\n\n");
+    }
 }
 
 static void cmd_tpm(void) {
