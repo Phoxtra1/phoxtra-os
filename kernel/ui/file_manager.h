@@ -15,6 +15,7 @@ void file_manager_render(void);
 window_t* file_manager_get_window(void);
 window_t* file_manager_get_preview_window(void);
 int file_manager_handle_preview_key(char key, uint8_t modifiers);
+int file_manager_preview_has_unsaved_changes(void);
 int file_manager_hit_test(uint32_t x, uint32_t y);
 int file_manager_entry_is_directory(uint32_t index);
 void file_manager_select_entry(uint32_t index);
