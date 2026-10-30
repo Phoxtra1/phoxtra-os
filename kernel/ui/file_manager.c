@@ -28,7 +28,7 @@ static uint32_t preview_length;
 static uint8_t preview_editable;
 static uint8_t preview_editing;
 static uint8_t preview_dirty;
-#define FM_CREATE_NAME_CAP 40u
+#define FM_CREATE_NAME_CAP 33u
 static uint8_t create_dialog_mode; /* 1 = folder, 2 = file */
 static char create_dialog_name[FM_CREATE_NAME_CAP];
 static uint32_t create_dialog_length;
@@ -389,7 +389,7 @@ int file_manager_handle_key(char key) {
             create_dialog_name[create_dialog_length] = '\0';
             create_dialog_status[0] = '\0';
         } else {
-            text_copy(create_dialog_status, "Name limit: 39 characters",
+            text_copy(create_dialog_status, "Name limit: 32 characters",
                       sizeof(create_dialog_status));
         }
         redraw_entries();
