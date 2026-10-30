@@ -118,7 +118,12 @@ int phoxtra_https_get_with_io(const phoxtra_https_io_t* io,const char* hostname,
   goto cleanup;
  }
  verification_flags=mbedtls_ssl_get_verify_result(&ssl);
- if(verification_flags!=0u && verification_flags!=UINT32_MAX){
+ /*
+  * A completed handshake must have an established session and an exact
+  * zero verification result. UINT32_MAX means no verification result exists;
+  * never treat that sentinel as a verified peer.
+  */
+ if(verification_flags!=0u){
   result=PHOXTRA_HTTPS_ERR_CERTIFICATE;goto cleanup;
  }
  size_t sent=0;
