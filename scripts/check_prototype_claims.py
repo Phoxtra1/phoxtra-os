@@ -19,6 +19,12 @@ for label, (path, needles) in checks.items():
         if needle in body:
             errors.append(f"{label} still contains unsupported-success marker: {needle}")
 # Shell diagnostics must not turn missing implementations into positive status reports.
+storage_command = shell[shell.find("static void cmd_storage(void)"):]
+if "Milestone v0.7.0 Verification" in storage_command or "Storage Drivers & Block Filesystem Layer VERIFIED" in storage_command:
+    errors.append("storage command still reports unimplemented physical storage/filesystem support as verified")
+for required in ("blockdev_count()", "blockdev_get_by_index(i)", "platform_device_count()", "BLOCKDEV_FLAG_SIMULATED", "BLOCKDEV_FLAG_WRITE_ENABLED", "on-disk FAT32 parsing is not implemented"):
+    if required not in storage_command:
+        errors.append(f"storage readiness command is missing live or limitation reporting: {required}")
 shell = read("kernel/src/shell.c")
 for marker in (
     "COMMERCIAL PRODUCTION LAUNCH", "0% packet loss", "100% Genuine & Authentic",
