@@ -54,6 +54,7 @@ static void wm_create_new_file(void);
 static void wm_draw_context_menu(void);
 static int wm_handle_context_menu_click(uint32_t x, uint32_t y);
 static void wm_handle_right_click(uint32_t x, uint32_t y);
+static void wm_redraw_window_frame(window_t* win, const theme_palette_t* palette);
 static void wm_terminal_init(void);
 static void wm_restore_window(window_t* win);
 static void wm_open_settings(void);
@@ -346,7 +347,7 @@ static void wm_draw_application_center(void) {
     page_label[pos++] = '/';
     if (page_count >= 10u) page_label[pos++] = (char)('0' + (page_count / 10u));
     page_label[pos++] = (char)('0' + (page_count % 10u));
-    page_label[pos] = '\\0';
+    page_label[pos] = '\0';
     font_draw_string(page_label, app_win->x + 24u, app_win->y + 500u, palette->accent_secondary, 0);
     font_draw_string("[: previous page  ]: next page  W: Workspace  Q: close", app_win->x + 24u, app_win->y + 526u, palette->accent_secondary, 0);
 }
@@ -749,19 +750,19 @@ static void wm_terminal_execute(const char* input) {
         uint32_t name_length = 0;
         char name[PLATFORM_FS_NAME_CAP];
         while (argument[name_length] && argument[name_length] != ' ' &&
-               argument[name_length] != '\\t') ++name_length;
+               argument[name_length] != '\t') ++name_length;
         if (!name_length || name_length >= sizeof(name) || !argument[name_length]) {
             wm_terminal_write("usage: write <new-file-name> <text>");
             return;
         }
         for (uint32_t i = 0; i < name_length; ++i) name[i] = argument[i];
-        name[name_length] = '\\0';
+        name[name_length] = '\0';
         if (!wm_terminal_valid_leaf(name)) {
             wm_terminal_write("write: use a simple new file name");
             return;
         }
         uint32_t content_start = name_length;
-        while (argument[content_start] == ' ' || argument[content_start] == '\\t')
+        while (argument[content_start] == ' ' || argument[content_start] == '\t')
             ++content_start;
         platform_fs_node_t* directory = platform_storage_lookup(wm_terminal_cwd);
         if (!directory || !platform_storage_is_directory(directory)) {
