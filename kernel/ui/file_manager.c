@@ -231,6 +231,11 @@ void file_manager_select_entry(uint32_t index) {
 int file_manager_open_entry(uint32_t index) {
     platform_fs_entry_t entry;
     if (!entry_at(index, &entry)) return 0;
+    if (preview_dirty) {
+        text_copy(preview_status, "Unsaved edits: Ctrl+S to save or Ctrl+Q to discard",
+                  sizeof(preview_status));
+        return 0;
+    }
     selected_entry = (int32_t)index;
     if (entry.type == PLATFORM_FS_ENTRY_DIRECTORY) {
         char next[FM_PATH_CAP];
@@ -292,6 +297,8 @@ void file_manager_create_file(const char* name, const char* content) {
         klog(LOG_INFO, "Created RAM-backed file");
     } else klog(LOG_WARNING, "File creation failed (invalid name, duplicate or allocation error)");
 }
+
+int file_manager_preview_has_unsaved_changes(void) { return preview_dirty != 0; }
 
 int file_manager_handle_preview_key(char key, uint8_t modifiers) {
     if (!preview_win || !preview_win->active || preview_win->minimized) return 0;
