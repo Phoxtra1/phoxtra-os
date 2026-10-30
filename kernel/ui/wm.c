@@ -241,20 +241,33 @@ static void wm_draw_settings(void) {
     font_draw_string("Installer and formatting are disabled.",
                      info_x, content_y + 362u, palette->text_color, 0);
 
-    font_draw_string_bold("SETTINGS AVAILABLE IN THIS BUILD",
-                          left_x, content_y + 278u, palette->accent_primary, 0);
-    font_draw_string("Desktop theme selection is configurable.",
-                     left_x, content_y + 306u, palette->text_color, 0);
-    font_draw_string("Network status is visible; configuration UI,",
-                     left_x, content_y + 332u, palette->text_color, 0);
-    font_draw_string("Wi-Fi/other NICs, accounts, sound, power and",
-                     left_x, content_y + 358u, palette->text_color, 0);
-    font_draw_string("software-update controls remain unavailable.",
-                     left_x, content_y + 384u, palette->text_color, 0);
-    font_draw_string("Press 1 / 2 / 3 to switch themes, or click a row.",
-                     left_x, content_y + 422u, palette->accent_secondary, 0);
+    font_draw_string_bold("DESKTOP WALLPAPER", left_x, content_y + 220u,
+                          palette->accent_primary, 0);
+    font_draw_string("Choose a background:", left_x, content_y + 242u,
+                     palette->text_color, 0);
+    uint32_t wallpaper_current = theme_get_wallpaper_index();
+    for (uint32_t i = 0; i < theme_get_wallpaper_count(); ++i) {
+        uint32_t row_y = settings_win->y + 302u + i * 38u;
+        uint32_t row_color = (i == wallpaper_current) ? palette->titlebar_bg : palette->window_bg;
+        uint32_t preview_start = 0, preview_end = 0;
+        theme_get_wallpaper_colors_by_id(i, &preview_start, &preview_end);
+        platform_display_fill_rect(left_x, row_y, 360u, 32u, row_color);
+        platform_display_draw_rect(left_x, row_y, 360u, 32u,
+                                   (i == wallpaper_current) ? palette->accent_primary : 0x00334155u);
+        platform_display_draw_gradient(left_x + 8u, row_y + 7u, 48u, 18u,
+                                       preview_start, preview_end);
+        font_draw_string_bold(theme_get_wallpaper_name(i), left_x + 68u, row_y + 8u,
+                              palette->text_color, 0);
+        font_draw_string((i == wallpaper_current) ? "CURRENT" : "SELECT",
+                         left_x + 250u, row_y + 8u,
+                         (i == wallpaper_current) ? palette->accent_primary : palette->accent_secondary, 0);
+    }
+    font_draw_string("Wi-Fi, accounts, sound, power and updates",
+                     left_x, content_y + 418u, palette->text_color, 0);
+    font_draw_string("are not configurable in this prototype.",
+                     left_x, content_y + 442u, palette->text_color, 0);
     font_draw_string("P opens Settings; Q closes this panel.",
-                     left_x, content_y + 448u, palette->accent_secondary, 0);
+                     left_x, content_y + 466u, palette->accent_secondary, 0);
 }
 
 static void wm_open_application_center(uint32_t selected_index, uint8_t detail) {
@@ -687,6 +700,7 @@ static void wm_terminal_execute(const char* input) {
         wm_terminal_write("write <name> <text>   create a text file with initial contents");
         wm_terminal_write("echo <text>            print text to the terminal");
         wm_terminal_write("theme 1|2|3           change the desktop theme");
+        wm_terminal_write("wallpaper 1|2|3|4     choose the desktop wallpaper");
         wm_terminal_write("open settings|files|apps");
         wm_terminal_write("clear                clear terminal output");
         wm_terminal_write("exit                 close the terminal window");
@@ -790,6 +804,15 @@ static void wm_terminal_execute(const char* input) {
             theme_set((uint32_t)(argument[0] - '1'));
             wm_terminal_write("desktop theme changed");
         } else wm_terminal_write("usage: theme 1|2|3");
+        return;
+    }
+    if (wm_terminal_equal(command, "wallpaper")) {
+        if (argument[0] >= '1' && argument[0] <= '4' && argument[1] == '\0') {
+            theme_set_wallpaper((uint32_t)(argument[0] - '1'));
+            wm_terminal_write("desktop wallpaper changed");
+        } else {
+            wm_terminal_write("usage: wallpaper 1|2|3|4");
+        }
         return;
     }
     if (wm_terminal_equal(command, "open")) {
@@ -1026,6 +1049,14 @@ static void wm_handle_click(uint32_t x, uint32_t y) {
             if (x >= row_x && x < row_x + 360u &&
                 y >= row_y && y < row_y + 42u) {
                 theme_set(i);
+                return;
+            }
+        }
+        for (uint32_t i = 0; i < theme_get_wallpaper_count(); ++i) {
+            uint32_t row_y = settings_win->y + 302u + i * 38u;
+            if (x >= row_x && x < row_x + 360u &&
+                y >= row_y && y < row_y + 32u) {
+                theme_set_wallpaper(i);
                 return;
             }
         }
