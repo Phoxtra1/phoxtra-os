@@ -86,10 +86,14 @@ void theme_set_wallpaper(uint32_t id) {
     active_wallpaper_index = id;
     klog(LOG_INFO, "Desktop wallpaper changed");
 }
-void theme_get_wallpaper_colors(uint32_t* start, uint32_t* end) {
-    const desktop_wallpaper_t* w = &desktop_wallpapers[active_wallpaper_index];
+void theme_get_wallpaper_colors_by_id(uint32_t id, uint32_t* start, uint32_t* end) {
+    if (id >= theme_get_wallpaper_count()) id = 0;
+    const desktop_wallpaper_t* w = &desktop_wallpapers[id];
     if (start) *start = w->start;
     if (end) *end = w->end;
+}
+void theme_get_wallpaper_colors(uint32_t* start, uint32_t* end) {
+    theme_get_wallpaper_colors_by_id(active_wallpaper_index, start, end);
 }
 
 void icon_draw_folder(uint32_t x, uint32_t y, const char* label) {
