@@ -601,8 +601,14 @@ static int wm_handle_context_menu_click(uint32_t x, uint32_t y) {
         uint32_t item = (y - menu_y) / 24;
         context_menu_open = 0;
 
-        if (item == 0) wm_create_new_folder();
-        else if (item == 1) wm_create_new_file();
+        if (item == 0 || item == 1) {
+            if (!fm_win || !fm_win->active) {
+                file_manager_open_window("/home/user");
+                fm_win = file_manager_get_window();
+            }
+            wm_restore_window(fm_win);
+            (void)file_manager_handle_key(item == 0 ? 'n' : 'c');
+        }
         return 1;
     }
 
