@@ -35,6 +35,7 @@ uint32_t theme_get_wallpaper_index(void);
 uint32_t theme_get_wallpaper_count(void);
 const char* theme_get_wallpaper_name(uint32_t wallpaper_id);
 void theme_get_wallpaper_colors(uint32_t* start_color, uint32_t* end_color);
+void theme_get_wallpaper_colors_by_id(uint32_t wallpaper_id, uint32_t* start_color, uint32_t* end_color);
 
 // Icon rendering engines (48x48 pixel icons)
 void icon_draw_folder(uint32_t x, uint32_t y, const char* label);
