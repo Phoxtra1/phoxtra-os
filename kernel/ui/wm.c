@@ -291,8 +291,8 @@ static void wm_draw_window_contents(void) {
 
         font_draw_string_bold("SYSTEM", left_x, top_y + 28u,
                               palette->accent_secondary, 0);
-        wm_status_line(left_x, top_y + 54u, palette->text_color,
-                       "OS: ", "Phoxtra x86_64 desktop", palette->text_color);
+        wm_status_line(left_x, top_y + 54u, "OS: ",
+                       "Phoxtra x86_64 desktop", palette->text_color);
         wm_status_uptime_line(left_x, top_y + 78u, palette->text_color);
         wm_status_memory_line(left_x, top_y + 102u, palette->text_color);
         wm_status_display_line(left_x, top_y + 126u, palette->text_color);
