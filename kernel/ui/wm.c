@@ -136,6 +136,8 @@ static void wm_draw_desktop_icons(void) {
 static void wm_draw_window_contents(void) {
     wm_terminal_render();
     if (sec_win && sec_win->active && !sec_win->minimized) {
+        /* Repaint the full status panel after the larger terminal underneath it. */
+        wm_redraw_window_frame(sec_win, theme_get_current());
         font_draw_string("SYSTEM STATUS", sec_win->x + 16, sec_win->y + 50, 0x00FFD700, 0);
         font_draw_string("Storage: temporary RAM-backed VFS", sec_win->x + 16, sec_win->y + 78, 0x0034D399, 0);
         font_draw_string("Input: detected keyboard and PS/2 pointer", sec_win->x + 16, sec_win->y + 100, 0x0034D399, 0);
