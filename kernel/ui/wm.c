@@ -55,6 +55,8 @@ static void wm_draw_context_menu(void);
 static int wm_handle_context_menu_click(uint32_t x, uint32_t y);
 static void wm_handle_right_click(uint32_t x, uint32_t y);
 static void wm_terminal_init(void);
+static void wm_restore_window(window_t* win);
+static void wm_open_settings(void);
 static void wm_terminal_render(void);
 static void wm_terminal_handle_key(char key);
 
@@ -434,8 +436,6 @@ static void wm_render_desktop(void) {
     if (fm_win && fm_win->active && !fm_win->minimized) file_manager_render();
     wm_draw_application_center();
     wm_draw_settings();
-    /* Render the focused terminal last so its text remains above overlapping windows. */
-    if (focused_win == term_win) wm_terminal_render();
     wm_draw_context_menu();
     wm_draw_pointer();
     platform_display_present();
